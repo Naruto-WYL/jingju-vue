@@ -53,7 +53,18 @@ const tooltip = reactive({
 let resizeObserver = null
 
 const DATA_URL = '/数据表合集/2/p2_edges.xlsx'
-const MAIN_COLOR = '#DDCCAB'
+
+// 主色
+const GOLD = '#B98A45'
+const LIGHT_GOLD = '#E8D1A5'
+const DEEP_RED = '#B84A36'
+const GREEN = '#5F8B7A'
+const INK = '#4A2B1A'
+
+// 节点大小
+// 想让圆牌更大，改大 NODE_R
+// 想让圆牌更小，改小 NODE_R
+const NODE_R = 28
 
 // 读取 Excel 数据
 async function loadData() {
@@ -127,6 +138,125 @@ const currentEdges = computed(() => {
   })
 })
 
+// 根据关系类型返回线颜色
+function getRelationColor(type) {
+  if (type.includes('师承')) return DEEP_RED
+  if (type.includes('合作')) return '#D9A65F'
+  if (type.includes('同台')) return GREEN
+  if (type.includes('影响')) return '#C8A66A'
+
+  return '#D9A65F'
+}
+
+// 画小红花
+function drawFlower(group, y) {
+  const flower = group.append('g').attr('class', 'node-flower').attr('transform', `translate(0, ${y})`)
+
+  const petals = [
+    { x: 0, y: -3 },
+    { x: 3, y: 0 },
+    { x: 0, y: 3 },
+    { x: -3, y: 0 },
+  ]
+
+  flower
+    .selectAll('ellipse')
+    .data(petals)
+    .join('ellipse')
+    .attr('cx', (d) => d.x)
+    .attr('cy', (d) => d.y)
+    .attr('rx', 2.4)
+    .attr('ry', 3.4)
+    .attr('fill', '#C74432')
+    .attr('stroke', '#8F2A20')
+    .attr('stroke-width', 0.5)
+
+  flower
+    .append('circle')
+    .attr('r', 1.7)
+    .attr('fill', '#F1D47A')
+    .attr('stroke', '#8F2A20')
+    .attr('stroke-width', 0.5)
+}
+
+// 画底部小装饰
+function drawBottomOrnament(group, y) {
+  const deco = group.append('g').attr('class', 'node-bottom-deco').attr('transform', `translate(0, ${y})`)
+
+  deco
+    .append('path')
+    .attr('d', 'M -10 0 C -6 5, -2 5, 0 0 C 2 5, 6 5, 10 0')
+    .attr('fill', 'none')
+    .attr('stroke', GOLD)
+    .attr('stroke-width', 1.1)
+    .attr('stroke-linecap', 'round')
+
+  deco
+    .append('circle')
+    .attr('cx', 0)
+    .attr('cy', 0)
+    .attr('r', 2)
+    .attr('fill', '#C74432')
+    .attr('stroke', '#8F2A20')
+    .attr('stroke-width', 0.5)
+}
+
+// 画京剧圆牌节点
+function drawOperaNode(nodeGroup) {
+  // 外层淡金阴影
+  nodeGroup
+    .append('circle')
+    .attr('r', NODE_R + 5)
+    .attr('fill', '#F4E6C9')
+    .attr('opacity', 0.5)
+
+  // 外圈金边
+  nodeGroup
+    .append('circle')
+    .attr('r', NODE_R + 2)
+    .attr('fill', '#FFF8E9')
+    .attr('stroke', GOLD)
+    .attr('stroke-width', 1.8)
+
+  // 第二层细边
+  nodeGroup
+    .append('circle')
+    .attr('r', NODE_R - 2)
+    .attr('fill', '#FFF9EE')
+    .attr('stroke', LIGHT_GOLD)
+    .attr('stroke-width', 1.2)
+    .attr('stroke-dasharray', '3 2')
+
+  // 中心浅色底
+  nodeGroup
+    .append('circle')
+    .attr('r', NODE_R - 7)
+    .attr('fill', '#FFFDF5')
+    .attr('stroke', '#E6D1A4')
+    .attr('stroke-width', 0.8)
+
+  // 左右小金点
+  nodeGroup
+    .append('circle')
+    .attr('cx', -NODE_R - 2)
+    .attr('cy', 0)
+    .attr('r', 2)
+    .attr('fill', GOLD)
+
+  nodeGroup
+    .append('circle')
+    .attr('cx', NODE_R + 2)
+    .attr('cy', 0)
+    .attr('r', 2)
+    .attr('fill', GOLD)
+
+  // 顶部红花
+  drawFlower(nodeGroup, -NODE_R - 5)
+
+  // 底部纹饰
+  drawBottomOrnament(nodeGroup, NODE_R - 2)
+}
+
 // 绘图
 function drawChart() {
   const container = chartRef.value
@@ -148,11 +278,30 @@ function drawChart() {
   if (!edges.length || width <= 0 || height <= 0) return
 
   const margin = {
-    top: 46,
-    right: 72,
-    bottom: 46,
-    left: 72,
+    top: NODE_R + 34,
+    right: NODE_R + 42,
+    bottom: NODE_R + 34,
+    left: NODE_R + 42,
   }
+
+  // 定义渐变和阴影
+  const defs = svg.append('defs')
+
+  const glow = defs
+    .append('filter')
+    .attr('id', 'nodeGlow')
+    .attr('x', '-40%')
+    .attr('y', '-40%')
+    .attr('width', '180%')
+    .attr('height', '180%')
+
+  glow
+    .append('feDropShadow')
+    .attr('dx', 0)
+    .attr('dy', 2)
+    .attr('stdDeviation', 2)
+    .attr('flood-color', '#9A6B32')
+    .attr('flood-opacity', 0.28)
 
   // 获取所有角色节点
   const roleSet = new Set()
@@ -169,15 +318,14 @@ function drawChart() {
   const centerY = height / 2 + 4
 
   // 圆半径
-  // 想让圆圈更大，改成 0.43 / 0.45
-  // 想让圆圈更小，改成 0.35 / 0.38
+  // 想让整体圆更大，改 0.46 / 0.48
+  // 想让整体圆更小，改 0.38 / 0.4
   const radius = Math.min(
     width - margin.left - margin.right,
     height - margin.top - margin.bottom,
   ) * 0.55
 
   // 计算角色关系数量
-  // 关系多的角色优先排布，使整体更均衡
   const degreeMap = new Map()
 
   roles.forEach((role) => {
@@ -208,7 +356,6 @@ function drawChart() {
   const nodePositionMap = new Map()
 
   orderedRoles.forEach((role, index) => {
-    // 从正上方开始排
     const angle = (Math.PI * 2 * index) / orderedRoles.length - Math.PI / 2
 
     const x = centerX + Math.cos(angle) * radius
@@ -225,16 +372,19 @@ function drawChart() {
   const minWeight = d3.min(edges, (d) => d.weight) || 1
 
   // 线宽表示权重
-  // 想让粗细差异更明显，就把 range 改成 [1, 8]
-  // 想让线不要太粗，就把 range 改成 [1, 4]
   const lineWidthScale = d3
     .scaleLinear()
     .domain([minWeight, maxWeight])
-    .range([1.2, 6])
+    .range([0.8, 5.6])
+
+  // 线透明度
+  const opacityScale = d3
+    .scaleLinear()
+    .domain([minWeight, maxWeight])
+    .range([0.18, 0.72])
 
   // 弧线弯曲程度
-  // 数值越大，线越往圆心靠
-  const CURVE_RATIO = 0.58
+  const CURVE_RATIO = 0.56
 
   // 生成圆内关系线
   function getArcPath(edge, index) {
@@ -251,31 +401,51 @@ function drawChart() {
     const midX = (x1 + x2) / 2
     const midY = (y1 + y2) / 2
 
-    // 控制点朝圆心移动，形成圆内弧线
     const controlX = midX + (centerX - midX) * CURVE_RATIO
     const controlY = midY + (centerY - midY) * CURVE_RATIO
 
-    // 少量错位，防止完全重合
-    const offset = ((index % 5) - 2) * 4
+    // 让重叠线稍微散开
+    const offset = ((index % 7) - 3) * 3
 
     return `
       M ${x1},${y1}
-      Q ${controlX + offset},${controlY + offset}
+      Q ${controlX + offset},${controlY - offset}
         ${x2},${y2}
     `
   }
 
-  // 背景圆圈
+  // 外层装饰圆环
+  svg
+    .append('circle')
+    .attr('cx', centerX)
+    .attr('cy', centerY)
+    .attr('r', radius + NODE_R + 14)
+    .attr('fill', 'none')
+    .attr('stroke', '#D6AA68')
+    .attr('stroke-width', 1.2)
+    .attr('opacity', 0.72)
+
+  svg
+    .append('circle')
+    .attr('cx', centerX)
+    .attr('cy', centerY)
+    .attr('r', radius + NODE_R + 7)
+    .attr('fill', 'none')
+    .attr('stroke', '#E3C58E')
+    .attr('stroke-width', 0.9)
+    .attr('opacity', 0.6)
+
   svg
     .append('circle')
     .attr('cx', centerX)
     .attr('cy', centerY)
     .attr('r', radius)
     .attr('fill', 'none')
-    .attr('stroke', "#DD7298")
+    .attr('stroke', '#C75C43')
     .attr('stroke-width', 1.2)
-    .attr('opacity', 0.36)
-    .attr('stroke-dasharray', '6 2')
+    .attr('stroke-dasharray', '3 9')
+    .attr('stroke-linecap', 'round')
+    .attr('opacity', 0.75)
 
   // 画关系线
   svg
@@ -286,16 +456,16 @@ function drawChart() {
     .join('path')
     .attr('d', (d, i) => getArcPath(d, i))
     .attr('fill', 'none')
-    .attr('stroke', "#E0D1B7")
+    .attr('stroke', (d) => getRelationColor(d.relation_type))
     .attr('stroke-width', (d) => lineWidthScale(d.weight))
-    .attr('opacity', 0.5)
+    .attr('opacity', (d) => opacityScale(d.weight))
     .attr('cursor', 'pointer')
     .attr('stroke-linecap', 'round')
     .attr('stroke-linejoin', 'round')
     .on('mouseenter', function (event, d) {
       d3.select(this)
         .attr('opacity', 0.95)
-        .attr('stroke-width', lineWidthScale(d.weight) + 1.5)
+        .attr('stroke-width', lineWidthScale(d.weight) + 1.6)
 
       tooltip.show = true
       tooltip.source = d.source
@@ -311,7 +481,7 @@ function drawChart() {
     })
     .on('mouseleave', function (event, d) {
       d3.select(this)
-        .attr('opacity', 0.5)
+        .attr('opacity', opacityScale(d.weight))
         .attr('stroke-width', lineWidthScale(d.weight))
 
       tooltip.show = false
@@ -329,60 +499,46 @@ function drawChart() {
       const pos = nodePositionMap.get(d)
       return `translate(${pos.x}, ${pos.y})`
     })
+    .style('filter', 'url(#nodeGlow)')
 
-  // 节点外圈
-  nodeGroup
-    .append('circle')
-    .attr('r', 7)
-    .attr('fill', '#fff')
-    .attr('stroke', MAIN_COLOR)
-    .attr('stroke-width', 2.2)
-
-  // 节点内点
-  nodeGroup
-    .append('circle')
-    .attr('r', 3.6)
-    .attr('fill', MAIN_COLOR)
+  // 节点圆牌
+  drawOperaNode(nodeGroup)
 
   // 节点文字
   nodeGroup
     .append('text')
     .text((d) => d)
-    .attr('x', (d) => {
-      const pos = nodePositionMap.get(d)
-
-      // 文字沿圆心向外偏移
-      return Math.cos(pos.angle) * 14
-    })
-    .attr('y', (d) => {
-      const pos = nodePositionMap.get(d)
-
-      // 文字沿圆心向外偏移
-      return Math.sin(pos.angle) * 14
-    })
-    .attr('text-anchor', (d) => {
-      const pos = nodePositionMap.get(d)
-      const cos = Math.cos(pos.angle)
-
-      if (Math.abs(cos) < 0.25) {
-        return 'middle'
-      }
-
-      return cos > 0 ? 'start' : 'end'
-    })
-    .attr('dominant-baseline', (d) => {
-      const pos = nodePositionMap.get(d)
-      const sin = Math.sin(pos.angle)
-
-      if (sin < -0.6) return 'baseline'
-      if (sin > 0.6) return 'hanging'
-
-      return 'middle'
-    })
-    .attr('font-size', 10)
-    .attr('fill', '#777')
+    .attr('x', 0)
+    .attr('y', 1)
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('font-size', 11)
+    .attr('font-weight', 600)
+    .attr('fill', INK)
+    .style('font-family', '"STKaiti", "KaiTi", "SimSun", serif')
     .style('letter-spacing', '1px')
     .style('pointer-events', 'none')
+
+  // 节点悬浮效果
+  nodeGroup
+    .on('mouseenter', function () {
+      d3.select(this)
+        .transition()
+        .duration(180)
+        .attr('transform', function (d) {
+          const pos = nodePositionMap.get(d)
+          return `translate(${pos.x}, ${pos.y}) scale(1.08)`
+        })
+    })
+    .on('mouseleave', function () {
+      d3.select(this)
+        .transition()
+        .duration(180)
+        .attr('transform', function (d) {
+          const pos = nodePositionMap.get(d)
+          return `translate(${pos.x}, ${pos.y}) scale(1)`
+        })
+    })
 }
 
 // 监听下拉框变化，重新绘图
@@ -429,18 +585,33 @@ onBeforeUnmount(() => {
 .chart-one {
   width: 100%;
   height: 100%;
+  position: relative;
 }
 
 .script-select {
-  width: 160px;
+  width: 170px;
   height: 30px;
   margin-bottom: 8px;
+  padding: 0 10px;
+  border: 1px solid rgba(185, 138, 69, 0.65);
+  border-radius: 4px;
+  background: rgba(255, 249, 238, 0.92);
+  color: #4a2b1a;
+  font-size: 13px;
+  font-family: "STKaiti", "KaiTi", "SimSun", serif;
+  outline: none;
+}
+
+.script-select:focus {
+  border-color: #b84a36;
+  box-shadow: 0 0 0 2px rgba(184, 74, 54, 0.12);
 }
 
 .chart-box {
   position: relative;
   width: 100%;
   height: calc(100% - 38px);
+  overflow: hidden;
 }
 
 .chart-box svg {
@@ -451,15 +622,23 @@ onBeforeUnmount(() => {
 .tooltip {
   position: absolute;
   pointer-events: none;
-  padding: 6px 8px;
-  background: #fff;
-  border: 1px solid #ccc;
+  padding: 8px 10px;
+  background: rgba(255, 249, 238, 0.96);
+  border: 1px solid rgba(185, 138, 69, 0.75);
+  border-radius: 6px;
   font-size: 12px;
-  color: #333;
+  line-height: 1.7;
+  color: #4a2b1a;
   z-index: 10;
+  box-shadow: 0 4px 14px rgba(112, 73, 35, 0.16);
+  font-family: "STKaiti", "KaiTi", "SimSun", serif;
 }
 
 :deep(.opera-node) {
   cursor: pointer;
+}
+
+:deep(.arc-group path) {
+  transition: opacity 0.2s ease;
 }
 </style>

@@ -141,18 +141,22 @@ function drawChart() {
 
   svg.selectAll('*').remove()
 
-  svg.attr('width', width).attr('height', height)
+  svg
+    .attr('width', width)
+    .attr('height', height)
 
   const edges = currentEdges.value
 
   if (!edges.length || width <= 0 || height <= 0) return
 
   const margin = {
-    top: 46,
-    right: 72,
-    bottom: 46,
-    left: 72,
+    top: 30,
+    right: 10,
+    bottom: 70,
+    left: 10,
   }
+
+  const baseY = height - margin.bottom
 
   // 获取所有角色节点
   const roleSet = new Set()
@@ -164,120 +168,55 @@ function drawChart() {
 
   const roles = Array.from(roleSet)
 
-  // 圆心位置
-  const centerX = width / 2
-  const centerY = height / 2 + 4
-
-  // 圆半径
-  // 想让圆圈更大，改成 0.43 / 0.45
-  // 想让圆圈更小，改成 0.35 / 0.38
-  const radius = Math.min(
-    width - margin.left - margin.right,
-    height - margin.top - margin.bottom,
-  ) * 0.55
-
-  // 计算角色关系数量
-  // 关系多的角色优先排布，使整体更均衡
-  const degreeMap = new Map()
-
-  roles.forEach((role) => {
-    degreeMap.set(role, 0)
-  })
-
-  edges.forEach((edge) => {
-    degreeMap.set(edge.source, (degreeMap.get(edge.source) || 0) + 1)
-    degreeMap.set(edge.target, (degreeMap.get(edge.target) || 0) + 1)
-  })
-
-  const sortedRoles = [...roles].sort((a, b) => {
-    return (degreeMap.get(b) || 0) - (degreeMap.get(a) || 0)
-  })
-
-  // 穿插排序，避免重要节点全部挤在一侧
-  const orderedRoles = []
-
-  sortedRoles.forEach((role, index) => {
-    if (index % 2 === 0) {
-      orderedRoles.push(role)
-    } else {
-      orderedRoles.unshift(role)
-    }
-  })
-
-  // 计算每个节点的圆周位置
-  const nodePositionMap = new Map()
-
-  orderedRoles.forEach((role, index) => {
-    // 从正上方开始排
-    const angle = (Math.PI * 2 * index) / orderedRoles.length - Math.PI / 2
-
-    const x = centerX + Math.cos(angle) * radius
-    const y = centerY + Math.sin(angle) * radius
-
-    nodePositionMap.set(role, {
-      x,
-      y,
-      angle,
-    })
-  })
+  const xScale = d3
+    .scalePoint()
+    .domain(roles)
+    .range([margin.left, width - margin.right])
+    .padding(0.01)
 
   const maxWeight = d3.max(edges, (d) => d.weight) || 1
   const minWeight = d3.min(edges, (d) => d.weight) || 1
 
-  // 线宽表示权重
-  // 想让粗细差异更明显，就把 range 改成 [1, 8]
-  // 想让线不要太粗，就把 range 改成 [1, 4]
-  const lineWidthScale = d3
+  /**
+   * 这里是核心：
+   * 权重越大，弧线离 baseY 越远。
+   * 不再用 stroke-width 表示权重。
+   *
+   * range 第一个值：最小权重的弧线高度
+   * range 第二个值：最大权重的弧线高度
+   */
+  const arcDistanceScale = d3
     .scaleLinear()
     .domain([minWeight, maxWeight])
-    .range([1.2, 6])
+    .range([height * 0.2, height * 1.5])
+  // 固定线宽，不让线宽代表权重
+  const FIXED_LINE_WIDTH = 2.2
 
-  // 弧线弯曲程度
-  // 数值越大，线越往圆心靠
-  const CURVE_RATIO = 0.58
-
-  // 生成圆内关系线
+  // 生成弧线路径
   function getArcPath(edge, index) {
-    const sourcePos = nodePositionMap.get(edge.source)
-    const targetPos = nodePositionMap.get(edge.target)
+  const x1 = xScale(edge.source)
+  const x2 = xScale(edge.target)
+  if (x1 == null || x2 == null) return ''
 
-    if (!sourcePos || !targetPos) return ''
+  const midX = (x1 + x2) / 2
+  const xDistance = Math.abs(x2 - x1)
 
-    const x1 = sourcePos.x
-    const y1 = sourcePos.y
-    const x2 = targetPos.x
-    const y2 = targetPos.y
+  // 权重基础高度
+  const weightDistance = arcDistanceScale(edge.weight)
 
-    const midX = (x1 + x2) / 2
-    const midY = (y1 + y2) / 2
+  // 让长弧稍微高一点
+  const distanceBonus = xDistance * 0.15
 
-    // 控制点朝圆心移动，形成圆内弧线
-    const controlX = midX + (centerX - midX) * CURVE_RATIO
-    const controlY = midY + (centerY - midY) * CURVE_RATIO
+  // 给相近边增加一点错位，避免全部重叠
+  const layerOffset = (index % 5) * 18
 
-    // 少量错位，防止完全重合
-    const offset = ((index % 5) - 2) * 4
+  const arcDistance = weightDistance + distanceBonus + layerOffset
+  const controlY = baseY - arcDistance
 
-    return `
-      M ${x1},${y1}
-      Q ${controlX + offset},${controlY + offset}
-        ${x2},${y2}
-    `
-  }
+  return `M ${x1},${baseY} Q ${midX},${controlY} ${x2},${baseY}`
+}
 
-  // 背景圆圈
-  svg
-    .append('circle')
-    .attr('cx', centerX)
-    .attr('cy', centerY)
-    .attr('r', radius)
-    .attr('fill', 'none')
-    .attr('stroke', "#DD7298")
-    .attr('stroke-width', 1.2)
-    .attr('opacity', 0.36)
-    .attr('stroke-dasharray', '6 2')
-
-  // 画关系线
+  // 画弧线
   svg
     .append('g')
     .attr('class', 'arc-group')
@@ -286,16 +225,15 @@ function drawChart() {
     .join('path')
     .attr('d', (d, i) => getArcPath(d, i))
     .attr('fill', 'none')
-    .attr('stroke', "#E0D1B7")
-    .attr('stroke-width', (d) => lineWidthScale(d.weight))
-    .attr('opacity', 0.5)
+    .attr('stroke', MAIN_COLOR)
+    .attr('stroke-width', FIXED_LINE_WIDTH)
+    .attr('opacity', 0.65)
     .attr('cursor', 'pointer')
     .attr('stroke-linecap', 'round')
-    .attr('stroke-linejoin', 'round')
     .on('mouseenter', function (event, d) {
       d3.select(this)
-        .attr('opacity', 0.95)
-        .attr('stroke-width', lineWidthScale(d.weight) + 1.5)
+        .attr('opacity', 1)
+        .attr('stroke-width', FIXED_LINE_WIDTH + 1)
 
       tooltip.show = true
       tooltip.source = d.source
@@ -309,10 +247,10 @@ function drawChart() {
       tooltip.x = event.clientX - rect.left + 12
       tooltip.y = event.clientY - rect.top + 12
     })
-    .on('mouseleave', function (event, d) {
+    .on('mouseleave', function () {
       d3.select(this)
-        .attr('opacity', 0.5)
-        .attr('stroke-width', lineWidthScale(d.weight))
+        .attr('opacity', 0.65)
+        .attr('stroke-width', FIXED_LINE_WIDTH)
 
       tooltip.show = false
     })
@@ -322,67 +260,34 @@ function drawChart() {
     .append('g')
     .attr('class', 'node-group')
     .selectAll('g')
-    .data(orderedRoles)
+    .data(roles)
     .join('g')
     .attr('class', 'opera-node')
-    .attr('transform', (d) => {
-      const pos = nodePositionMap.get(d)
-      return `translate(${pos.x}, ${pos.y})`
-    })
+    .attr('transform', (d) => `translate(${xScale(d)}, ${baseY})`)
 
-  // 节点外圈
   nodeGroup
     .append('circle')
-    .attr('r', 7)
+    .attr('r', 6)
     .attr('fill', '#fff')
     .attr('stroke', MAIN_COLOR)
     .attr('stroke-width', 2.2)
 
-  // 节点内点
   nodeGroup
     .append('circle')
-    .attr('r', 3.6)
+    .attr('r', 3.2)
     .attr('fill', MAIN_COLOR)
 
-  // 节点文字
   nodeGroup
     .append('text')
     .text((d) => d)
-    .attr('x', (d) => {
-      const pos = nodePositionMap.get(d)
-
-      // 文字沿圆心向外偏移
-      return Math.cos(pos.angle) * 14
-    })
-    .attr('y', (d) => {
-      const pos = nodePositionMap.get(d)
-
-      // 文字沿圆心向外偏移
-      return Math.sin(pos.angle) * 14
-    })
-    .attr('text-anchor', (d) => {
-      const pos = nodePositionMap.get(d)
-      const cos = Math.cos(pos.angle)
-
-      if (Math.abs(cos) < 0.25) {
-        return 'middle'
-      }
-
-      return cos > 0 ? 'start' : 'end'
-    })
-    .attr('dominant-baseline', (d) => {
-      const pos = nodePositionMap.get(d)
-      const sin = Math.sin(pos.angle)
-
-      if (sin < -0.6) return 'baseline'
-      if (sin > 0.6) return 'hanging'
-
-      return 'middle'
-    })
-    .attr('font-size', 10)
+    .attr('x', 3)
+    .attr('y', 10)
+    .attr('dominant-baseline', 'hanging')
+    .attr('font-size', 8)
     .attr('fill', '#777')
-    .style('letter-spacing', '1px')
-    .style('pointer-events', 'none')
+    .attr('writing-mode', 'vertical-rl')
+    .attr('glyph-orientation-vertical', 0)
+    .style('letter-spacing', '2px')
 }
 
 // 监听下拉框变化，重新绘图
