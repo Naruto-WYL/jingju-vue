@@ -1,957 +1,505 @@
 <template>
-  <div class="sankey-card">
-    <div class="sankey-header">
-      <div class="sankey-legend">
-        <span
-          v-for="item in legendItems"
-          :key="item.label"
-          class="legend-item"
-        >
-          <i :style="{ background: item.color }"></i>
-          {{ item.label }}
-        </span>
+  <div class="evolution-sankey">
+    <div ref="chartRef" class="sankey-wrap">
+      <svg
+        ref="svgRef"
+        class="sankey-svg"
+        role="img"
+        aria-label="历史时期、身份类型与行当的桑基图"
+      ></svg>
+
+      <div v-if="loading" class="chart-state">数据加载中...</div>
+      <div v-else-if="errorMessage" class="chart-state chart-state--error">
+        {{ errorMessage }}
       </div>
+      <div v-else-if="!rows.length" class="chart-state">暂无桑基图数据</div>
     </div>
 
-    <div ref="chartWrapRef" class="sankey-wrap">
-      <svg ref="svgRef" class="sankey-svg"></svg>
-
+    <!-- Tooltip 放到 body 外层，避免被遮挡 -->
+    <Teleport to="body">
       <div
-        v-if="tooltip.show"
+        ref="tooltipRef"
         class="sankey-tooltip"
-        :style="{
-          left: `${tooltip.x}px`,
-          top: `${tooltip.y}px`,
-        }"
+        :class="{ 'is-visible': tooltip.show }"
+        :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }"
       >
         <strong>{{ tooltip.title }}</strong>
-        <span>{{ tooltip.desc }}</span>
+        <span>{{ tooltip.value }}</span>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import * as d3 from 'd3'
-import {
-  sankey,
-  sankeyJustify,
-} from 'd3-sankey'
+import { sankey, sankeyJustify, sankeyLinkHorizontal } from 'd3-sankey'
 
-import sheng from '../../assets/step1/生.png'
-import dan from '../../assets/step1/旦.png'
-import jing from '../../assets/step1/净.png'
-import chou from '../../assets/step1/丑.png'
+const DATA_URL = '/数据表合集/1/Table3_Historical_Evolution.csv'
+const PERIOD_FIELD = '历史时期'
+const IDENTITY_FIELD = '身份类型(角色)'
+const PERIOD_SHARE_FIELD = '该身份在此时期的占比'
+const FIXED_FIELDS = new Set([PERIOD_FIELD, IDENTITY_FIELD, PERIOD_SHARE_FIELD])
 
-const chartConfig = {
-  margin: {
-    top: 10,
-    right: 42,
-    bottom: 10,
-    left: 8,
-  },
-
-  node: {
-    width: 18,
-    middleBarWidth: 7,
-    padding: 18,
-    radius: 5,
-    stroke: 'rgba(255,255,255,0.55)',
-    strokeWidth: 1,
-    opacity: 0.95,
-    hoverOpacity: 1,
-  },
-
-  circle: {
-    radius: 35,
-
-    // 第三列圆圈虚线边框向圆心收缩多少
-    // 越大，虚线边框越靠里面
-    borderInset: 2,
-
-    stroke: 'rgba(194, 176, 143, 1)',
-    strokeWidth: 1.5,
-    strokeDasharray: '2 1',
-  },
-
-  roleImage: {
-    // 控制第三列图片大小
-    // 1.44 表示图片宽高约为圆圈半径的 1.44 倍
-    // 想大一点改成 1.6，想小一点改成 1.25
-    sizeRatio: 2,
-    opacity: 1,
-    inactiveOpacity: 0.22,
-  },
-
-  link: {
-    opacity: 0.28,
-    hoverOpacity: 0.72,
-    inactiveOpacity: 0.06,
-    strokeLinecap: 'round',
-    minWidth: 1,
-  },
-
-  label: {
-    fontSize: 8,
-    fontWeight: 700,
-    color: '#000000',
-    inactiveOpacity: 0.22,
-    offset: 10,
-  },
-
-  background: {
-    showColumnGuide: false,
-  },
-
-  transition: {
-    duration: 500,
-  },
+const typeColors = {
+  period: '#9d5b46',
+  identity: '#b98539',
+  trade: '#476f86',
 }
 
-const typeColorMap = {
-  时期: '#b28a49',
-  身份: '#c96b7d',
-  行当: '#4d9bae',
-}
-
-const nodeColorMap = {
-  '时期:明清': '#b07a3d',
-  '时期:先秦': '#9b6a45',
-  '时期:未识别': '#b8aa91',
-  '时期:神话传说': '#8c6bb1',
-  '时期:近现代': '#7c9f55',
-  '时期:宋元': '#c58b39',
-  '时期:秦汉': '#a6695b',
-  '时期:三国': '#bf554f',
-  '时期:隋唐': '#d09d4f',
-
-  '身份:女性闺阁': '#d05f86',
-  '身份:书生公子': '#5f94c8',
-  '身份:帝王皇族': '#c4a64d',
-  '身份:僧道仙怪': '#8e72bd',
-  '身份:官员文臣': '#709c62',
-  '身份:仆从差役': '#9c8065',
-  '身份:将帅武人': '#c95b4a',
-  '身份:市井滑稽': '#d28a35',
-
-  '行当:旦': '#dc6d95',
-  '行当:生': '#5594c5',
-  '行当:丑': '#e29a3f',
-  '行当:净': '#7564b3',
-}
-
-// 第三列圆圈内部图片映射
-const roleImageMap = {
-  '行当:生': sheng,
-  '行当:旦': dan,
-  '行当:净': jing,
-  '行当:丑': chou,
-}
-
-const legendItems = [
-  { label: '时期', color: typeColorMap['时期'] },
-  { label: '身份', color: typeColorMap['身份'] },
-  { label: '行当', color: typeColorMap['行当'] },
-]
-
-const sankeyNodes = [
-  { name: '时期:明清', depth: 0 },
-  { name: '时期:先秦', depth: 0 },
-  { name: '时期:未识别', depth: 0 },
-  { name: '时期:神话传说', depth: 0 },
-  { name: '时期:近现代', depth: 0 },
-  { name: '时期:宋元', depth: 0 },
-  { name: '时期:秦汉', depth: 0 },
-  { name: '时期:三国', depth: 0 },
-  { name: '时期:隋唐', depth: 0 },
-
-  { name: '身份:女性闺阁', depth: 1 },
-  { name: '身份:书生公子', depth: 1 },
-  { name: '身份:帝王皇族', depth: 1 },
-  { name: '身份:僧道仙怪', depth: 1 },
-  { name: '身份:官员文臣', depth: 1 },
-  { name: '身份:仆从差役', depth: 1 },
-  { name: '身份:将帅武人', depth: 1 },
-  { name: '身份:市井滑稽', depth: 1 },
-
-  { name: '行当:旦', depth: 2 },
-  { name: '行当:生', depth: 2 },
-  { name: '行当:丑', depth: 2 },
-  { name: '行当:净', depth: 2 },
-]
-
-const sankeyLinks = [
-  { source: '时期:明清', target: '身份:女性闺阁', value: 22 },
-  { source: '时期:明清', target: '身份:帝王皇族', value: 8 },
-  { source: '时期:明清', target: '身份:官员文臣', value: 9 },
-  { source: '时期:先秦', target: '身份:帝王皇族', value: 14 },
-  { source: '时期:先秦', target: '身份:将帅武人', value: 8 },
-  { source: '时期:宋元', target: '身份:官员文臣', value: 10 },
-  { source: '时期:宋元', target: '身份:市井滑稽', value: 5 },
-  { source: '时期:秦汉', target: '身份:僧道仙怪', value: 7 },
-  { source: '时期:三国', target: '身份:将帅武人', value: 18 },
-  { source: '时期:三国', target: '身份:书生公子', value: 7 },
-  { source: '时期:隋唐', target: '身份:将帅武人', value: 11 },
-  { source: '时期:神话传说', target: '身份:僧道仙怪', value: 6 },
-  { source: '时期:近现代', target: '身份:书生公子', value: 5 },
-  { source: '时期:未识别', target: '身份:仆从差役', value: 3 },
-
-  { source: '身份:女性闺阁', target: '行当:旦', value: 28 },
-  { source: '身份:书生公子', target: '行当:生', value: 15 },
-  { source: '身份:帝王皇族', target: '行当:生', value: 12 },
-  { source: '身份:帝王皇族', target: '行当:净', value: 7 },
-  { source: '身份:僧道仙怪', target: '行当:丑', value: 7 },
-  { source: '身份:僧道仙怪', target: '行当:净', value: 5 },
-  { source: '身份:官员文臣', target: '行当:生', value: 13 },
-  { source: '身份:官员文臣', target: '行当:丑', value: 4 },
-  { source: '身份:仆从差役', target: '行当:丑', value: 6 },
-  { source: '身份:将帅武人', target: '行当:生', value: 17 },
-  { source: '身份:将帅武人', target: '行当:净', value: 15 },
-  { source: '身份:市井滑稽', target: '行当:丑', value: 8 },
-]
-
+const chartRef = ref(null)
 const svgRef = ref(null)
-const chartWrapRef = ref(null)
-let resizeObserver = null
+const tooltipRef = ref(null)
+const rows = ref([])
+const loading = ref(false)
+const errorMessage = ref('')
 
 const tooltip = reactive({
   show: false,
   x: 0,
   y: 0,
   title: '',
-  desc: '',
+  value: '',
 })
 
-const graphData = computed(() => ({
-  nodes: sankeyNodes.map((item) => ({ ...item })),
-  links: sankeyLinks.map((item) => ({ ...item })),
-}))
+let resizeFrame = 0
 
-function getNodeType(name) {
-  return name.split(':')[0]
-}
+onMounted(async () => {
+  await loadRows()
+  await nextTick()
+  drawSankey()
+  window.addEventListener('resize', scheduleDraw)
+})
 
-function getNodeShortName(name) {
-  return name.split(':')[1] || name
-}
+onBeforeUnmount(() => {
+  if (resizeFrame) cancelAnimationFrame(resizeFrame)
+  window.removeEventListener('resize', scheduleDraw)
+})
 
-function getNodeColor(node) {
-  return nodeColorMap[node.name] || typeColorMap[getNodeType(node.name)] || '#999'
-}
-
-function getLinkColor(link) {
-  const sourceColor = getNodeColor(link.source)
-  const targetColor = getNodeColor(link.target)
-
-  return {
-    sourceColor,
-    targetColor,
+async function loadRows() {
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    rows.value = await d3.csv(encodeURI(DATA_URL), normalizeRow)
+  } catch (error) {
+    errorMessage.value = 'Table3_Historical_Evolution.csv 加载失败'
+    console.error(error)
+  } finally {
+    loading.value = false
   }
+}
+
+function normalizeRow(row) {
+  const normalized = {
+    period: cleanText(row[PERIOD_FIELD]),
+    identity: cleanText(row[IDENTITY_FIELD]),
+    periodShare: parseNumber(row[PERIOD_SHARE_FIELD]),
+    trades: {},
+  }
+
+  Object.keys(row)
+    .filter((key) => !FIXED_FIELDS.has(key))
+    .forEach((trade) => {
+      const value = parseNumber(row[trade])
+      if (value > 0) normalized.trades[cleanText(trade)] = value
+    })
+
+  return normalized
 }
 
 function drawSankey() {
-  const wrapEl = chartWrapRef.value
-  const svgEl = svgRef.value
+  if (!svgRef.value || !chartRef.value || !rows.value.length) return
 
-  if (!wrapEl || !svgEl) return
+  const bounds = chartRef.value.getBoundingClientRect()
+  const width = Math.max(420, bounds.width || 680)
+  const height = Math.max(300, bounds.height || 360)
 
-  const width = wrapEl.clientWidth
-  const height = wrapEl.clientHeight
+  const margin = {
+    top: 34,
+    right: 30,
+    bottom: 14,
+    left: 20,
+  }
 
-  if (width <= 0 || height <= 0) return
-
-  const {
-    margin,
-    node,
-    link,
-    label,
-    background,
-    transition,
-  } = chartConfig
-
-  const svg = d3.select(svgEl)
-
+  const svg = d3.select(svgRef.value)
   svg.selectAll('*').remove()
+  hideTooltip()
 
-  svg
-    .attr('width', width)
-    .attr('height', height)
-    .attr('viewBox', `0 0 ${width} ${height}`)
+  const graph = buildGraph(rows.value)
+  if (!graph.nodes.length || !graph.links.length) return
 
-  const defs = svg.append('defs')
+  svg.attr('viewBox', `0 0 ${width} ${height}`).attr('preserveAspectRatio', 'none')
 
-  const pattern = defs
-    .append('pattern')
-    .attr('id', 'sankey-dot-pattern')
-    .attr('width', 18)
-    .attr('height', 18)
-    .attr('patternUnits', 'userSpaceOnUse')
-
-  pattern
-    .append('circle')
-    .attr('cx', 2)
-    .attr('cy', 2)
-    .attr('r', 1)
-    .attr('fill', 'rgba(80, 56, 36, 0.12)')
-
-  svg
-    .append('rect')
-    .attr('width', width)
-    .attr('height', height)
-    .attr('fill', 'url(#sankey-dot-pattern)')
-    .attr('opacity', 0.55)
-
-  const innerWidth = width - margin.left - margin.right
-  const innerHeight = height - margin.top - margin.bottom
-
-  const sankeyLayout = sankey()
-    .nodeId((d) => d.name)
-    .nodeWidth(node.width)
-    .nodePadding(node.padding)
+  const layout = sankey()
+    .nodeId((node) => node.id)
     .nodeAlign(sankeyJustify)
+    .nodeWidth(12)
+    .nodePadding(12)
+    .nodeSort((a, b) => sortByType(a, b))
     .extent([
       [margin.left, margin.top],
-      [margin.left + innerWidth, margin.top + innerHeight],
+      [width - margin.right, height - margin.bottom],
     ])
 
-  const graph = sankeyLayout(graphData.value)
-
-  const depthCount = 3
-
-  graph.nodes.forEach((d) => {
-    const columnX = margin.left + (innerWidth / (depthCount - 1)) * d.depth
-
-    if (d.depth === 1) {
-      d.x0 = columnX
-      d.x1 = columnX + node.middleBarWidth
-    } else if (d.depth === 2) {
-      d.x0 = columnX - chartConfig.circle.radius
-      d.x1 = columnX + chartConfig.circle.radius
-    } else {
-      d.x0 = columnX
-      d.x1 = columnX + node.width
-    }
+  const sankeyGraph = layout({
+    nodes: graph.nodes.map((node) => ({ ...node })),
+    links: graph.links.map((link) => ({ ...link })),
   })
 
-  // 只改每列内部的 y 位置，不动 x 位置
-  // 每一列内部的节点会按照相同间隔排列
-  const columns = d3.group(graph.nodes, (d) => d.depth)
+  drawColumnLabels(svg, sankeyGraph.nodes)
+  drawLinks(svg, sankeyGraph.links)
+  drawNodes(svg, sankeyGraph.nodes)
+}
 
-  columns.forEach((columnNodes) => {
-    columnNodes.sort((a, b) => a.y0 - b.y0)
-
-    const visualHeights = columnNodes.map((d) => {
-      if (d.depth === 2) {
-        return chartConfig.circle.radius * 2
-      }
-
-      return Math.max(2, d.y1 - d.y0)
-    })
-
-    const totalVisualHeight = d3.sum(visualHeights)
-
-    const gap =
-      columnNodes.length > 1
-        ? Math.max(6, (innerHeight - totalVisualHeight) / (columnNodes.length - 1))
-        : 0
-
-    let currentY = margin.top
-
-    columnNodes.forEach((d, index) => {
-      const visualHeight = visualHeights[index]
-
-      if (d.depth === 2) {
-        const centerY = currentY + visualHeight / 2
-
-        d.y0 = centerY - chartConfig.circle.radius
-        d.y1 = centerY + chartConfig.circle.radius
-      } else {
-        d.y0 = currentY
-        d.y1 = currentY + visualHeight
-      }
-
-      currentY += visualHeight + gap
-    })
-  })
-
-  sankeyLayout.update(graph)
-
-  function getNodeCenterY(d) {
-    return (d.y0 + d.y1) / 2
-  }
-
-  function getNodeCenterX(d) {
-    return (d.x0 + d.x1) / 2
-  }
-
-  function getCustomLinkPath(d) {
-    const sourceX = d.source.depth === 2
-      ? getNodeCenterX(d.source) + chartConfig.circle.radius
-      : d.source.x1
-
-    const sourceY = d.source.depth === 2
-      ? getNodeCenterY(d.source)
-      : d.y0
-
-    const targetX = d.target.depth === 2
-      ? getNodeCenterX(d.target) - chartConfig.circle.radius
-      : d.target.x0
-
-    const targetY = d.target.depth === 2
-      ? getNodeCenterY(d.target)
-      : d.y1
-
-    const midX = (sourceX + targetX) / 2
-
-    return `
-      M ${sourceX},${sourceY}
-      C ${midX},${sourceY}
-        ${midX},${targetY}
-        ${targetX},${targetY}
-    `
-  }
-
-  function fitGroupInsideSvg(group, svgWidth, svgHeight) {
-    const groupNode = group.node()
-
-    if (!groupNode) return
-
-    const bbox = groupNode.getBBox()
-
-    if (!bbox.width || !bbox.height) return
-
-    const safePadding = 2
-
-    const scaleX = (svgWidth - safePadding * 2) / bbox.width
-    const scaleY = (svgHeight - safePadding * 2) / bbox.height
-
-    const scale = Math.min(1, scaleX, scaleY)
-
-    const scaledWidth = bbox.width * scale
-    const scaledHeight = bbox.height * scale
-
-    const translateX = (svgWidth - scaledWidth) / 2 - bbox.x * scale
-    const translateY = (svgHeight - scaledHeight) / 2 - bbox.y * scale
-
-    group.attr(
-      'transform',
-      `translate(${translateX}, ${translateY}) scale(${scale})`
-    )
-  }
-
-  if (background.showColumnGuide) {
-    const columnTitles = [
-      { title: '历史时期', depth: 0 },
-      { title: '角色身份', depth: 1 },
-      { title: '京剧行当', depth: 2 },
-    ]
-
-    const guideGroup = svg
-      .append('g')
-      .attr('class', 'column-guides')
-
-    guideGroup
-      .selectAll('rect')
-      .data(columnTitles)
-      .join('rect')
-      .attr('x', (d) => margin.left + (innerWidth / 2) * d.depth - 42)
-      .attr('y', margin.top - 18)
-      .attr('width', 104)
-      .attr('height', innerHeight + 36)
-      .attr('rx', 14)
-      .attr('fill', 'rgba(89, 61, 38, 0.06)')
-
-    guideGroup
-      .selectAll('text')
-      .data(columnTitles)
-      .join('text')
-      .attr('x', (d) => margin.left + (innerWidth / 2) * d.depth + node.width / 2)
-      .attr('y', margin.top - 6)
-      .attr('text-anchor', 'middle')
-      .attr('fill', 'rgba(70, 45, 28, 0.58)')
-      .attr('font-size', 12)
-      .attr('font-weight', 800)
-      .text((d) => d.title)
-  }
-
-  graph.links.forEach((d, i) => {
-    const { sourceColor, targetColor } = getLinkColor(d)
-
-    const gradientX1 = d.source.depth === 2
-      ? getNodeCenterX(d.source) + chartConfig.circle.radius
-      : d.source.x1
-
-    const gradientX2 = d.target.depth === 2
-      ? getNodeCenterX(d.target) - chartConfig.circle.radius
-      : d.target.x0
-
-    const gradient = defs
-      .append('linearGradient')
-      .attr('id', `sankey-link-gradient-${i}`)
-      .attr('gradientUnits', 'userSpaceOnUse')
-      .attr('x1', gradientX1)
-      .attr('x2', gradientX2)
-
-    gradient
-      .append('stop')
-      .attr('offset', '0%')
-      .attr('stop-color', sourceColor)
-
-    gradient
-      .append('stop')
-      .attr('offset', '100%')
-      .attr('stop-color', targetColor)
-  })
-
-  const mainGroup = svg
-    .append('g')
-    .attr('class', 'sankey-main')
-
-  const linkGroup = mainGroup
-    .append('g')
-    .attr('class', 'sankey-links')
-    .attr('fill', 'none')
-
-  const nodeGroup = mainGroup
-    .append('g')
-    .attr('class', 'sankey-nodes')
-
-  const labelGroup = mainGroup
-    .append('g')
-    .attr('class', 'sankey-labels')
-
-  const linkSelection = linkGroup
-    .selectAll('path')
-    .data(graph.links)
-    .join('path')
-    .attr('class', 'sankey-link')
-    .attr('d', getCustomLinkPath)
-    .attr('stroke', (d, i) => `url(#sankey-link-gradient-${i})`)
-    .attr('stroke-width', (d) => Math.max(link.minWidth, d.width))
-    .attr('stroke-linecap', link.strokeLinecap)
-    .attr('opacity', 0)
-    .on('mousemove', function (event, d) {
-      showTooltip(event, {
-        title: `${d.source.name} → ${d.target.name}`,
-        desc: `角色数：${d.value}`,
-      })
-
-      highlightByLink(d, linkSelection, nodeSelection, textSelection, imageSelection)
-    })
-    .on('mouseleave', function () {
-      hideTooltip()
-      resetHighlight(linkSelection, nodeSelection, textSelection, imageSelection)
-    })
-
-  linkSelection
-    .transition()
-    .duration(transition.duration)
-    .attr('opacity', link.opacity)
-
-  const nodeSelection = nodeGroup
-    .selectAll('.sankey-node-shape')
-    .data(graph.nodes)
-    .join((enter) =>
-      enter.append(function (d) {
-        return document.createElementNS(
-          'http://www.w3.org/2000/svg',
-          d.depth === 2 ? 'circle' : 'rect'
-        )
-      })
-    )
-    .attr('class', 'sankey-node-shape')
-    .attr('fill', (d) => getNodeColor(d))
-    .attr('stroke', (d) => {
-      return d.depth === 2 ? 'none' : node.stroke
-    })
-    .attr('stroke-width', (d) => {
-      return d.depth === 2 ? 0 : node.strokeWidth
-    })
-    .attr('stroke-dasharray', 'none')
-    .attr('opacity', node.opacity)
-    .style('filter', (d) => {
-      if (d.depth === 2) {
-        return 'drop-shadow(0 4px 10px rgba(67, 45, 27, 0.22))'
-      }
-
-      return 'drop-shadow(0 6px 10px rgba(67, 45, 27, 0.18))'
-    })
-    .each(function (d) {
-      const shape = d3.select(this)
-
-      if (d.depth === 2) {
-        shape
-          .attr('cx', getNodeCenterX(d))
-          .attr('cy', getNodeCenterY(d))
-          .attr('r', 0)
-      } else {
-        shape
-          .attr('x', d.x0)
-          .attr('y', d.y0)
-          .attr('width', Math.max(1, d.x1 - d.x0))
-          .attr('height', 0)
-          .attr('rx', node.radius)
-      }
-    })
-    .on('mousemove', function (event, d) {
-      showTooltip(event, {
-        title: d.name,
-        desc: `合计角色数：${d.value || 0}`,
-      })
-
-      highlightByNode(d, linkSelection, nodeSelection, textSelection, imageSelection)
-    })
-    .on('mouseleave', function () {
-      hideTooltip()
-      resetHighlight(linkSelection, nodeSelection, textSelection, imageSelection)
-    })
-
-  nodeSelection
-    .transition()
-    .duration(transition.duration)
-    .each(function (d) {
-      const shape = d3.select(this)
-
-      if (d.depth === 2) {
-        shape.attr('r', chartConfig.circle.radius)
-      } else {
-        shape.attr('height', Math.max(2, d.y1 - d.y0))
-      }
-    })
-
-  // 第三列圆圈的内缩虚线边框
-  // 这个边框只是往圆心靠，圆圈本身和第三列位置都不会乱动
-  nodeGroup
-    .selectAll('.sankey-circle-inner-border')
-    .data(graph.nodes.filter((d) => d.depth === 2))
-    .join('circle')
-    .attr('class', 'sankey-circle-inner-border')
-    .attr('cx', (d) => getNodeCenterX(d))
-    .attr('cy', (d) => getNodeCenterY(d))
-    .attr('r', chartConfig.circle.radius - chartConfig.circle.borderInset)
-    .attr('fill', 'none')
-    .attr('stroke', chartConfig.circle.stroke)
-    .attr('stroke-width', chartConfig.circle.strokeWidth)
-    .attr('stroke-dasharray', chartConfig.circle.strokeDasharray)
-    .attr('opacity', 0.95)
-    .style('pointer-events', 'none')
-
-  // 第一列文字：时期
-  // 注意：这里不再画第三列文字了
-  const textSelection = labelGroup
-    .selectAll('.sankey-label')
-    .data(graph.nodes.filter((d) => d.depth === 0))
-    .join('text')
-    .attr('class', 'sankey-label')
-    .attr('x', (d) => getNodeCenterX(d))
-    .attr('y', (d) => {
-      const text = getNodeShortName(d.name)
-      const lineHeight = label.fontSize + 2
-      const totalHeight = text.length * lineHeight
-
-      return getNodeCenterY(d) - totalHeight / 2 + lineHeight / 2
-    })
-    .attr('text-anchor', 'middle')
-    .attr('dominant-baseline', 'middle')
-    .attr('fill', '#000000')
-    .attr('font-size', label.fontSize)
-    .attr('font-weight', label.fontWeight)
-    .attr('opacity', 0)
-    .style('pointer-events', 'none')
-    .each(function (d) {
-      const currentText = d3.select(this)
-
-      currentText.selectAll('*').remove()
-
-      const text = getNodeShortName(d.name)
-      const chars = text.split('')
-      const lineHeight = label.fontSize + 2
-
-      currentText
-        .selectAll('tspan')
-        .data(chars)
-        .join('tspan')
-        .attr('x', getNodeCenterX(d))
-        .attr('dy', (char, index) => {
-          return index === 0 ? 0 : lineHeight
-        })
-        .text((char) => char)
-    })
-
-  textSelection
-    .transition()
-    .duration(transition.duration)
-    .attr('opacity', 1)
-
-  // 第三列图片：生 / 旦 / 净 / 丑
-  // 用 image 替代原来的文字
-  const imageSelection = labelGroup
-    .selectAll('.sankey-role-image')
-    .data(graph.nodes.filter((d) => d.depth === 2))
-    .join('image')
-    .attr('class', 'sankey-role-image')
-    .attr('href', (d) => roleImageMap[d.name])
-    .attr('x', (d) => {
-      const imageSize = chartConfig.circle.radius * chartConfig.roleImage.sizeRatio
-      return getNodeCenterX(d) - imageSize / 2
-    })
-    .attr('y', (d) => {
-      const imageSize = chartConfig.circle.radius * chartConfig.roleImage.sizeRatio
-      return getNodeCenterY(d) - imageSize / 2 - 7
-    })
-    .attr('width', chartConfig.circle.radius * chartConfig.roleImage.sizeRatio)
-    .attr('height', chartConfig.circle.radius * chartConfig.roleImage.sizeRatio)
-    .attr('preserveAspectRatio', 'xMidYMid meet')
-    .attr('opacity', 0)
-    .style('pointer-events', 'none')
-
-  imageSelection
-    .transition()
-    .duration(transition.duration)
-    .attr('opacity', chartConfig.roleImage.opacity)
-
-  requestAnimationFrame(() => {
-    fitGroupInsideSvg(mainGroup, width, height)
+function scheduleDraw() {
+  if (resizeFrame) cancelAnimationFrame(resizeFrame)
+  resizeFrame = requestAnimationFrame(() => {
+    resizeFrame = 0
+    drawSankey()
   })
 }
 
-function showTooltip(event, content) {
-  const wrapRect = chartWrapRef.value.getBoundingClientRect()
+function buildGraph(sourceRows) {
+  const nodes = new Map()
+  const links = new Map()
 
+  sourceRows.forEach((row) => {
+    if (!row.period || !row.identity || row.periodShare <= 0) return
+
+    const periodId = addNode(nodes, 'period', row.period)
+    const identityId = addNode(nodes, 'identity', row.identity)
+    addLink(links, periodId, identityId, row.periodShare, `${row.period} -> ${row.identity}`)
+
+    Object.entries(row.trades).forEach(([trade, tradeShare]) => {
+      const tradeId = addNode(nodes, 'trade', trade)
+      const weightedValue = (row.periodShare * tradeShare) / 100
+      addLink(links, identityId, tradeId, weightedValue, `${row.identity} -> ${trade}`)
+    })
+  })
+
+  return {
+    nodes: Array.from(nodes.values()),
+    links: Array.from(links.values()).filter((link) => link.value > 0),
+  }
+}
+
+function addNode(nodes, type, label) {
+  const id = `${type}:${label}`
+  if (!nodes.has(id)) {
+    nodes.set(id, { id, type, label })
+  }
+  return id
+}
+
+function addLink(links, source, target, value, label) {
+  const key = `${source}=>${target}`
+  const current = links.get(key)
+  if (current) {
+    current.value += value
+  } else {
+    links.set(key, { source, target, value, label })
+  }
+}
+
+function drawColumnLabels(svg, nodes) {
+  const labels = [
+    { type: 'period', text: '历史时期' },
+    { type: 'identity', text: '身份类型' },
+    { type: 'trade', text: '行当' },
+  ]
+
+  labels.forEach((item) => {
+    const columnNodes = nodes.filter((node) => node.type === item.type)
+    if (!columnNodes.length) return
+    const x = d3.mean(columnNodes, (node) => (node.x0 + node.x1) / 2)
+
+    svg
+      .append('text')
+      .attr('class', 'column-label')
+      .attr('x', x)
+      .attr('y', 16)
+      .attr('text-anchor', 'middle')
+      .text(item.text)
+  })
+}
+
+function drawLinks(svg, links) {
+  const defs = svg.append('defs')
+  const linkPath = sankeyLinkHorizontal()
+
+  links.forEach((link, index) => {
+    const gradient = defs
+      .append('linearGradient')
+      .attr('id', `sankey-gradient-${index}`)
+      .attr('gradientUnits', 'userSpaceOnUse')
+      .attr('x1', link.source.x1)
+      .attr('x2', link.target.x0)
+
+    gradient.append('stop').attr('offset', '0%').attr('stop-color', getNodeColor(link.source))
+    gradient.append('stop').attr('offset', '100%').attr('stop-color', getNodeColor(link.target))
+  })
+
+  svg
+    .append('g')
+    .attr('class', 'links')
+    .selectAll('path')
+    .data(links)
+    .join('path')
+    .attr('class', 'sankey-link')
+    .attr('d', linkPath)
+    .attr('stroke', (_, index) => `url(#sankey-gradient-${index})`)
+    .attr('stroke-width', (link) => Math.max(1, link.width))
+    .on('mouseenter', (event, link) => {
+      highlightLink(link)
+      showTooltip(event, link.label, `映射占比：${formatPercent(link.value)}`)
+    })
+    .on('mousemove', moveTooltip)
+    .on('mouseleave', () => {
+      clearHighlight()
+      hideTooltip()
+    })
+}
+
+function drawNodes(svg, nodes) {
+  const node = svg
+    .append('g')
+    .attr('class', 'nodes')
+    .selectAll('g')
+    .data(nodes)
+    .join('g')
+    .attr('class', 'sankey-node')
+
+  node.append('title').text((d) => `${d.label} ${formatPercent(d.value)}`)
+
+  node
+    .append('rect')
+    .attr('x', (d) => d.x0)
+    .attr('y', (d) => d.y0)
+    .attr('width', (d) => Math.max(1, d.x1 - d.x0))
+    .attr('height', (d) => Math.max(2, d.y1 - d.y0))
+    .attr('rx', 4)
+    .attr('fill', getNodeColor)
+    .on('mouseenter', (event, d) => {
+      highlightNode(d)
+      d3.select(event.currentTarget).attr('filter', 'brightness(1.08)')
+      showTooltip(event, d.label, `节点总占比：${formatPercent(d.value)}`)
+    })
+    .on('mousemove', moveTooltip)
+    .on('mouseleave', (event) => {
+      clearHighlight()
+      d3.select(event.currentTarget).attr('filter', null)
+      hideTooltip()
+    })
+
+  node
+    .append('text')
+    .attr('x', getLabelX)
+    .attr('y', (d) => (d.y0 + d.y1) / 2)
+    .attr('dy', '0.32em')
+    .attr('text-anchor', getLabelAnchor)
+    .text((d) => d.label)
+}
+
+// 高亮节点和连线
+function highlightNode(targetNode) {
+  const svg = d3.select(svgRef.value)
+  const relatedNodeIds = new Set([targetNode.id])
+
+  svg.selectAll('.sankey-link').attr('stroke-opacity', (link) => {
+    const isRelated = link.source.id === targetNode.id || link.target.id === targetNode.id
+    if (isRelated) {
+      relatedNodeIds.add(link.source.id)
+      relatedNodeIds.add(link.target.id)
+    }
+    return isRelated ? 0.76 : 0.06
+  })
+
+  svg.selectAll('.sankey-node').attr('opacity', (node) =>
+    relatedNodeIds.has(node.id) ? 1 : 0.16
+  )
+}
+
+function highlightLink(targetLink) {
+  const svg = d3.select(svgRef.value)
+  const sourceId = targetLink.source.id
+  const targetId = targetLink.target.id
+
+  svg.selectAll('.sankey-link').attr('stroke-opacity', (link) =>
+    link === targetLink ? 0.82 : 0.06
+  )
+
+  svg.selectAll('.sankey-node').attr('opacity', (node) =>
+    node.id === sourceId || node.id === targetId ? 1 : 0.16
+  )
+}
+
+function clearHighlight() {
+  const svg = d3.select(svgRef.value)
+  svg.selectAll('.sankey-link').attr('stroke-opacity', null)
+  svg.selectAll('.sankey-node').attr('opacity', 1)
+}
+
+// Tooltip
+function showTooltip(event, title, value) {
+  tooltip.title = title
+  tooltip.value = value
   tooltip.show = true
-  tooltip.x = event.clientX - wrapRect.left + 14
-  tooltip.y = event.clientY - wrapRect.top + 14
-  tooltip.title = content.title
-  tooltip.desc = content.desc
+  moveTooltip(event)
+}
+
+function moveTooltip(event) {
+  const offset = 14
+  const tooltipWidth = 190
+  const tooltipHeight = 70
+
+  let x = event.clientX + offset
+  let y = event.clientY + offset
+
+  if (x + tooltipWidth > window.innerWidth) x = event.clientX - tooltipWidth - offset
+  if (y + tooltipHeight > window.innerHeight) y = event.clientY - tooltipHeight - offset
+
+  tooltip.x = x
+  tooltip.y = y
 }
 
 function hideTooltip() {
   tooltip.show = false
 }
 
-function highlightByNode(activeNode, linkSelection, nodeSelection, textSelection, imageSelection) {
-  const relatedNodeNames = new Set()
-
-  relatedNodeNames.add(activeNode.name)
-
-  linkSelection
-    .transition()
-    .duration(180)
-    .attr('opacity', (d) => {
-      const isRelated =
-        d.source.name === activeNode.name ||
-        d.target.name === activeNode.name
-
-      if (isRelated) {
-        relatedNodeNames.add(d.source.name)
-        relatedNodeNames.add(d.target.name)
-      }
-
-      return isRelated ? chartConfig.link.hoverOpacity : chartConfig.link.inactiveOpacity
-    })
-
-  nodeSelection
-    .transition()
-    .duration(180)
-    .attr('opacity', (d) => {
-      return relatedNodeNames.has(d.name)
-        ? chartConfig.node.hoverOpacity
-        : 0.18
-    })
-
-  textSelection
-    .transition()
-    .duration(180)
-    .attr('opacity', (d) => {
-      return relatedNodeNames.has(d.name)
-        ? 1
-        : chartConfig.label.inactiveOpacity
-    })
-
-  imageSelection
-    .transition()
-    .duration(180)
-    .attr('opacity', (d) => {
-      return relatedNodeNames.has(d.name)
-        ? chartConfig.roleImage.opacity
-        : chartConfig.roleImage.inactiveOpacity
-    })
+function getNodeColor(node) {
+  return typeColors[node.type] || '#7d7469'
 }
 
-function highlightByLink(activeLink, linkSelection, nodeSelection, textSelection, imageSelection) {
-  const relatedNodeNames = new Set([
-    activeLink.source.name,
-    activeLink.target.name,
-  ])
-
-  linkSelection
-    .transition()
-    .duration(180)
-    .attr('opacity', (d) => {
-      const isSame =
-        d.source.name === activeLink.source.name &&
-        d.target.name === activeLink.target.name
-
-      return isSame ? chartConfig.link.hoverOpacity : chartConfig.link.inactiveOpacity
-    })
-
-  nodeSelection
-    .transition()
-    .duration(180)
-    .attr('opacity', (d) => {
-      return relatedNodeNames.has(d.name)
-        ? chartConfig.node.hoverOpacity
-        : 0.18
-    })
-
-  textSelection
-    .transition()
-    .duration(180)
-    .attr('opacity', (d) => {
-      return relatedNodeNames.has(d.name)
-        ? 1
-        : chartConfig.label.inactiveOpacity
-    })
-
-  imageSelection
-    .transition()
-    .duration(180)
-    .attr('opacity', (d) => {
-      return relatedNodeNames.has(d.name)
-        ? chartConfig.roleImage.opacity
-        : chartConfig.roleImage.inactiveOpacity
-    })
+function getLabelX(node) {
+  return node.x1 + 5
 }
 
-function resetHighlight(linkSelection, nodeSelection, textSelection, imageSelection) {
-  linkSelection
-    .transition()
-    .duration(180)
-    .attr('opacity', chartConfig.link.opacity)
-
-  nodeSelection
-    .transition()
-    .duration(180)
-    .attr('opacity', chartConfig.node.opacity)
-
-  textSelection
-    .transition()
-    .duration(180)
-    .attr('opacity', 1)
-
-  imageSelection
-    .transition()
-    .duration(180)
-    .attr('opacity', chartConfig.roleImage.opacity)
+function getLabelAnchor() {
+  return 'start'
 }
 
-onMounted(async () => {
-  await nextTick()
+function sortByType(a, b) {
+  if (a.type !== b.type) return a.type.localeCompare(b.type)
+  return a.label.localeCompare(b.label, 'zh-Hans-CN')
+}
 
-  drawSankey()
+function cleanText(value) {
+  return String(value ?? '').trim()
+}
 
-  resizeObserver = new ResizeObserver(() => {
-    drawSankey()
-  })
+function parseNumber(value) {
+  const parsed = Number.parseFloat(String(value ?? '').replace('%', '').trim())
+  return Number.isFinite(parsed) ? parsed : 0
+}
 
-  if (chartWrapRef.value) {
-    resizeObserver.observe(chartWrapRef.value)
-  }
-})
-
-onBeforeUnmount(() => {
-  if (resizeObserver) {
-    resizeObserver.disconnect()
-    resizeObserver = null
-  }
-})
+function formatPercent(value) {
+  return `${d3.format('.2f')(value)}%`
+}
 </script>
 
 <style scoped>
-.sankey-card {
-  width: 100%;
-  height: 100%;
-  box-sizing: border-box;
+.evolution-sankey {
   position: relative;
-  overflow: hidden;
-}
-
-.sankey-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border: 1px solid rgba(119, 78, 42, 0.12);
-  pointer-events: none;
-}
-
-.sankey-header {
-  height: 20px;
-}
-
-.sankey-legend {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  padding: 2px;
-}
-
-.legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: rgba(48, 34, 23, 0.66);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.legend-item i {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5);
+  min-height: 100%;
+  flex-direction: column;
+  gap: 8px;
+  color: #3d3935;
 }
 
 .sankey-wrap {
-  width: 100%;
-  height: calc(100% - 20px);
-  min-height: 340px;
   position: relative;
-  z-index: 1;
+  min-height: 310px;
+  flex: 1;
+  overflow: hidden;
 }
 
 .sankey-svg {
+  display: block;
   width: 100%;
   height: 100%;
-  display: block;
+  min-height: 310px;
+}
+
+.chart-state {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(61, 57, 53, 0.72);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.chart-state--error {
+  color: #9d2f2a;
 }
 
 .sankey-tooltip {
-  position: absolute;
-  z-index: 20;
-  max-width: 260px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  position: fixed;
+  z-index: 9999;
+  display: grid;
+  gap: 5px;
+  max-width: 180px;
+  padding: 8px 10px;
+  border: 1px solid rgba(111, 20, 24, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 250, 241, 0.96);
+  box-shadow: 0 8px 18px rgba(72, 47, 30, 0.14);
+  color: #3d3935;
+  font-size: 11px;
+  line-height: 1.35;
+  opacity: 0;
   pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
 
-  background: rgba(42, 30, 21, 0.9);
-  color: #fff8e8;
-  box-shadow: 0 10px 28px rgba(42, 30, 21, 0.22);
-  backdrop-filter: blur(8px);
+.sankey-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .sankey-tooltip strong {
-  display: block;
-  margin-bottom: 5px;
   font-size: 12px;
-  line-height: 1.4;
 }
 
 .sankey-tooltip span {
-  display: block;
-  color: rgba(255, 248, 232, 0.76);
-  font-size: 12px;
-  line-height: 1.4;
+  color: rgba(61, 57, 53, 0.72);
+}
+
+:deep(.column-label) {
+  fill: rgba(61, 57, 53, 0.72);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+:deep(.sankey-link) {
+  fill: none;
+  mix-blend-mode: multiply;
+  stroke-linecap: round;
+  stroke-opacity: 0.34;
+  transition: stroke-opacity 0.18s ease;
+}
+
+:deep(.sankey-node) {
+  transition: opacity 0.18s ease;
+}
+
+:deep(.sankey-node rect) {
+  cursor: pointer;
+  opacity: 0.94;
+  stroke: rgba(255, 255, 255, 0.7);
+  stroke-width: 1;
+}
+
+:deep(.sankey-node text) {
+  fill: rgba(61, 57, 53, 0.86);
+  font-size: 10px;
+  font-weight: 600;
+  paint-order: stroke;
+  pointer-events: none;
+  stroke: rgba(255, 250, 241, 0.86);
+  stroke-width: 3px;
 }
 </style>
