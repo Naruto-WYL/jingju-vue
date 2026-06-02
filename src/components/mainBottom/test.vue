@@ -47,21 +47,21 @@ const metricFields = [
 ]
 
 const colorMap = {
-  performanceDensity: '#8f2f2a',
-  conflictStrength: '#b88a36',
-  emotionStrength: '#2f625d',
-  roleActivity: '#3d4655',
-  relationChanges: '#9a5260',
-  plotStrength: '#5c5360',
+  performanceDensity: '#6f7478',
+  conflictStrength: '#9a978f',
+  emotionStrength: '#7f8b90',
+  roleActivity: '#8b8f95',
+  relationChanges: '#aaa49a',
+  plotStrength: '#5f6770',
 }
 
 const inkColorMap = {
-  performanceDensity: ['#f3ded7', '#8f2f2a'],
-  conflictStrength: ['#f0ddb0', '#a57427'],
-  emotionStrength: ['#d4e5e1', '#2f625d'],
-  roleActivity: ['#d7dce3', '#3d4655'],
-  relationChanges: ['#ecd2d6', '#9a5260'],
-  plotStrength: ['#ded8e0', '#5c5360'],
+  performanceDensity: ['#f5f3ee', '#6f7478'],
+  conflictStrength: ['#f2efe8', '#9a978f'],
+  emotionStrength: ['#eef3f2', '#7f8b90'],
+  roleActivity: ['#f0f1f2', '#8b8f95'],
+  relationChanges: ['#f4f0e9', '#aaa49a'],
+  plotStrength: ['#eceff1', '#5f6770'],
 }
 
 const stageOrder = ['开端', '发展', '高潮', '结局']
@@ -767,7 +767,7 @@ function formatValue(value) {
 
 .river-tooltip :deep(.river-tooltip__metric) {
   margin: 5px 0 3px;
-  color: #8f2f2a;
+  color: #5f6770;
   font-weight: 700;
 }
 
@@ -789,7 +789,7 @@ function formatValue(value) {
 }
 
 .river-tooltip :deep(.river-tooltip__active) {
-  color: #8f2f2a;
+  color: #4f5962;
 }
 
 .chart-state {
