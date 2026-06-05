@@ -52,8 +52,28 @@ const tooltip = reactive({
 
 let resizeObserver = null
 
-const DATA_URL = '/数据表合集/2/p2_edges.xlsx'
+const DATA_URL = '/数据表合集/2/p2_one.xlsx'
 const MAIN_COLOR = '#DDCCAB'
+
+function normalizeKey(key) {
+  return String(key || '').replace(/\s+/g, '').toLowerCase()
+}
+
+function pickValue(row, candidates) {
+  const keyMap = new Map(
+    Object.keys(row).map((key) => [normalizeKey(key), key]),
+  )
+
+  for (const candidate of candidates) {
+    const key = keyMap.get(normalizeKey(candidate))
+
+    if (key && row[key] !== '') {
+      return row[key]
+    }
+  }
+
+  return ''
+}
 
 // 读取 Excel 数据
 async function loadData() {
@@ -71,12 +91,12 @@ async function loadData() {
 
     rawData.value = rows
       .map((row) => ({
-        script_id: String(row.script_id || '').trim(),
-        script_title: String(row.script_title || '').trim(),
-        source: String(row.source || '').trim(),
-        target: String(row.target || '').trim(),
-        weight: Number(row.weight || 0),
-        relation_type: String(row.relation_type || '').trim(),
+        script_id: String(pickValue(row, ['剧本ID', '剧本id', 'script_id']) || '').trim(),
+        script_title: String(pickValue(row, ['剧本名称', 'script_title']) || '').trim(),
+        source: String(pickValue(row, ['角色A', '角色a', 'source']) || '').trim(),
+        target: String(pickValue(row, ['角色B', '角色b', 'target']) || '').trim(),
+        weight: Number(pickValue(row, ['关系强度', 'weight']) || 0),
+        relation_type: String(pickValue(row, ['关系类型', 'relation_type']) || '').trim(),
       }))
       .filter((row) => {
         return (

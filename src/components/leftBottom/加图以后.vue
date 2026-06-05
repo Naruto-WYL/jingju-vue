@@ -366,7 +366,6 @@ function layoutPosterGraph(nodes, links) {
   placeClusters(clusters, coreNodes)
   relaxLayout(nodes, coreNodes)
   expandLayoutToCanvas(nodes)
-  spreadLayoutEvenly(nodes, coreNodes)
   relaxLayout(nodes, coreNodes)
   updateClusterHubs(clusters)
 }
@@ -843,64 +842,6 @@ function expandLayoutToCanvas(nodes) {
   })
 }
 
-function spreadLayoutEvenly(nodes, coreNodes) {
-  const coreIds = new Set(coreNodes.map((node) => node.id))
-
-  nodes.forEach((node) => {
-    node.spreadAnchorX = node.x
-    node.spreadAnchorY = node.y
-  })
-
-  for (let pass = 0; pass < 90; pass += 1) {
-    const shifts = new Map(nodes.map((node) => [node.id, { x: 0, y: 0 }]))
-    let totalShift = 0
-
-    for (let i = 0; i < nodes.length; i += 1) {
-      for (let j = i + 1; j < nodes.length; j += 1) {
-        const left = nodes[i]
-        const right = nodes[j]
-        const dx = right.x - left.x
-        const dy = right.y - left.y
-        const distance = Math.hypot(dx, dy) || 1
-        const targetDistance = evenNodeDistance(left, right)
-
-        if (distance >= targetDistance) continue
-
-        const pressure = (targetDistance - distance) / targetDistance
-        const push = pressure * pressure * 18
-        const ux = dx / distance
-        const uy = dy / distance
-        const leftMobility = coreIds.has(left.id) ? 0.34 : 1
-        const rightMobility = coreIds.has(right.id) ? 0.34 : 1
-        const leftShift = shifts.get(left.id)
-        const rightShift = shifts.get(right.id)
-
-        leftShift.x -= ux * push * leftMobility
-        leftShift.y -= uy * push * leftMobility
-        rightShift.x += ux * push * rightMobility
-        rightShift.y += uy * push * rightMobility
-        totalShift += push
-      }
-    }
-
-    nodes.forEach((node) => {
-      const shift = shifts.get(node.id)
-      const anchorStrength = coreIds.has(node.id) ? 0.035 : 0.018
-
-      node.x += shift.x + (node.spreadAnchorX - node.x) * anchorStrength
-      node.y += shift.y + (node.spreadAnchorY - node.y) * anchorStrength
-      keepNodeInBounds(node)
-    })
-
-    if (totalShift < 0.18) break
-  }
-
-  nodes.forEach((node) => {
-    delete node.spreadAnchorX
-    delete node.spreadAnchorY
-  })
-}
-
 function updateClusterHubs(clusters) {
   clusters.forEach((cluster) => {
     const hub = averagePosition(cluster.nodes)
@@ -969,16 +910,6 @@ function minimumNodeDistance(left, right) {
     left.r + right.r + (sameCluster ? 88 : 118),
     (left.plateWidth || 120) / 2 + (right.plateWidth || 120) / 2 + (sameCluster ? 66 : 88),
   )
-}
-
-function evenNodeDistance(left, right) {
-  const sameCluster = left.clusterId && left.clusterId === right.clusterId
-  const base = minimumNodeDistance(left, right)
-
-  if (left.core && right.core) return base + 120
-  if (left.core || right.core) return base + 135
-  if (sameCluster) return base + 70
-  return base + 175
 }
 
 function averagePosition(items) {
