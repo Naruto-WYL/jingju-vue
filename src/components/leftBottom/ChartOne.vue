@@ -1580,7 +1580,7 @@ function clamp(value, min, max) {
   background:
     linear-gradient(90deg, rgba(142, 47, 36, 0.035) 1px, transparent 1px),
     linear-gradient(0deg, rgba(142, 47, 36, 0.025) 1px, transparent 1px),
-    #FEFAED;
+    #FDF8EB;
 
   /* 设置网格背景尺寸 */
   background-size: 34px 34px, 34px 34px, auto;
