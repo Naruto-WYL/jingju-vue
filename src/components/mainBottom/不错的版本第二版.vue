@@ -36,6 +36,18 @@
         <div v-else-if="errorMessage" class="chart-state chart-state--error">{{ errorMessage }}</div>
         <div v-else-if="!hasRiverData" class="chart-state">暂无河流图数据</div>
       </div>
+
+      <aside class="stage-side-panel" aria-label="叙事阶段场次范围">
+        <div
+          v-for="band in stageBands"
+          :key="`${band.name}-${band.startIndex}-${band.endIndex}`"
+          class="stage-card"
+          :style="stageCardStyle(band)"
+        >
+          <span class="stage-card__name">{{ band.name }}</span>
+          <strong class="stage-card__range">{{ formatStageRangeText(band) }}</strong>
+        </div>
+      </aside>
     </div>
   </div>
 </template>
@@ -51,9 +63,9 @@ const width = 560
 const height = 246
 const margin = {
   top: 42,
-  right: 20,
+  right: 10,
   bottom: 50,
-  left: 22,
+  left: 30,
 }
 
 const metricFields = [
@@ -423,11 +435,10 @@ function drawRiver() {
     )
 
   xAxis.selectAll('.tick text')
-    .attr('dx', 0)
-    .attr('dy', 12)
-    .attr('text-anchor', 'middle')
-
-  drawStageProgressBar(root, x, rows, innerWidth, innerHeight)
+    .attr('dx', -5)
+    .attr('dy', 0)
+    .attr('writing-mode', 'vertical-rl')
+    .attr('text-anchor', 'start')
 
   const focusLine = root.append('line')
     .attr('class', 'focus-line')
@@ -486,27 +497,15 @@ function drawRiver() {
     .attr('class', 'legend')
     .attr('transform', `translate(${margin.left},6)`)
 
-  // const legendItems = legend.selectAll('.legend-item')
-  //   .data(metricFields)
-  //   .join('g')
-  //   .attr('class', 'legend-item')
-  //   .attr('transform', (metric, index) => {
-  //     return `translate(${index * 110},0)`
-  //   })
-  const legendColWidth = 266
-const legendRowHeight = 18
-const legendCols = 3
-
-const legendItems = legend.selectAll('.legend-item')
-  .data(metricFields)
-  .join('g')
-  .attr('class', 'legend-item')
-  .attr('transform', (metric, index) => {
-    const col = index % legendCols
-    const row = Math.floor(index / legendCols)
-
-    return `translate(${col * legendColWidth},${row * legendRowHeight})`
-  })
+  const legendItems = legend.selectAll('.legend-item')
+    .data(metricFields)
+    .join('g')
+    .attr('class', 'legend-item')
+    .attr('transform', (metric, index) => {
+      const col = index % 3
+      const row = Math.floor(index / 3)
+      return `translate(${col * 122},${row * 18})`
+    })
 
   legendItems.append('rect')
     .attr('width', 11)
@@ -515,65 +514,9 @@ const legendItems = legend.selectAll('.legend-item')
     .attr('fill', (metric) => colorMap[metric.key])
 
   legendItems.append('text')
-    .attr('x', 14)
+    .attr('x', 16)
     .attr('y', 10)
     .text((metric) => metric.label)
-}
-
-function drawStageProgressBar(root, x, rows, innerWidth, innerHeight) {
-  const bands = stageBands.value
-  if (!bands.length) return
-
-  const stepWidth = rows.length > 1 ? innerWidth / (rows.length - 1) : innerWidth
-  const barY = innerHeight + 30
-  const barHeight = 16
-  const corner = 4
-
-  const progress = root.append('g')
-    .attr('class', 'stage-progress')
-    .attr('transform', `translate(0,${barY})`)
-
-  progress.append('line')
-    .attr('class', 'stage-progress__ornament')
-    .attr('x1', 0)
-    .attr('x2', innerWidth)
-    .attr('y1', -5)
-    .attr('y2', -5)
-
-  const segments = progress.selectAll('.stage-progress__segment')
-    .data(bands)
-    .join('g')
-    .attr('class', 'stage-progress__segment')
-
-  segments.append('rect')
-    .attr('class', 'stage-progress__rect')
-    .attr('x', (band) => progressSegmentBounds(band, x, stepWidth, innerWidth).x)
-    .attr('y', 0)
-    .attr('width', (band) => progressSegmentBounds(band, x, stepWidth, innerWidth).width)
-    .attr('height', barHeight)
-    .attr('rx', corner)
-    .attr('fill', (band) => stageColorMap[band.name] || '#7a6658')
-    .attr('stroke', (band) => stageColorMap[band.name] || '#7a6658')
-
-  segments.append('text')
-    .attr('class', 'stage-progress__label')
-    .attr('x', (band) => {
-      const bounds = progressSegmentBounds(band, x, stepWidth, innerWidth)
-      return bounds.x + bounds.width / 2
-    })
-    .attr('y', 11)
-    .attr('text-anchor', 'middle')
-    .text((band) => formatProgressLabel(band, x, stepWidth, innerWidth))
-
-  progress.selectAll('.stage-progress__joint')
-    .data(bands.slice(1))
-    .join('rect')
-    .attr('class', 'stage-progress__joint')
-    .attr('x', (band) => x(band.startIndex) - 3)
-    .attr('y', barHeight / 2 - 3)
-    .attr('width', 6)
-    .attr('height', 6)
-    .attr('transform', (band) => `rotate(45 ${x(band.startIndex)} ${barHeight / 2})`)
 }
 
 function showTooltip(event, row, activeKey) {
@@ -620,23 +563,11 @@ function nearestRow(rows, pointerX, xScale) {
   }, rows[0])
 }
 
-function progressSegmentBounds(band, x, stepWidth, innerWidth) {
-  const start = Math.max(0, x(band.startIndex) - stepWidth * 0.45)
-  const end = Math.min(innerWidth, x(band.endIndex) + stepWidth * 0.45)
-
+function stageCardStyle(band) {
+  const color = stageColorMap[band.name] || '#7a6658'
   return {
-    x: start,
-    width: Math.max(14, end - start),
+    '--stage-color': color,
   }
-}
-
-function formatProgressLabel(band, x, stepWidth, innerWidth) {
-  const bounds = progressSegmentBounds(band, x, stepWidth, innerWidth)
-  if (bounds.width < 36) return ''
-  if (bounds.width < 58) return band.name
-  if (bounds.width < 92) return `${band.name} ${formatStageRangeText(band).replace(/^第/, '')}`
-
-  return `${band.name} ${formatStageRangeText(band)}`
 }
 
 function formatStageRangeText(band) {
@@ -940,7 +871,7 @@ function formatValue(value) {
 }
 
 .river-svg :deep(.legend text) {
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -960,38 +891,6 @@ function formatValue(value) {
   stroke: rgba(73, 56, 47, 0.36);
   stroke-width: 1;
   stroke-dasharray: 4 3;
-}
-
-.river-svg :deep(.stage-progress__ornament) {
-  stroke: rgba(168, 77, 54, 0.28);
-  stroke-width: 1;
-  stroke-dasharray: 7 5;
-}
-
-.river-svg :deep(.stage-progress__rect) {
-  fill-opacity: 0.2;
-  stroke-opacity: 0.56;
-  stroke-width: 1;
-  filter: drop-shadow(0 1px 0 rgba(255, 248, 232, 0.72));
-}
-
-.river-svg :deep(.stage-progress__label) {
-  fill: #4b3328;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 11px;
-  font-weight: 900;
-  paint-order: stroke;
-  stroke: rgba(255, 250, 242, 0.84);
-  stroke-width: 2px;
-  stroke-linejoin: round;
-  pointer-events: none;
-}
-
-.river-svg :deep(.stage-progress__joint) {
-  fill: #c79a47;
-  opacity: 0.72;
-  stroke: rgba(255, 248, 232, 0.82);
-  stroke-width: 1;
 }
 
 .river-tooltip {
@@ -1066,5 +965,55 @@ function formatValue(value) {
 
 .chart-state--error {
   color: #8b2a25;
+}
+
+.stage-side-panel {
+  position: relative;
+  display: flex;
+  flex: 0 0 clamp(58px, 11%, 76px);
+  flex-direction: column;
+  gap: 4px;
+  min-width: 58px;
+  min-height: 0;
+  padding: 2px 0;
+  overflow: hidden;
+}
+
+.stage-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  justify-items: center;
+  gap: 3px;
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 2px 2px;
+  border: 1px solid color-mix(in srgb, var(--stage-color) 46%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--stage-color) 8%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(255, 248, 232, 0.34);
+  color: #4b3328;
+}
+
+.stage-card__name {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  color: var(--stage-color);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.stage-card__range {
+  min-width: 0;
+  color: #3f2b22;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
 }
 </style>

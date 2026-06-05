@@ -28,14 +28,12 @@
       </label>
     </div>
 
-    <div class="chart-content">
-      <div ref="chartBodyRef" class="chart-body">
-        <svg ref="svgRef" class="river-svg" role="img" aria-label="剧情节奏河流图"></svg>
-        <div ref="tooltipRef" class="river-tooltip"></div>
-        <div v-if="loading" class="chart-state">数据加载中...</div>
-        <div v-else-if="errorMessage" class="chart-state chart-state--error">{{ errorMessage }}</div>
-        <div v-else-if="!hasRiverData" class="chart-state">暂无河流图数据</div>
-      </div>
+    <div ref="chartBodyRef" class="chart-body">
+      <svg ref="svgRef" class="river-svg" role="img" aria-label="剧情节奏河流图"></svg>
+      <div ref="tooltipRef" class="river-tooltip"></div>
+      <div v-if="loading" class="chart-state">数据加载中...</div>
+      <div v-else-if="errorMessage" class="chart-state chart-state--error">{{ errorMessage }}</div>
+      <div v-else-if="!hasRiverData" class="chart-state">暂无河流图数据</div>
     </div>
   </div>
 </template>
@@ -51,9 +49,9 @@ const width = 560
 const height = 246
 const margin = {
   top: 42,
-  right: 20,
-  bottom: 50,
-  left: 22,
+  right: 18,
+  bottom: 66,
+  left: 56,
 }
 
 const metricFields = [
@@ -423,11 +421,9 @@ function drawRiver() {
     )
 
   xAxis.selectAll('.tick text')
-    .attr('dx', 0)
-    .attr('dy', 12)
-    .attr('text-anchor', 'middle')
+    .attr('dy', 13)
 
-  drawStageProgressBar(root, x, rows, innerWidth, innerHeight)
+  drawStageBands(root, x, rows, innerWidth, innerHeight)
 
   const focusLine = root.append('line')
     .attr('class', 'focus-line')
@@ -484,96 +480,66 @@ function drawRiver() {
 
   const legend = svg.append('g')
     .attr('class', 'legend')
-    .attr('transform', `translate(${margin.left},6)`)
+    .attr('transform', `translate(${margin.left},16)`)
 
-  // const legendItems = legend.selectAll('.legend-item')
-  //   .data(metricFields)
-  //   .join('g')
-  //   .attr('class', 'legend-item')
-  //   .attr('transform', (metric, index) => {
-  //     return `translate(${index * 110},0)`
-  //   })
-  const legendColWidth = 266
-const legendRowHeight = 18
-const legendCols = 3
-
-const legendItems = legend.selectAll('.legend-item')
-  .data(metricFields)
-  .join('g')
-  .attr('class', 'legend-item')
-  .attr('transform', (metric, index) => {
-    const col = index % legendCols
-    const row = Math.floor(index / legendCols)
-
-    return `translate(${col * legendColWidth},${row * legendRowHeight})`
-  })
+  const legendItems = legend.selectAll('.legend-item')
+    .data(metricFields)
+    .join('g')
+    .attr('class', 'legend-item')
+    .attr('transform', (metric, index) => {
+      const col = index % 3
+      const row = Math.floor(index / 3)
+      return `translate(${col * 116},${row * 16})`
+    })
 
   legendItems.append('rect')
-    .attr('width', 11)
-    .attr('height', 11)
+    .attr('width', 9)
+    .attr('height', 9)
     .attr('rx', 2)
     .attr('fill', (metric) => colorMap[metric.key])
 
   legendItems.append('text')
-    .attr('x', 14)
-    .attr('y', 10)
+    .attr('x', 13)
+    .attr('y', 8)
     .text((metric) => metric.label)
 }
 
-function drawStageProgressBar(root, x, rows, innerWidth, innerHeight) {
+function drawStageBands(root, x, rows, innerWidth, innerHeight) {
   const bands = stageBands.value
   if (!bands.length) return
 
   const stepWidth = rows.length > 1 ? innerWidth / (rows.length - 1) : innerWidth
-  const barY = innerHeight + 30
-  const barHeight = 16
-  const corner = 4
+  const bandY = innerHeight + 30
+  const bandHeight = 22
+  const stageGroup = root.append('g')
+    .attr('class', 'stage-bands')
+    .attr('transform', `translate(0,${bandY})`)
 
-  const progress = root.append('g')
-    .attr('class', 'stage-progress')
-    .attr('transform', `translate(0,${barY})`)
-
-  progress.append('line')
-    .attr('class', 'stage-progress__ornament')
-    .attr('x1', 0)
-    .attr('x2', innerWidth)
-    .attr('y1', -5)
-    .attr('y2', -5)
-
-  const segments = progress.selectAll('.stage-progress__segment')
+  const bandItems = stageGroup.selectAll('.stage-band')
     .data(bands)
     .join('g')
-    .attr('class', 'stage-progress__segment')
+    .attr('class', 'stage-band')
 
-  segments.append('rect')
-    .attr('class', 'stage-progress__rect')
-    .attr('x', (band) => progressSegmentBounds(band, x, stepWidth, innerWidth).x)
+  bandItems.append('rect')
+    .attr('class', 'stage-band__rect')
+    .attr('x', (band) => Math.max(0, x(band.startIndex) - stepWidth * 0.42))
     .attr('y', 0)
-    .attr('width', (band) => progressSegmentBounds(band, x, stepWidth, innerWidth).width)
-    .attr('height', barHeight)
-    .attr('rx', corner)
+    .attr('width', (band) => {
+      const start = Math.max(0, x(band.startIndex) - stepWidth * 0.42)
+      const end = Math.min(innerWidth, x(band.endIndex) + stepWidth * 0.42)
+      return Math.max(22, end - start)
+    })
+    .attr('height', bandHeight)
+    .attr('rx', 4)
     .attr('fill', (band) => stageColorMap[band.name] || '#7a6658')
     .attr('stroke', (band) => stageColorMap[band.name] || '#7a6658')
 
-  segments.append('text')
-    .attr('class', 'stage-progress__label')
-    .attr('x', (band) => {
-      const bounds = progressSegmentBounds(band, x, stepWidth, innerWidth)
-      return bounds.x + bounds.width / 2
-    })
-    .attr('y', 11)
+  bandItems.append('text')
+    .attr('class', 'stage-band__text')
+    .attr('x', (band) => (Math.max(0, x(band.startIndex) - stepWidth * 0.42) + Math.min(innerWidth, x(band.endIndex) + stepWidth * 0.42)) / 2)
+    .attr('y', 14)
     .attr('text-anchor', 'middle')
-    .text((band) => formatProgressLabel(band, x, stepWidth, innerWidth))
-
-  progress.selectAll('.stage-progress__joint')
-    .data(bands.slice(1))
-    .join('rect')
-    .attr('class', 'stage-progress__joint')
-    .attr('x', (band) => x(band.startIndex) - 3)
-    .attr('y', barHeight / 2 - 3)
-    .attr('width', 6)
-    .attr('height', 6)
-    .attr('transform', (band) => `rotate(45 ${x(band.startIndex)} ${barHeight / 2})`)
+    .text((band) => formatStageBandLabel(band, stepWidth))
 }
 
 function showTooltip(event, row, activeKey) {
@@ -620,31 +586,12 @@ function nearestRow(rows, pointerX, xScale) {
   }, rows[0])
 }
 
-function progressSegmentBounds(band, x, stepWidth, innerWidth) {
-  const start = Math.max(0, x(band.startIndex) - stepWidth * 0.45)
-  const end = Math.min(innerWidth, x(band.endIndex) + stepWidth * 0.45)
+function formatStageBandLabel(band, stepWidth) {
+  const range = band.startNumber === band.endNumber
+    ? numberToChinese(band.startNumber)
+    : `${numberToChinese(band.startNumber)}-${numberToChinese(band.endNumber)}`
 
-  return {
-    x: start,
-    width: Math.max(14, end - start),
-  }
-}
-
-function formatProgressLabel(band, x, stepWidth, innerWidth) {
-  const bounds = progressSegmentBounds(band, x, stepWidth, innerWidth)
-  if (bounds.width < 36) return ''
-  if (bounds.width < 58) return band.name
-  if (bounds.width < 92) return `${band.name} ${formatStageRangeText(band).replace(/^第/, '')}`
-
-  return `${band.name} ${formatStageRangeText(band)}`
-}
-
-function formatStageRangeText(band) {
-  const start = Number(band.startNumber || band.startIndex + 1)
-  const end = Number(band.endNumber || band.endIndex + 1)
-
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return band.range || ''
-  return start === end ? `第${numberToChinese(start)}场` : `第${numberToChinese(start)}-${numberToChinese(end)}场`
+  return stepWidth * Math.max(1, band.endIndex - band.startIndex + 1) < 52 ? band.name : `${band.name} ${range}`
 }
 
 function buildRiverWaveRows(rows, keys) {
@@ -843,7 +790,6 @@ function formatValue(value) {
   width: 100%;
   height: 100%;
   min-height: 0;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
 }
 
 .chart-toolbar {
@@ -891,19 +837,9 @@ function formatValue(value) {
   box-shadow: 0 0 0 2px rgba(139, 42, 37, 0.1);
 }
 
-.chart-content {
-  display: flex;
-  align-items: stretch;
-  gap: 5px;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-}
-
 .chart-body {
   position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 1;
   min-height: 0;
   overflow: hidden;
 }
@@ -931,7 +867,6 @@ function formatValue(value) {
 .river-svg :deep(.axis-title),
 .river-svg :deep(.legend text) {
   fill: #67594e;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
   font-size: 11px;
 }
 
@@ -940,8 +875,21 @@ function formatValue(value) {
 }
 
 .river-svg :deep(.legend text) {
-  font-size: 16px;
+  font-size: 10px;
+}
+
+.river-svg :deep(.stage-band__rect) {
+  fill-opacity: 0.13;
+  stroke-width: 1;
+  stroke-opacity: 0.34;
+}
+
+.river-svg :deep(.stage-band__text) {
+  fill: #5d4030;
+  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+  font-size: 11px;
   font-weight: 800;
+  pointer-events: none;
 }
 
 .river-svg :deep(.river-layer) {
@@ -962,38 +910,6 @@ function formatValue(value) {
   stroke-dasharray: 4 3;
 }
 
-.river-svg :deep(.stage-progress__ornament) {
-  stroke: rgba(168, 77, 54, 0.28);
-  stroke-width: 1;
-  stroke-dasharray: 7 5;
-}
-
-.river-svg :deep(.stage-progress__rect) {
-  fill-opacity: 0.2;
-  stroke-opacity: 0.56;
-  stroke-width: 1;
-  filter: drop-shadow(0 1px 0 rgba(255, 248, 232, 0.72));
-}
-
-.river-svg :deep(.stage-progress__label) {
-  fill: #4b3328;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 11px;
-  font-weight: 900;
-  paint-order: stroke;
-  stroke: rgba(255, 250, 242, 0.84);
-  stroke-width: 2px;
-  stroke-linejoin: round;
-  pointer-events: none;
-}
-
-.river-svg :deep(.stage-progress__joint) {
-  fill: #c79a47;
-  opacity: 0.72;
-  stroke: rgba(255, 248, 232, 0.82);
-  stroke-width: 1;
-}
-
 .river-tooltip {
   position: absolute;
   top: 0;
@@ -1005,7 +921,6 @@ function formatValue(value) {
   border-radius: 6px;
   color: #49382f;
   font-size: 11px;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
   line-height: 1.45;
   background: rgba(255, 250, 242, 0.96);
   box-shadow: 0 8px 20px rgba(73, 56, 47, 0.14);
@@ -1060,7 +975,6 @@ function formatValue(value) {
   justify-content: center;
   color: #7a6658;
   font-size: 13px;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
   background: rgba(255, 250, 242, 0.72);
 }
 

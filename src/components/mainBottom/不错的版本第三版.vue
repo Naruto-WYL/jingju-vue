@@ -486,27 +486,15 @@ function drawRiver() {
     .attr('class', 'legend')
     .attr('transform', `translate(${margin.left},6)`)
 
-  // const legendItems = legend.selectAll('.legend-item')
-  //   .data(metricFields)
-  //   .join('g')
-  //   .attr('class', 'legend-item')
-  //   .attr('transform', (metric, index) => {
-  //     return `translate(${index * 110},0)`
-  //   })
-  const legendColWidth = 266
-const legendRowHeight = 18
-const legendCols = 3
-
-const legendItems = legend.selectAll('.legend-item')
-  .data(metricFields)
-  .join('g')
-  .attr('class', 'legend-item')
-  .attr('transform', (metric, index) => {
-    const col = index % legendCols
-    const row = Math.floor(index / legendCols)
-
-    return `translate(${col * legendColWidth},${row * legendRowHeight})`
-  })
+  const legendItems = legend.selectAll('.legend-item')
+    .data(metricFields)
+    .join('g')
+    .attr('class', 'legend-item')
+    .attr('transform', (metric, index) => {
+      const col = index % 3
+      const row = Math.floor(index / 3)
+      return `translate(${col * 122},${row * 18})`
+    })
 
   legendItems.append('rect')
     .attr('width', 11)
@@ -515,7 +503,7 @@ const legendItems = legend.selectAll('.legend-item')
     .attr('fill', (metric) => colorMap[metric.key])
 
   legendItems.append('text')
-    .attr('x', 14)
+    .attr('x', 16)
     .attr('y', 10)
     .text((metric) => metric.label)
 }
@@ -940,7 +928,7 @@ function formatValue(value) {
 }
 
 .river-svg :deep(.legend text) {
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 800;
 }
 
