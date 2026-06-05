@@ -1,7 +1,20 @@
 <template>
   <div class="relation-network">
-    <div class="relation-network__toolbar">
+    <div class="relation-network__toolbar" :class="{ 'relation-network__toolbar--teleported': props.selectTarget }">
+      <Teleport v-if="props.selectTarget" :to="props.selectTarget" defer>
+        <select
+          v-model="selectedScript"
+          class="script-select"
+          aria-label="选择剧本"
+          :disabled="loading || !scriptOptions.length"
+        >
+          <option v-for="script in scriptOptions" :key="script" :value="script">
+            {{ script }}
+          </option>
+        </select>
+      </Teleport>
       <select
+        v-else
         v-model="selectedScript"
         class="script-select"
         aria-label="选择剧本"
@@ -42,6 +55,13 @@ import shengAvatar from '../../assets/step1/生.png'
 
 defineOptions({
   inheritAttrs: false,
+})
+
+const props = defineProps({
+  selectTarget: {
+    type: String,
+    default: '',
+  },
 })
 
 const DATA_URL = '/数据表合集/2/new.xlsx'
@@ -1486,13 +1506,19 @@ function clamp(value, min, max) {
   min-height: 32px;
 }
 
+.relation-network__toolbar--teleported {
+  min-height: 0;
+  height: 0;
+  overflow: visible;
+}
+
 /* 剧本选择下拉框 */
 .script-select {
   /* 宽度最大 240px，同时不超过父容器 52% */
   width: min(240px, 52%);
 
   /* 设置下拉框高度 */
-  height: 30px;
+  height: 20px;
 
   /* 设置内边距，右侧留出下拉箭头空间 */
   padding: 0 32px 0 12px;
@@ -1515,7 +1541,7 @@ function clamp(value, min, max) {
   color: #50301c;
 
   /* 设置字号 */
-  font-size: 20px;
+  font-size: 16px;
 
   /* 设置字重 */
   font-weight: 1000;
@@ -1554,7 +1580,7 @@ function clamp(value, min, max) {
   background:
     linear-gradient(90deg, rgba(142, 47, 36, 0.035) 1px, transparent 1px),
     linear-gradient(0deg, rgba(142, 47, 36, 0.025) 1px, transparent 1px),
-    #f6ecd6;
+    #FEFAED;
 
   /* 设置网格背景尺寸 */
   background-size: 34px 34px, 34px 34px, auto;

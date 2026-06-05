@@ -19,10 +19,10 @@ const DATA_URL = '/数据表合集/2/p2_script_metrics.xlsx'
 const width = 760
 const height = 700
 const margin = {
-  top: 58,
-  right: 54,
-  bottom: 92,
-  left: 50,
+  top: 12,
+  right: 20,
+  bottom: 130,
+  left: 80,
 }
 
 const chartUid = `script-scatter-${Math.random().toString(36).slice(2, 10)}`
@@ -212,13 +212,6 @@ const plaqueHeight = d3
     .attr('width', plotWidth)
     .attr('height', plotHeight)
 
-  svg
-    .append('text')
-    .attr('class', 'chart-caption')
-    .attr('x', margin.left)
-    .attr('y', 36)
-    .text('剧目网络结构分布')
-
   const grid = svg.append('g').attr('class', 'grid-lines')
 
   grid
@@ -271,7 +264,7 @@ const plaqueHeight = d3
   svg
     .append('text')
     .attr('class', 'axis-label axis-label-y')
-    .attr('transform', `translate(${margin.left - 26},${margin.top + plotHeight / 2}) rotate(-90)`)
+    .attr('transform', `translate(${margin.left - 40},${margin.top + plotHeight / 2}) rotate(-90)`)
     .attr('text-anchor', 'middle')
     .text('中心化')
 
@@ -279,7 +272,7 @@ const plaqueHeight = d3
     .append('text')
     .attr('class', 'axis-label axis-label-x')
     .attr('x', margin.left + plotWidth / 2)
-    .attr('y', margin.top + plotHeight + 48)
+    .attr('y', margin.top + plotHeight + 50)
     .attr('text-anchor', 'middle')
     .text('密度')
 
@@ -353,33 +346,37 @@ function drawLegend(svg, chartWidth, chartHeight) {
   const legend = svg
     .append('g')
     .attr('class', 'legend')
-    .attr('transform', `translate(${margin.left},${chartHeight - 28})`)
+    .attr('transform', `translate(${margin.left},${chartHeight - 50})`)
 
-  const titleWidth = 86
+  const titleWidth = 104
+  const rowGap = 35
+  const itemsPerRow = Math.max(1, Math.ceil(categories.value.length / 2))
   const itemStep = Math.min(
-    108,
-    Math.max(78, (chartWidth - margin.left - margin.right - titleWidth) / Math.max(1, categories.value.length)),
+    150,
+    Math.max(112, (chartWidth - margin.left - margin.right - titleWidth) / itemsPerRow),
   )
 
-  legend.append('text').attr('class', 'legend-title').attr('x', 0).attr('y', 6).text('戏剧种类')
+  legend.append('text').attr('class', 'legend-title').attr('x', 0).attr('y', 7).text('戏剧种类')
 
   categories.value.forEach((category, index) => {
+    const row = Math.floor(index / itemsPerRow)
+    const column = index % itemsPerRow
     const item = legend
       .append('g')
-      .attr('transform', `translate(${titleWidth + index * itemStep},0)`)
+      .attr('transform', `translate(${titleWidth + column * itemStep},${row * rowGap})`)
 
     item
       .append('path')
       .attr('class', 'legend-plaque')
-      .attr('d', createPlaquePath(34, 18, 3))
+      .attr('d', createPlaquePath(42, 22, 3))
       .attr('fill', getCategoryColor(category))
 
-    item.append('path').attr('class', 'legend-plaque-inner').attr('d', createPlaquePath(26, 12, 2))
+    item.append('path').attr('class', 'legend-plaque-inner').attr('d', createPlaquePath(32, 15, 2))
 
     item
       .append('text')
-      .attr('x', 26)
-      .attr('y', 5)
+      .attr('x', 32)
+      .attr('y', 6)
       .text(category)
   })
 }
@@ -461,9 +458,7 @@ function hideTooltip(tooltipElement) {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid rgba(143, 47, 36, 0.16);
   border-radius: 2px;
-  
 }
 
 .scatter-chart {
@@ -474,13 +469,11 @@ function hideTooltip(tooltipElement) {
 }
 
 .scatter-chart :deep(.paper-background) {
-  fill: #c58c1a;
-  stroke: rgba(143, 47, 36, 0.2);
-  stroke-width: 1.1;
+  fill: #FEF9ED;
 }
 
 .scatter-chart :deep(.plot-background) {
-  fill: rgba(100, 82, 31, 0.5);
+  fill: #F6EFDF;
   stroke: rgba(143, 47, 36, 0.2);
   stroke-width: 1;
 }
@@ -577,27 +570,27 @@ function hideTooltip(tooltipElement) {
 .scatter-chart :deep(.legend text) {
   fill: #4b3328;
   font-family: 'STKaiti', 'KaiTi', 'Microsoft YaHei', sans-serif;
-  font-size: 17px;
-  font-weight: 700;
+  font-size: 21px;
+  font-weight: 800;
 }
 
 .scatter-chart :deep(.legend-title) {
   fill: #8f2f24;
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 800;
 }
 
 .scatter-chart :deep(.legend-plaque) {
   stroke: #f5ddb0;
   stroke-linejoin: round;
-  stroke-width: 2.4;
+  stroke-width: 2.8;
 }
 
 .scatter-chart :deep(.legend-plaque-inner) {
   fill: none;
   stroke: rgba(255, 247, 218, 0.9);
   stroke-linejoin: round;
-  stroke-width: 1;
+  stroke-width: 1.2;
 }
 
 .chart-state {
