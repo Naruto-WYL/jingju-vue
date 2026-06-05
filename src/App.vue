@@ -296,50 +296,50 @@ function cleanTitle(title, id) {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: 0;
   background: #f6f2e7;
 }
 
 .block-left-top {
-  left: 0.7vw;
-  top: 2.86vh;
-  width: 25.1vw;
-  height: 43.54vh;
+  left: 0;
+  top: 0;
+  width: 26.52vw;
+  height: 47.69vh;
 }
 
 .block-left-bottom {
-  left: 0.7vw;
+  left: 0;
   top: 47.69vh;
-  width: 25.1vw;
-  height: 49.79vh;
+  width: 26.52vw;
+  height: 52.31vh;
 }
 
 .block-main-top {
   left: 26.52vw;
-  top: 2.86vh;
-  width: 37.92vw;
-  height: 64.27vh;
+  top: 0;
+  width: 38.51vw;
+  height: 68.49vh;
 }
 
 .block-right-top {
   left: 65.03vw;
-  top: 2.86vh;
-  width: 33.87vw;
-  height: 64.27vh;
+  top: 0;
+  width: 34.97vw;
+  height: 68.49vh;
 }
 
 .block-main-bottom {
   left: 26.52vw;
   top: 68.49vh;
-  width: 37.92vw;
-  height: 28.8vh;
+  width: 38.51vw;
+  height: 31.51vh;
 }
 
 .block-right-bottom {
   left: 65.03vw;
   top: 68.49vh;
-  width: 33.87vw;
-  height: 28.8vh;
+  width: 34.97vw;
+  height: 31.51vh;
 }
 
 .app-mask {
@@ -393,9 +393,9 @@ function cleanTitle(title, id) {
   .dashboard-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 8px;
+    gap: 0;
     height: auto;
-    padding: 8px;
+    padding: 0;
   }
 
   .left-stack {

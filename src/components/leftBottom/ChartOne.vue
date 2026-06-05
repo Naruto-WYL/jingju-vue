@@ -40,11 +40,8 @@ import * as d3 from 'd3'
 import * as XLSX from 'xlsx'
 import shengAvatar from '../../assets/step1/生.png'
 
-defineProps({
-  arcRelations: {
-    type: Object,
-    default: () => ({}),
-  },
+defineOptions({
+  inheritAttrs: false,
 })
 
 const DATA_URL = '/数据表合集/2/new.xlsx'
@@ -282,13 +279,12 @@ function drawChart() {
   }))
 
   const nodeById = new Map(nodes.map((node) => [node.id, node]))
-  layoutGraph(nodes, links, nodeById)
-  svg.attr('viewBox', `0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`)
+  layoutPosterGraph(nodes, links)
 
   const defs = svg.append('defs')
   drawDefs(defs)
 
-  const viewport = svg.append('g').attr('class', 'network-viewport')
+  const viewport = svg.append('g')
   svg.call(
     d3
       .zoom()
@@ -298,8 +294,8 @@ function drawChart() {
       }),
   )
 
-  const edgeLayer = viewport.append('g').attr('class', 'edge-layer')
-  const nodeLayer = viewport.append('g').attr('class', 'node-layer')
+  const edgeLayer = viewport.append('g')
+  const nodeLayer = viewport.append('g')
 
   drawEdges(edgeLayer, links, nodeById)
   drawNodes(nodeLayer, nodes, links, nodeById)
@@ -345,10 +341,6 @@ function drawDefs(defs) {
     .append('path')
     .attr('d', 'M1.5,2 L10,6 L1.5,10 Z')
     .attr('fill', EDGE_COLOR)
-}
-
-function layoutGraph(nodes, links) {
-  layoutPosterGraph(nodes, links)
 }
 
 function layoutPosterGraph(nodes, links) {
@@ -1197,7 +1189,7 @@ function drawNodes(nodeLayer, nodes, links, nodeById) {
     .selectAll('g.node')
     .data(nodes)
     .join('g')
-    .attr('class', (node) => `node ${node.core ? 'node--core' : ''}`)
+    .attr('class', 'node')
     .attr('transform', (node) => `translate(${node.x},${node.y})`)
     .on('mouseenter', (event, node) => {
       setNodeActive(node.id)
@@ -1447,14 +1439,30 @@ function clamp(value, min, max) {
 </script>
 
 <style scoped>
+/* 关系网络组件的最外层容器 */
 .relation-network {
+  /* 使用 flex 布局 */
   display: flex;
+
+  /* 子元素上下排列 */
   flex-direction: column;
-  gap: 8px;
+
+  /* 工具栏和图表区域之间的间距 */
+  gap: 2px;
+
+  /* 宽度占满父容器 */
   width: 100%;
+
+  /* 高度占满父容器 */
   height: 100%;
+
+  /* 最小高度为 0，防止 flex 子元素撑开布局 */
   min-height: 0;
+
+  /* 设置默认文字颜色 */
   color: #273b58;
+
+  /* 设置字体，优先使用楷体，体现戏曲/传统风格 */
   font-family:
     "STKaiti",
     "KaiTi",
@@ -1463,267 +1471,538 @@ function clamp(value, min, max) {
     sans-serif;
 }
 
+/* 顶部工具栏区域 */
 .relation-network__toolbar {
+  /* 使用 flex 布局 */
   display: flex;
+
+  /* 垂直方向居中 */
   align-items: center;
+
+  /* 内容靠右显示 */
   justify-content: flex-end;
+
+  /* 设置工具栏最小高度 */
   min-height: 32px;
 }
 
+/* 剧本选择下拉框 */
 .script-select {
+  /* 宽度最大 240px，同时不超过父容器 52% */
   width: min(240px, 52%);
+
+  /* 设置下拉框高度 */
   height: 30px;
+
+  /* 设置内边距，右侧留出下拉箭头空间 */
   padding: 0 32px 0 12px;
+
+  /* 设置边框颜色和透明度 */
   border: 1px solid rgba(142, 47, 36, 0.38);
+
+  /* 设置圆角 */
   border-radius: 6px;
+
+  /* 去掉默认聚焦外轮廓 */
   outline: none;
+
+  /* 设置下拉框背景，使用浅米色渐变 */
   background:
     linear-gradient(180deg, rgba(255, 248, 232, 0.94), rgba(242, 224, 188, 0.94)),
     #f4e8cf;
+
+  /* 设置文字颜色 */
   color: #50301c;
-  font-size: 13px;
-  font-weight: 700;
+
+  /* 设置字号 */
+  font-size: 20px;
+
+  /* 设置字重 */
+  font-weight: 1000;
+
+  /* 鼠标移上去显示可点击手型 */
   cursor: pointer;
 }
 
+/* 下拉框获得焦点时的样式 */
 .script-select:focus {
+  /* 聚焦时加深边框颜色 */
   border-color: rgba(142, 47, 36, 0.74);
+
+  /* 聚焦时添加淡金色外发光 */
   box-shadow: 0 0 0 2px rgba(212, 166, 74, 0.24);
 }
 
+/* 图表舞台区域，也就是 SVG 所在的大容器 */
 .relation-network__stage {
+  /* 设置为相对定位，方便 tooltip 绝对定位 */
   position: relative;
+
+  /* 占据剩余空间 */
   flex: 1;
+
+  /* 最小高度为 0，避免 flex 布局溢出 */
   min-height: 0;
+
+  /* 超出区域隐藏 */
   overflow: hidden;
+
+  /* 设置圆角 */
   border-radius: 8px;
+
+  /* 设置背景：前两层是浅红网格线，最后一层是画布底色 */
   background:
     linear-gradient(90deg, rgba(142, 47, 36, 0.035) 1px, transparent 1px),
     linear-gradient(0deg, rgba(142, 47, 36, 0.025) 1px, transparent 1px),
     #f6ecd6;
+
+  /* 设置网格背景尺寸 */
   background-size: 34px 34px, 34px 34px, auto;
 }
 
+/* SVG 画布 */
 .relation-network__svg {
+  /* 让 SVG 作为块级元素显示，去除底部空隙 */
   display: block;
+
+  /* SVG 宽度占满容器 */
   width: 100%;
+
+  /* SVG 高度占满容器 */
   height: 100%;
+
+  /* 最小高度为 0，避免撑开布局 */
   min-height: 0;
+
+  /* 鼠标显示抓取样式，提示可以拖动画布 */
   cursor: grab;
+
+  /* 禁止选中文字，避免拖动画布时选中内容 */
   user-select: none;
 }
 
+/* SVG 被鼠标按下时 */
 .relation-network__svg:active {
+  /* 鼠标变成正在抓取的样式 */
   cursor: grabbing;
 }
 
+/* 关系线主体 */
 :deep(.edge__line) {
+  /* 不填充路径内部 */
   fill: none;
+
+  /* 设置关系线颜色 */
   stroke: #8f2f24;
+
+  /* 线条端点为圆角 */
   stroke-linecap: round;
+
+  /* 线条连接处为圆角 */
   stroke-linejoin: round;
+
+  /* 设置透明度 */
   opacity: 0.9;
+
+  /* 给线条加一点投影，让它从背景中浮出来 */
   filter: drop-shadow(0 2px 1px rgba(74, 35, 15, 0.18));
 }
 
+/* 关系线底部金色衬线 */
 :deep(.edge__line-bg) {
+  /* 不填充路径内部 */
   fill: none;
+
+  /* 设置底线为金色 */
   stroke: #d8ad4b;
+
+  /* 底线更粗，用来形成描边效果 */
   stroke-width: 6.5;
+
+  /* 线条端点为圆角 */
   stroke-linecap: round;
+
+  /* 线条连接处为圆角 */
   stroke-linejoin: round;
+
+  /* 降低透明度，避免太抢眼 */
   opacity: 0.24;
 }
 
+/* 关系线鼠标感应区域 */
 :deep(.edge__hit) {
+  /* 不填充 */
   fill: none;
+
+  /* 透明描边，不可见但可感应鼠标 */
   stroke: transparent;
+
+  /* 感应线宽较大，方便鼠标悬停 */
   stroke-width: 24;
+
+  /* 鼠标事件只在线条描边范围内触发 */
   pointer-events: stroke;
+
+  /* 鼠标移到线上显示手型 */
   cursor: pointer;
 }
 
+/* 关系文字标签 */
 :deep(.edge__label) {
+  /* 文字颜色 */
   fill: #22140d;
+
+  /* 字号较大，方便看清关系名称 */
   font-size: 26px;
+
+  /* 字体加粗 */
   font-weight: 900;
+
+  /* 默认隐藏，悬停时才显示 */
   opacity: 0;
+
+  /* 文字先描边再填充，提高可读性 */
   paint-order: stroke;
+
+  /* 给文字加浅色描边 */
   stroke: rgba(255, 245, 218, 0.95);
+
+  /* 设置文字描边宽度 */
   stroke-width: 6px;
+
+  /* 描边连接处圆润 */
   stroke-linejoin: round;
+
+  /* 禁止文字响应鼠标事件，避免影响线条悬停 */
   pointer-events: none;
+
+  /* 设置透明度变化动画 */
   transition: opacity 0.18s ease;
 }
 
+/* 关系边和人物节点的通用过渡 */
 :deep(.edge),
 :deep(.node) {
+  /* 设置透明度和滤镜变化动画 */
   transition:
     opacity 0.2s ease,
     filter 0.2s ease;
 }
 
+/* 被弱化的关系边和节点 */
 :deep(.edge.is-muted),
 :deep(.node.is-muted) {
+  /* 降低透明度，突出当前悬停对象 */
   opacity: 0.16;
 }
 
+/* 激活状态下的关系线 */
 :deep(.edge.is-active .edge__line) {
+  /* 激活线条完全显示 */
   opacity: 1;
+
+  /* 添加金色光晕和阴影 */
   filter:
     drop-shadow(0 0 4px rgba(255, 223, 134, 0.8))
     drop-shadow(0 3px 4px rgba(86, 37, 13, 0.24));
 }
 
+/* 激活状态下关系线底部衬线 */
 :deep(.edge.is-active .edge__line-bg) {
+  /* 提高底线透明度 */
   opacity: 0.52;
 }
 
+/* 激活状态下显示关系标签 */
 :deep(.edge.is-active .edge__label) {
+  /* 显示关系文字 */
   opacity: 1;
 }
 
+/* 人物节点 */
 :deep(.node) {
+  /* 鼠标移到节点上显示手型 */
   cursor: pointer;
 }
 
+/* 节点外层光环 */
 :deep(.node__halo) {
+  /* 设置淡金色填充 */
   fill: rgba(255, 238, 184, 0.22);
+
+  /* 设置金色描边 */
   stroke: rgba(212, 166, 74, 0.65);
+
+  /* 设置描边宽度 */
   stroke-width: 4;
+
+  /* 设置虚线效果，让节点更有装饰感 */
   stroke-dasharray: 12 8;
 }
 
+/* 节点外圈 */
 :deep(.node__ring-outer) {
+  /* 设置浅米色填充 */
   fill: rgba(255, 244, 213, 0.72);
+
+  /* 使用 SVG 中定义的金色渐变描边 */
   stroke: url(#plateGold);
+
+  /* 设置外圈描边宽度 */
   stroke-width: 7;
+
+  /* 使用 SVG 中定义的阴影滤镜 */
   filter: url(#nodeShadow);
 }
 
+/* 节点内圈 */
 :deep(.node__ring-inner) {
+  /* 设置半透明米黄色填充 */
   fill: rgba(248, 230, 189, 0.58);
+
+  /* 设置深金棕色描边 */
   stroke: #7a4b19;
+
+  /* 设置描边宽度 */
   stroke-width: 2.2;
 }
 
+/* 节点头像图片 */
 :deep(.node__avatar) {
+  /* 头像不响应鼠标事件，避免挡住节点交互 */
   pointer-events: none;
+
+  /* 允许头像超出自身盒子显示 */
   overflow: visible;
 }
 
+/* 头像圆形边框 */
 :deep(.node__avatar-border) {
+  /* 不填充，只显示边框 */
   fill: none;
+
+  /* 设置边框颜色 */
   stroke: #6b421b;
+
+  /* 设置边框宽度 */
   stroke-width: 3;
 }
 
+/* 人物名牌整体 */
 :deep(.node__plaque) {
+  /* 给名牌添加投影，增强层次 */
   filter: drop-shadow(0 4px 3px rgba(70, 30, 12, 0.28));
 }
 
+/* 名牌边框 */
 :deep(.node__plaque-border) {
+  /* 不填充，只显示边框 */
   fill: none;
+
+  /* 使用金色渐变描边 */
   stroke: url(#plateGold);
+
+  /* 设置边框宽度 */
   stroke-width: 3.2;
 }
 
+/* 人物姓名文字 */
 :deep(.node__name) {
+  /* 设置姓名文字颜色 */
   fill: #fff1bf;
+
+  /* 设置普通节点姓名字号 */
   font-size: 26px;
+
+  /* 字体加粗 */
   font-weight: 900;
+
+  /* 先描边再填充，增强文字清晰度 */
   paint-order: stroke;
+
+  /* 设置文字深色描边 */
   stroke: rgba(46, 20, 10, 0.5);
+
+  /* 设置文字描边宽度 */
   stroke-width: 2px;
+
+  /* 设置描边连接处圆润 */
   stroke-linejoin: round;
+
+  /* 禁止姓名文字响应鼠标事件 */
   pointer-events: none;
 }
 
+/* 核心人物姓名文字 */
 :deep(.node__name--core) {
+  /* 核心人物名字更大 */
   font-size: 38px;
 }
 
+/* 节点激活状态 */
 :deep(.node.is-active) {
+  /* 给激活节点添加金色光晕和阴影 */
   filter:
     drop-shadow(0 0 9px rgba(255, 224, 142, 0.9))
     drop-shadow(0 8px 12px rgba(90, 36, 13, 0.25));
 }
 
+/* 图表状态提示，比如加载中、暂无数据 */
 .chart-state {
+  /* 绝对定位，覆盖整个图表舞台 */
   position: absolute;
+
+  /* 四边都贴合父容器 */
   inset: 0;
+
+  /* 使用 grid 居中内容 */
   display: grid;
+
+  /* 水平和垂直居中 */
   place-items: center;
+
+  /* 设置提示文字颜色 */
   color: #6a4526;
+
+  /* 设置字号 */
   font-size: 14px;
+
+  /* 字体加粗 */
   font-weight: 800;
+
+  /* 不响应鼠标事件，避免遮挡 SVG 交互 */
   pointer-events: none;
 }
 
+/* 错误状态提示 */
 .chart-state--error {
+  /* 错误文字使用红色 */
   color: #9b2b24;
 }
 
+/* tooltip 提示框 */
 .relation-tooltip {
+  /* 绝对定位，位置由 JS 控制 */
   position: absolute;
+
+  /* 设置层级，保证浮在 SVG 上面 */
   z-index: 10;
+
+  /* 设置固定宽度 */
   width: 260px;
+
+  /* 最大宽度不超过容器宽度 */
   max-width: calc(100% - 20px);
+
+  /* 设置内边距 */
   padding: 10px 12px;
+
+  /* 设置边框 */
   border: 1px solid rgba(142, 47, 36, 0.46);
+
+  /* 设置圆角 */
   border-radius: 8px;
+
+  /* 设置半透明浅色背景 */
   background: rgba(255, 249, 232, 0.97);
+
+  /* 设置阴影 */
   box-shadow: 0 10px 24px rgba(50, 24, 10, 0.22);
+
+  /* 设置文字颜色 */
   color: #3a2113;
+
+  /* 默认隐藏 */
   opacity: 0;
+
+  /* tooltip 不响应鼠标事件 */
   pointer-events: none;
+
+  /* 默认略微下移，出现时有动画 */
   transform: translateY(4px);
+
+  /* 设置显示隐藏过渡动画 */
   transition:
     opacity 0.16s ease,
     transform 0.16s ease;
 }
 
+/* tooltip 显示状态 */
 .relation-tooltip.is-visible {
+  /* 显示 tooltip */
   opacity: 1;
+
+  /* 回到原位 */
   transform: translateY(0);
 }
 
+/* tooltip 内部标题、副标题、正文 */
 .relation-tooltip strong,
 .relation-tooltip span,
 .relation-tooltip p {
+  /* 都作为块级元素显示 */
   display: block;
 }
 
+/* tooltip 标题 */
 .relation-tooltip strong {
+  /* 标题使用京剧红 */
   color: #8f2f24;
+
+  /* 设置标题字号 */
   font-size: 17px;
+
+  /* 设置标题行高 */
   line-height: 1.35;
 }
 
+/* tooltip 副标题 */
 .relation-tooltip span {
+  /* 与标题保持一点距离 */
   margin-top: 3px;
+
+  /* 设置副标题颜色 */
   color: #76502b;
+
+  /* 设置副标题字号 */
   font-size: 12px;
+
+  /* 副标题加粗 */
   font-weight: 800;
 }
 
+/* tooltip 正文 */
 .relation-tooltip p {
+  /* 设置正文外边距 */
   margin: 6px 0 0;
+
+  /* 设置正文颜色 */
   color: #3a2113;
+
+  /* 设置正文字号 */
   font-size: 12px;
+
+  /* 设置正文行高 */
   line-height: 1.55;
 }
 
+/* 小屏幕适配 */
 @media (max-width: 760px) {
+  /* 小屏幕下工具栏 */
   .relation-network__toolbar {
+    /* 工具栏内容靠左 */
     justify-content: flex-start;
   }
 
+  /* 小屏幕下剧本选择框 */
   .script-select {
+    /* 下拉框宽度占满容器 */
     width: 100%;
   }
 
+  /* 小屏幕下 SVG */
   .relation-network__svg {
+    /* 给 SVG 设置最小宽度，避免图表被压得太窄 */
     min-width: 920px;
   }
 }

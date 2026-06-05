@@ -463,9 +463,7 @@ function hideTooltip(tooltipElement) {
   overflow: hidden;
   border: 1px solid rgba(143, 47, 36, 0.16);
   border-radius: 2px;
-  background:
-    linear-gradient(135deg, rgba(185, 72, 52, 0.13), rgba(244, 234, 214, 0.12) 46%, rgba(47, 127, 109, 0.09)),
-    #df9707;
+  
 }
 
 .scatter-chart {
@@ -476,13 +474,13 @@ function hideTooltip(tooltipElement) {
 }
 
 .scatter-chart :deep(.paper-background) {
-  fill: #fde5b5;
+  fill: #c58c1a;
   stroke: rgba(143, 47, 36, 0.2);
   stroke-width: 1.1;
 }
 
 .scatter-chart :deep(.plot-background) {
-  fill: rgba(255, 249, 233, 0.5);
+  fill: rgba(100, 82, 31, 0.5);
   stroke: rgba(143, 47, 36, 0.2);
   stroke-width: 1;
 }
