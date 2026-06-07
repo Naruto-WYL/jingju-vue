@@ -317,28 +317,28 @@ function cleanTitle(title, id) {
 .block-main-top {
   left: 26.52vw;
   top: 0;
-  width: 38.51vw;
+  width: 47.51vw;
   height: 68.49vh;
 }
 
 .block-right-top {
-  left: 65.03vw;
+  left: 74.03vw;
   top: 0;
-  width: 34.97vw;
+  width: 25.97vw;
   height: 68.49vh;
 }
 
 .block-main-bottom {
   left: 26.52vw;
   top: 68.49vh;
-  width: 38.51vw;
+  width: 47.51vw;
   height: 31.51vh;
 }
 
 .block-right-bottom {
-  left: 65.03vw;
+  left: 74.03vw;
   top: 68.49vh;
-  width: 34.97vw;
+  width: 25.97vw;
   height: 31.51vh;
 }
 

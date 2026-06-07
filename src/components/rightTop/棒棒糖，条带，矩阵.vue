@@ -202,11 +202,11 @@ function renderUpset() {
     left: 8,
   }
 
-  const rightBarsWidth = Math.max(34, Math.min(46, width * 0.14))
-  const rightBarsGap = 6
+  const rightBarsWidth = Math.max(126, Math.min(158, width * 0.46))
+  const rightBarsGap = 8
   const matrixLeft = margin.left
   const matrixMaxRight = width - margin.right - rightBarsWidth - rightBarsGap
-  const matrixWidth = matrixMaxRight - matrixLeft
+  const matrixWidth = Math.min(matrixMaxRight - matrixLeft, Math.max(150, width * 0.5))
   const matrixRight = matrixLeft + matrixWidth
   const topHeight = Math.max(72, Math.min(96, height * 0.22))
   const matrixTop = topHeight + 3
@@ -266,15 +266,24 @@ function drawTopThemeBars(svg, data, layout) {
     })
 
   groups
-    .append('rect')
-    .attr('class', 'theme-count-rect')
-    .attr('x', (theme) => layout.xBand(theme.name) + layout.xBand.bandwidth() * 0.18)
-    .attr('y', (theme) => yScale(theme.count))
-    .attr('width', Math.max(8, layout.xBand.bandwidth() * 0.64))
-    .attr('height', (theme) => chartBottom - yScale(theme.count))
-    .attr('rx', 3)
+    .append('line')
+    .attr('class', 'theme-count-stem')
+    .attr('x1', (theme) => layout.themeX(theme.name))
+    .attr('x2', (theme) => layout.themeX(theme.name))
+    .attr('y1', chartBottom)
+    .attr('y2', (theme) => yScale(theme.count))
+    .attr('stroke', (theme) => theme.color)
+    .attr('stroke-opacity', (theme) => (theme.count ? 0.58 : 0.2))
+
+  groups
+    .append('circle')
+    .attr('class', 'theme-count-dot')
+    .attr('cx', (theme) => layout.themeX(theme.name))
+    .attr('cy', (theme) => yScale(theme.count))
+    .attr('r', (theme) => (theme.count ? 6.2 + Math.sqrt(theme.count / maxCount) * 2.8 : 4.2))
     .attr('fill', (theme) => theme.color)
-    .attr('opacity', (theme) => (theme.count ? 0.9 : 0.2))
+    .attr('stroke', '#fff8e8')
+    .attr('stroke-width', 1.4)
 }
 
 function drawVerticalMatrix(svg, data, layout) {
@@ -287,8 +296,15 @@ function drawVerticalMatrix(svg, data, layout) {
     .domain(data.combos.map((combo) => combo.key))
     .range([lineTop + 6, lineBottom - 6])
     .padding(0.28)
-  const countBadgeWidth = layout.rightBarsWidth
-  const countBadgeHeight = 20
+
+  const comboMax = Math.max(1, d3.max(data.combos, (combo) => combo.count) || 1)
+  const rightSquareSize = 8
+  const rightSquareGap = 2
+  const rightSegmentCount = Math.max(
+    6,
+    Math.floor((layout.rightBarsWidth - 14) / (rightSquareSize + rightSquareGap)),
+  )
+  const rightFillScale = d3.scaleLinear().domain([0, comboMax]).range([0, rightSegmentCount])
 
   const themeHeaders = svg
     .append('g')
@@ -380,23 +396,31 @@ function drawVerticalMatrix(svg, data, layout) {
     .attr('stroke-width', (cell) => (cell.active ? 0.8 : 0))
 
   comboRows
-    .append('rect')
-    .attr('class', 'combo-count-badge')
-    .attr('x', layout.rightBarsX)
-    .attr('y', -countBadgeHeight / 2)
-    .attr('width', countBadgeWidth)
-    .attr('height', countBadgeHeight)
-    .attr('rx', 5)
-    .attr('fill', (combo) => colorWithOpacity(combo.color, 0.14))
-    .attr('stroke', (combo) => colorWithOpacity(combo.color, 0.42))
+    .selectAll('.combo-count-cell')
+    .data((combo) => {
+      const filledCount = Math.max(1, Math.round(rightFillScale(combo.count)))
+      return d3.range(rightSegmentCount).map((segmentIndex) => ({
+        comboIndex: combo.index,
+        themes: combo.themes,
+        color: combo.color,
+        filled: segmentIndex < filledCount,
+        segmentIndex,
+      }))
+    })
+    .join('rect')
+    .attr('class', (cell) => `combo-count-cell${cell.filled ? ' combo-count-cell--filled' : ''}`)
+    .attr('x', (cell) => layout.rightBarsX + cell.segmentIndex * (rightSquareSize + rightSquareGap))
+    .attr('y', -4)
+    .attr('width', rightSquareSize)
+    .attr('height', rightSquareSize)
+    .attr('rx', 1.4)
+    .attr('fill', (cell) => (cell.filled ? cell.color : 'rgba(88, 68, 51, 0.11)'))
 
   comboRows
     .append('text')
     .attr('class', 'combo-count-label')
-    .attr('x', layout.rightBarsX + countBadgeWidth / 2)
+    .attr('x', layout.rightBarsX + rightSegmentCount * (rightSquareSize + rightSquareGap) + 1)
     .attr('dy', '0.32em')
-    .attr('text-anchor', 'middle')
-    .attr('fill', (combo) => combo.color)
     .text((combo) => combo.count)
 
   comboRows
@@ -446,8 +470,8 @@ function highlightCombo(svg, comboIndex) {
       return cell.active ? 7 : 3
     })
 
-  svg.selectAll('.combo-count-badge, .combo-count-label')
-    .attr('opacity', (combo) => (combo.index === comboIndex ? 1 : 0.18))
+  svg.selectAll('.combo-count-cell')
+    .attr('opacity', (cell) => (cell.comboIndex === comboIndex ? 1 : 0.18))
 
   svg.selectAll('.combo-connector')
     .attr('opacity', function connectorOpacity() {
@@ -472,15 +496,15 @@ function highlightTheme(svg, themeName) {
   svg.selectAll('.combo-row')
     .attr('opacity', (combo) => (combo.themes.includes(themeName) ? 1 : 0.24))
 
-  svg.selectAll('.combo-count-badge, .combo-count-label')
-    .attr('opacity', (combo) => (combo.themes.includes(themeName) ? 0.95 : 0.18))
+  svg.selectAll('.combo-count-cell')
+    .attr('opacity', (cell) => (cell.themes.includes(themeName) ? 0.95 : 0.18))
 }
 
 function clearHighlight(svg) {
   svg.selectAll('.theme-count-group').attr('opacity', 1)
   svg.selectAll('.theme-column').attr('opacity', 1)
   svg.selectAll('.combo-row').attr('opacity', 1)
-  svg.selectAll('.combo-count-badge, .combo-count-label').attr('opacity', 1)
+  svg.selectAll('.combo-count-cell').attr('opacity', 1)
   svg.selectAll('.combo-connector').attr('opacity', 0.7)
   svg.selectAll('.matrix-dot')
     .attr('opacity', 1)
@@ -529,14 +553,6 @@ function hideTooltip() {
   tooltipRef.value.style.display = 'none'
 }
 
-function colorWithOpacity(color, opacity) {
-  const parsedColor = d3.color(color)
-  if (!parsedColor) return color
-
-  parsedColor.opacity = opacity
-  return parsedColor.formatRgb()
-}
-
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -579,12 +595,19 @@ function escapeHtml(value) {
 }
 
 .vertical-upset-svg :deep(.combo-count-label) {
-  font-size: 16px;
-  font-weight: 1200;
+  fill: #66574b;
+  font-size: 8.5px;
+  font-weight: 700;
 }
 
-.vertical-upset-svg :deep(.theme-count-rect) {
-  filter: drop-shadow(0 1px 2px rgba(70, 40, 22, 0.12));
+.vertical-upset-svg :deep(.theme-count-stem) {
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  opacity: 0.74;
+}
+
+.vertical-upset-svg :deep(.theme-count-dot) {
+  filter: drop-shadow(0 1px 2px rgba(70, 40, 22, 0.16));
 }
 
 .vertical-upset-svg :deep(.theme-count-group),
@@ -617,9 +640,13 @@ function escapeHtml(value) {
   stroke-width: 1;
 }
 
-.vertical-upset-svg :deep(.combo-count-badge) {
-  stroke-width: 1;
-  filter: drop-shadow(0 1px 1px rgba(70, 40, 22, 0.08));
+.vertical-upset-svg :deep(.combo-count-cell) {
+  stroke: rgba(255, 250, 238, 0.82);
+  stroke-width: 0.7;
+}
+
+.vertical-upset-svg :deep(.combo-count-cell--filled) {
+  filter: drop-shadow(0 1px 1px rgba(70, 40, 22, 0.1));
 }
 
 .vertical-upset-svg :deep(.combo-hover-zone) {
