@@ -384,7 +384,7 @@ const roles = [
   {
     name: '生',
     src: personImage,
-    x: 0,
+    x: 50,
     y: -5,
     color: 'rgba(176, 198, 214, 0.75)',
     textColor: 'rgba(90, 120, 140, 0.9)',
@@ -393,7 +393,7 @@ const roles = [
   {
     name: '旦',
     src: danImage,
-    x: 110,
+    x: 150,
     y: -5,
     color: 'rgba(229, 158, 150, 0.75)',
     textColor: 'rgba(160, 90, 85, 0.9)',
@@ -402,7 +402,7 @@ const roles = [
   {
     name: '净',
     src: jingImage,
-    x: 220,
+    x: 255,
     y: -5,
     color: 'rgba(168, 168, 168, 0.75)',
     textColor: 'rgba(90, 90, 90, 0.9)',
@@ -411,7 +411,7 @@ const roles = [
   {
     name: '末',
     src: moImage,
-    x: 330,
+    x: 360,
     y: -5,
     color: 'rgba(222, 195, 112, 0.75)',
     textColor: 'rgba(150, 130, 60, 0.9)',
@@ -815,10 +815,34 @@ async function render() {
   await document.fonts?.ready;
 
   const canvas = canvasRef.value;
-  canvas.width = W;
-  canvas.height = H;
 
-  const ctx = canvas.getContext('2d');
+// 获取屏幕像素比，例如高清屏一般是 2
+const dpr = window.devicePixelRatio || 1;
+
+// 再额外提高清晰度，2 基本够用，想更清楚可以改 3
+const quality = 2.5;
+
+// 最终绘制倍率
+const ratio = dpr * quality;
+
+// canvas 内部真实像素变大
+canvas.width = Math.round(W * ratio);
+canvas.height = Math.round(H * ratio);
+
+// 注意：不要在这里改 canvas.style.width / height
+// 让 CSS 继续控制现在的视觉大小
+
+const ctx = canvas.getContext('2d');
+
+// 把绘图坐标缩放回原来的 W / H 逻辑尺寸
+ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+// 清空画布
+ctx.clearRect(0, 0, W, H);
+
+// 图片缩放质量设高
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = 'high';
 
   // 获取文字列表（带降级处理）
   const wordSources = await getRoleWords();
@@ -851,15 +875,22 @@ onMounted(async () => {
 
 <style scoped>
 .role-poster {
-  width: 512px;
-  height: 288px;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
+  place-items: center;
   border-radius: 2px;
 }
 
 .poster-canvas {
   display: block;
-  width: 512px;
-  height: 288px;
+  width: min(100%, 540px);
+  max-height: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  transform: translateY(24px) scale(1.28);
+  transform-origin: top center;
 }
 </style>

@@ -280,7 +280,7 @@ function drawTopThemeBars(svg, data, layout) {
 function drawVerticalMatrix(svg, data, layout) {
   const labelTop = layout.y + 4
   const labelBottom = labelTop + 58
-  const lineTop = labelBottom + 4
+  const lineTop = labelBottom + 0
   const lineBottom = layout.bottom - 2
   const rowScale = d3
     .scalePoint()
@@ -420,7 +420,7 @@ function drawVerticalLabel(group, text, x, y) {
     label
       .append('tspan')
       .attr('x', x)
-      .attr('dy', index === 0 ? 0 : 12)
+      .attr('dy', index === 0 ? 0 : 16)
       .text(char)
   })
 }
@@ -596,7 +596,7 @@ function escapeHtml(value) {
 .vertical-upset-svg :deep(.vertical-theme-label) {
   fill: #332820;
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 900;
 }
 
