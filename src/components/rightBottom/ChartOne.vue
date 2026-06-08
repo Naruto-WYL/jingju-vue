@@ -1,983 +1,650 @@
 <template>
   <div class="role-poster">
-    <canvas ref="canvasRef" class="poster-canvas"></canvas>
+    <svg ref="svgRef" class="poster-svg" role="img" aria-label="脸谱人物词云"></svg>
   </div>
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import * as d3 from 'd3'
 
-import personImage from '../../assets/词云/生.jpg';
-import danImage from '../../assets/词云/旦.jpg';
-import jingImage from '../../assets/词云/净.jpg';
+import chouImage from '../../assets/词云2/chou3.png'
+import danImage from '../../assets/词云2/dan3.png'
+import jingImage from '../../assets/词云2/jing3.png'
 
-const canvasRef = ref(null);
+const svgRef = ref(null)
 
-// 在384和640之间取中间值，适当放大
-const W = 600;   // 三个词云横向铺满右下卡片
-const H = 288;   // 216 * 1.33
-
-const PANEL_W = 186;
-const PANEL_H = 276;
-
-const textFont = '"FangSong", "STFangsong", "KaiTi", "STKaiti", "STSong", "SimSun", serif';
-
-// 每个角色独立的文字列表 - 字号适当增大（用作降级数据）
-const roleWordSources = {
-  sheng: [
-    ['老生', 10],
-    ['武生', 9],
-    ['小生', 9],
-    ['唱腔', 9],
-    ['台步', 8],
-    ['身段', 8],
-    ['板眼', 8],
-    ['念白', 7],
-    ['亮相', 7],
-    ['行头', 7],
-    ['西皮', 7],
-    ['二黄', 6],
-    ['锣鼓', 6],
-    ['戏曲', 6],
-    ['梨园', 5],
-    ['票友', 5],
-    ['科班', 5],
-    ['角儿', 4],
-  ],
-  dan: [
-    ['青衣', 10],
-    ['花旦', 9],
-    ['水袖', 9],
-    ['唱腔', 9],
-    ['台步', 8],
-    ['身段', 8],
-    ['亮相', 8],
-    ['行头', 7],
-    ['念白', 7],
-    ['板眼', 7],
-    ['锣鼓', 7],
-    ['戏曲', 6],
-    ['梨园', 6],
-    ['票友', 6],
-    ['科班', 5],
-    ['角儿', 5],
-    ['戏服', 4],
-    ['脸谱', 4],
-  ],
-  jing: [
-    ['脸谱', 10],
-    ['花脸', 9],
-    ['武净', 9],
-    ['唱腔', 9],
-    ['亮相', 8],
-    ['行头', 8],
-    ['身段', 8],
-    ['锣鼓', 7],
-    ['念白', 7],
-    ['板眼', 7],
-    ['台步', 7],
-    ['戏曲', 6],
-    ['梨园', 6],
-    ['角儿', 6],
-    ['票友', 5],
-    ['科班', 5],
-    ['西皮', 4],
-    ['二黄', 4],
-  ],
-};
-
-const wordAnchors = [
-  { x: 0.5, y: 0.47, angle: -6, level: 1 },
-  { x: 0.45, y: 0.34, angle: 9, level: 2 },
-  { x: 0.56, y: 0.6, angle: -10, level: 2 },
-  { x: 0.32, y: 0.5, angle: 14, level: 3 },
-  { x: 0.68, y: 0.44, angle: -14, level: 3 },
-  { x: 0.39, y: 0.68, angle: 7, level: 4 },
-  { x: 0.63, y: 0.29, angle: 13, level: 4 },
-  { x: 0.53, y: 0.77, angle: 0, level: 4 },
-];
-
-const levelSizes = {
-  1: 31,
-  2: 23,
-  3: 18,
-  4: 15,
-};
-
-// API 配置
-const API_CONFIG = {
-  // 后端接口地址（根据实际项目修改）
-  url: '/api/opera-words',
-  // 请求超时时间（毫秒）
-  timeout: 5000,
-  // 缓存有效期（毫秒）- 24小时
-  cacheDuration: 24 * 60 * 60 * 1000,
-  // localStorage 缓存键
-  cacheKey: 'opera_role_words_cache',
-};
-
-/**
- * 从 localStorage 获取缓存数据
- */
-function getCachedWords() {
-  try {
-    const cached = localStorage.getItem(API_CONFIG.cacheKey);
-    if (!cached) return null;
-
-    const { data, timestamp } = JSON.parse(cached);
-    const now = Date.now();
-
-    // 检查缓存是否过期
-    if (now - timestamp > API_CONFIG.cacheDuration) {
-      localStorage.removeItem(API_CONFIG.cacheKey);
-      return null;
-    }
-
-    return data;
-  } catch (error) {
-    console.warn('读取缓存失败:', error);
-    return null;
-  }
-}
-
-/**
- * 保存数据到 localStorage
- */
-function setCachedWords(data) {
-  try {
-    const cacheData = {
-      data,
-      timestamp: Date.now(),
-    };
-    localStorage.setItem(API_CONFIG.cacheKey, JSON.stringify(cacheData));
-  } catch (error) {
-    console.warn('保存缓存失败:', error);
-  }
-}
-
-/**
- * 模拟后端数据请求接口
- * 在实际项目中，替换为真实的 API 请求
- */
-async function fetchWordsFromAPI() {
-  // 模拟网络延迟
-  const delay = 500 + Math.random() * 1500;
-  
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      // 模拟成功响应（90% 成功率）
-      if (Math.random() > 0.1) {
-        resolve({
-          code: 200,
-          message: 'success',
-          data: {
-            sheng: [
-              ['老生', 10],
-              ['武生', 9],
-              ['小生', 9],
-              ['唱腔', 9],
-              ['台步', 8],
-              ['身段', 8],
-              ['板眼', 8],
-              ['念白', 7],
-              ['亮相', 7],
-              ['行头', 7],
-              ['西皮', 7],
-              ['二黄', 6],
-              ['锣鼓', 6],
-              ['戏曲', 6],
-              ['梨园', 5],
-              ['票友', 5],
-              ['科班', 5],
-              ['角儿', 4],
-            ],
-            dan: [
-              ['青衣', 10],
-              ['花旦', 9],
-              ['水袖', 9],
-              ['唱腔', 9],
-              ['台步', 8],
-              ['身段', 8],
-              ['亮相', 8],
-              ['行头', 7],
-              ['念白', 7],
-              ['板眼', 7],
-              ['锣鼓', 7],
-              ['戏曲', 6],
-              ['梨园', 6],
-              ['票友', 6],
-              ['科班', 5],
-              ['角儿', 5],
-              ['戏服', 4],
-              ['脸谱', 4],
-            ],
-            jing: [
-              ['脸谱', 10],
-              ['花脸', 9],
-              ['武净', 9],
-              ['唱腔', 9],
-              ['亮相', 8],
-              ['行头', 8],
-              ['身段', 8],
-              ['锣鼓', 7],
-              ['念白', 7],
-              ['板眼', 7],
-              ['台步', 7],
-              ['戏曲', 6],
-              ['梨园', 6],
-              ['角儿', 6],
-              ['票友', 5],
-              ['科班', 5],
-              ['西皮', 4],
-              ['二黄', 4],
-            ],
-            mo: [
-              ['老末', 10],
-              ['末角', 9],
-              ['唱腔', 9],
-              ['台步', 9],
-              ['身段', 8],
-              ['念白', 8],
-              ['板眼', 8],
-              ['行头', 7],
-              ['亮相', 7],
-              ['锣鼓', 7],
-              ['戏曲', 6],
-              ['梨园', 6],
-              ['票友', 6],
-              ['科班', 5],
-              ['角儿', 5],
-              ['脸谱', 4],
-              ['水袖', 4],
-              ['戏服', 4],
-            ],
-          },
-        });
-      } else {
-        // 模拟失败
-        reject(new Error('Network error'));
-      }
-    }, delay);
-  });
-
-  // ============================================
-  // 实际项目中替换为以下代码：
-  // ============================================
-  /*
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
-
-    const response = await fetch(API_CONFIG.url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    
-    // 根据后端返回的数据结构调整
-    if (result.code === 200) {
-      return result;
-    } else {
-      throw new Error(result.message || 'API返回异常');
-    }
-  } catch (error) {
-    console.error('请求文字列表失败:', error);
-    throw error;
-  }
-  */
-}
-
-/**
- * 获取文字列表（主函数）
- * 优先级：API响应 > 缓存数据 > 本地降级数据
- */
-async function getRoleWords() {
-  // 1. 尝试从 API 获取
-  try {
-    console.log('正在从API获取文字列表...');
-    const response = await fetchWordsFromAPI();
-    
-    // 验证数据格式
-    if (response && response.data && validateWordsData(response.data)) {
-      console.log('API请求成功，使用服务器数据');
-      // 保存到缓存
-      setCachedWords(response.data);
-      return response.data;
-    }
-    
-    throw new Error('API返回数据格式不正确');
-  } catch (apiError) {
-    console.warn('API请求失败，尝试使用缓存数据:', apiError.message);
-
-    // 2. API失败，尝试使用缓存
-    const cachedData = getCachedWords();
-    if (cachedData && validateWordsData(cachedData)) {
-      console.log('使用缓存数据');
-      return cachedData;
-    }
-
-    // 3. 缓存也失败，使用本地降级数据
-    console.log('使用本地降级数据');
-    return roleWordSources;
-  }
-}
-
-/**
- * 验证文字列表数据格式
- */
-function validateWordsData(data) {
-  const requiredKeys = ['sheng', 'dan', 'jing'];
-  
-  // 检查是否包含所有角色
-  const hasAllKeys = requiredKeys.every(key => key in data);
-  if (!hasAllKeys) {
-    console.warn('数据缺少必要的角色键');
-    return false;
-  }
-
-  // 检查每个角色的数据格式
-  for (const key of requiredKeys) {
-    const words = data[key];
-    
-    if (!Array.isArray(words)) {
-      console.warn(`${key} 的文字列表不是数组`);
-      return false;
-    }
-
-    // 检查每个词条的格式：[文字, 字号]
-    const isValid = words.every(item => 
-      Array.isArray(item) && 
-      item.length === 2 && 
-      typeof item[0] === 'string' && 
-      typeof item[1] === 'number'
-    );
-
-    if (!isValid) {
-      console.warn(`${key} 的文字列表格式不正确`);
-      return false;
-    }
-  }
-
-  return true;
-}
-
-// 为每个角色生成多层淡化的文字列表 - 3层比较合适
-let roleWords = {};
-
-// 调整角色位置，保持合适的间距
-// 增加轮廓背景的不透明度
-// 添加角色名称颜色
+const W = 600
+const H = 288
+const fontFamily = '"SimHei", "Microsoft YaHei", sans-serif'
+const MIN_WORD_SIZE = 8
+const MAX_WORD_SIZE = 26
+const WORD_DENSITY = 2.1
+const WORD_GAP = 0
+const CENTER_STEP = 1
 const roles = [
   {
-    name: '生',
-    src: personImage,
-    x: 8,
-    y: 6,
-    color: 'rgba(181, 197, 188, 0.76)',
-    textColor: 'rgba(50, 58, 50, 0.9)',
-    wordKey: 'sheng',
+    key: 'chou',
+    name: '丑',
+    src: chouImage,
+    imageScale: 1.04,
+    bgColor: '#D9C39A',
+    box: { x: 0, y: 0, w: 196, h: 286 },
+    words: [
+      ['机敏', 10],
+      ['诙谐', 9],
+      ['市井', 8],
+      ['差役', 8],
+      ['滑稽', 8],
+      ['念白', 7],
+      ['插科', 7],
+      ['打诨', 7],
+      ['幽默', 6],
+      ['灵动', 6],
+      ['小花脸', 6],
+      ['圆场', 5],
+      ['节奏', 5],
+      ['俏皮', 5],
+      ['身段', 5],
+      ['节外生枝', 4],
+      ['市井烟火', 4],
+      ['调笑', 4],
+      ['机锋', 4],
+      ['点破', 4],
+      ['变通', 3],
+      ['轻快', 3],
+      ['逗趣', 3],
+      ['俐落', 3],
+    ],
   },
   {
+    key: 'dan',
     name: '旦',
     src: danImage,
-    x: 207,
-    y: 6,
-    color: 'rgba(224, 153, 125, 0.76)',
-    textColor: 'rgba(93, 58, 47, 0.92)',
-    wordKey: 'dan',
+    imageScale: 1.16,
+    bgColor: '#D8A6A0',
+    box: { x: 202, y: 0, w: 196, h: 286 },
+    words: [
+      ['婉转', 10],
+      ['水袖', 9],
+      ['青衣', 8],
+      ['花旦', 8],
+      ['柔情', 8],
+      ['闺阁', 7],
+      ['唱腔', 7],
+      ['身段', 7],
+      ['离合', 6],
+      ['团圆', 6],
+      ['清丽', 6],
+      ['抒情', 5],
+      ['含蓄', 5],
+      ['念白', 5],
+      ['流转', 5],
+      ['才情', 4],
+      ['绣阁', 4],
+      ['情义', 4],
+      ['婉约', 4],
+      ['端庄', 4],
+      ['思念', 3],
+      ['明眸', 3],
+      ['顾盼', 3],
+      ['轻盈', 3],
+    ],
   },
   {
+    key: 'jing',
     name: '净',
     src: jingImage,
-    x: 406,
-    y: 6,
-    color: 'rgba(207, 188, 129, 0.78)',
-    textColor: 'rgba(77, 64, 36, 0.9)',
-    wordKey: 'jing',
+    imageScale: 1.22,
+    bgColor: '#AEB8A6',
+    box: { x: 404, y: 0, w: 196, h: 286 },
+    words: [
+      ['威武', 10],
+      ['脸谱', 9],
+      ['忠勇', 8],
+      ['豪迈', 8],
+      ['锣鼓', 8],
+      ['靠旗', 7],
+      ['武净', 7],
+      ['亮相', 7],
+      ['刚烈', 6],
+      ['气势', 6],
+      ['冲突', 6],
+      ['战阵', 5],
+      ['义胆', 5],
+      ['雄浑', 5],
+      ['开打', 5],
+      ['高亢', 4],
+      ['肃杀', 4],
+      ['对峙', 4],
+      ['震慑', 4],
+      ['秩序', 4],
+      ['阵前', 3],
+      ['金鼓', 3],
+      ['激昂', 3],
+      ['厚重', 3],
+    ],
   },
-];
+]
+
+const textMeasureCanvas = document.createElement('canvas')
+const textMeasureContext = textMeasureCanvas.getContext('2d')
+let destroyed = false
+
+onMounted(async () => {
+  await nextTick()
+  await render()
+})
+
+onBeforeUnmount(() => {
+  destroyed = true
+  d3.select(svgRef.value).selectAll('*').remove()
+})
+
+async function render() {
+  const svgElement = svgRef.value
+  if (!svgElement) return
+
+  await document.fonts?.ready
+
+  const roleLayouts = await Promise.all(roles.map(prepareRoleLayout))
+  if (destroyed) return
+
+  const svg = d3.select(svgElement)
+  svg.selectAll('*').remove()
+  svg.attr('viewBox', `0 0 ${W} ${H}`).attr('preserveAspectRatio', 'xMidYMid meet')
+
+  const defs = svg.append('defs')
+
+  roleLayouts.forEach((layout) => {
+    const maskId = `role-word-mask-${layout.role.key}`
+    const clipId = `role-figure-clip-${layout.role.key}`
+
+    defs
+      .append('clipPath')
+      .attr('id', clipId)
+      .append('rect')
+      .attr('x', layout.role.box.x)
+      .attr('y', layout.role.box.y)
+      .attr('width', layout.role.box.w)
+      .attr('height', layout.role.box.h)
+
+    defs
+      .append('mask')
+      .attr('id', maskId)
+      .attr('maskUnits', 'userSpaceOnUse')
+      .attr('mask-type', 'alpha')
+      .style('mask-type', 'alpha')
+      .append('image')
+      .attr('href', layout.maskUrl)
+      .attr('x', layout.role.box.x)
+      .attr('y', layout.role.box.y)
+      .attr('width', layout.role.box.w)
+      .attr('height', layout.role.box.h)
+
+    const group = svg.append('g').attr('class', 'role-cloud')
+
+    group
+  .append('rect')
+  .attr('class', 'role-shape-bg')
+  .attr('x', layout.role.box.x)
+  .attr('y', layout.role.box.y)
+  .attr('width', layout.role.box.w)
+  .attr('height', layout.role.box.h)
+  .attr('fill', layout.role.bgColor || '#E8D8B6')
+  .attr('fill-opacity', layout.role.bgOpacity ?? 0.5)
+  .attr('mask', `url(#${maskId})`)
+    group
+      .append('image')
+      .attr('class', 'role-figure')
+      .attr('href', layout.role.src)
+      .attr('x', layout.imageBox.x)
+      .attr('y', layout.imageBox.y)
+      .attr('width', layout.imageBox.w)
+      .attr('height', layout.imageBox.h)
+      .attr('clip-path', `url(#${clipId})`)
+
+    group
+      .append('g')
+      .attr('class', 'word-layer')
+      .attr('mask', `url(#${maskId})`)
+      .selectAll('text')
+      .data(layout.words)
+      .join('text')
+      .attr('x', (word) => layout.role.box.x + word.x)
+      .attr('y', (word) => layout.role.box.y + word.y)
+      .attr('transform', (word) => {
+        const x = layout.role.box.x + word.x
+        const y = layout.role.box.y + word.y
+        return `rotate(${word.rotate},${x},${y})`
+      })
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .attr('font-family', fontFamily)
+      .attr('font-size', (word) => word.size)
+      .attr('font-weight', 700)
+      .attr('fill', '#111')
+      .attr('opacity', (word) => word.opacity)
+      .text((word) => word.text)
+
+  })
+}
+
+async function prepareRoleLayout(role) {
+  const image = await loadImage(role.src)
+  const imageBox = fitImage(image, role.box, 0, role.imageScale || 1)
+  const { mask, maskUrl } = createAlphaMask(image, role.box, imageBox)
+  const words = layoutWords(role.words, mask, role.box.w, role.box.h)
+
+  return {
+    role,
+    imageBox,
+    maskUrl,
+    words,
+  }
+}
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = reject
+    image.src = src
+  })
 }
 
-function createRoleMask(img) {
-  const canvas = document.createElement('canvas');
-  canvas.width = PANEL_W;
-  canvas.height = PANEL_H;
+function fitImage(image, box, padding = 0, multiplier = 1) {
+  const scale = Math.min((box.w - padding * 2) / image.width, (box.h - padding * 2) / image.height) * multiplier
+  const w = image.width * scale
+  const h = image.height * scale
 
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, PANEL_W, PANEL_H);
+  return {
+    x: box.x + (box.w - w) / 2,
+    y: box.y + (box.h - h) / 2,
+    w,
+    h,
+  }
+}
 
-  const scale = Math.min(PANEL_W * 1.1 / img.width, PANEL_H * 1.1 / img.height);
-  const dw = img.width * scale;
-  const dh = img.height * scale;
-  const dx = (PANEL_W - dw) / 2;
-  const dy = (PANEL_H - dh) / 2;
+function createAlphaMask(image, box, imageBox) {
+  const canvas = document.createElement('canvas')
+  canvas.width = box.w
+  canvas.height = box.h
 
-  ctx.drawImage(img, dx, dy, dw, dh);
+  const ctx = canvas.getContext('2d')
+  ctx.clearRect(0, 0, box.w, box.h)
+  ctx.drawImage(image, imageBox.x - box.x, imageBox.y - box.y, imageBox.w, imageBox.h)
 
-  const imageData = ctx.getImageData(0, 0, PANEL_W, PANEL_H);
-  const data = imageData.data;
-  let mask = new Uint8Array(PANEL_W * PANEL_H);
+  const imageData = ctx.getImageData(0, 0, box.w, box.h)
+  let mask = new Uint8Array(box.w * box.h)
 
-  for (let i = 0; i < PANEL_W * PANEL_H; i += 1) {
-    const r = data[i * 4];
-    const g = data[i * 4 + 1];
-    const b = data[i * 4 + 2];
-
-    const notWhite = !(r > 238 && g > 238 && b > 238);
-    if (notWhite) mask[i] = 1;
+  for (let index = 0; index < mask.length; index += 1) {
+    const alpha = imageData.data[index * 4 + 3]
+    if (alpha > 28) mask[index] = 1
   }
 
-  mask = keepLargestComponent(mask);
-  mask = dilate(mask, 2);
-  mask = fillHoles(mask);
-  mask = erode(mask, 1);
+  mask = keepLargestComponent(mask, box.w, box.h)
+  mask = erode(mask, box.w, box.h, 1)
 
-  return mask;
+  const maskData = ctx.createImageData(box.w, box.h)
+  for (let index = 0; index < mask.length; index += 1) {
+    const value = mask[index] ? 255 : 0
+    maskData.data[index * 4] = value
+    maskData.data[index * 4 + 1] = value
+    maskData.data[index * 4 + 2] = value
+    maskData.data[index * 4 + 3] = value
+  }
+
+  ctx.putImageData(maskData, 0, 0)
+
+  return {
+    mask,
+    maskUrl: canvas.toDataURL('image/png'),
+  }
 }
 
-function keepLargestComponent(mask) {
-  const visited = new Uint8Array(PANEL_W * PANEL_H);
-  let best = [];
+function keepLargestComponent(mask, width, height) {
+  const visited = new Uint8Array(width * height)
+  let best = []
 
-  for (let i = 0; i < mask.length; i += 1) {
-    if (!mask[i] || visited[i]) continue;
+  for (let index = 0; index < mask.length; index += 1) {
+    if (!mask[index] || visited[index]) continue
 
-    const queue = [i];
-    const component = [];
-    visited[i] = 1;
+    const queue = [index]
+    const component = []
+    visited[index] = 1
 
     while (queue.length) {
-      const current = queue.pop();
-      component.push(current);
+      const current = queue.pop()
+      component.push(current)
 
-      const x = current % PANEL_W;
-      const y = Math.floor(current / PANEL_W);
-      const neighbors = [
-        current - 1,
-        current + 1,
-        current - PANEL_W,
-        current + PANEL_W,
-      ];
-
-      for (const next of neighbors) {
-        if (next < 0 || next >= mask.length) continue;
-
-        const nx = next % PANEL_W;
-        const ny = Math.floor(next / PANEL_W);
-
-        if (Math.abs(nx - x) + Math.abs(ny - y) !== 1) continue;
-        if (!mask[next] || visited[next]) continue;
-
-        visited[next] = 1;
-        queue.push(next);
+      for (const next of getNeighbors(current, width, height)) {
+        if (!mask[next] || visited[next]) continue
+        visited[next] = 1
+        queue.push(next)
       }
     }
 
-    if (component.length > best.length) best = component;
+    if (component.length > best.length) best = component
   }
 
-  const result = new Uint8Array(PANEL_W * PANEL_H);
-  best.forEach(index => {
-    result[index] = 1;
-  });
+  const result = new Uint8Array(width * height)
+  best.forEach((index) => {
+    result[index] = 1
+  })
 
-  return result;
+  return result
 }
 
-function dilate(mask, radius) {
-  const result = new Uint8Array(PANEL_W * PANEL_H);
+function erode(mask, width, height, radius) {
+  const result = new Uint8Array(width * height)
 
-  for (let y = 0; y < PANEL_H; y += 1) {
-    for (let x = 0; x < PANEL_W; x += 1) {
-      let hit = false;
-
-      for (let dy = -radius; dy <= radius && !hit; dy += 1) {
-        for (let dx = -radius; dx <= radius; dx += 1) {
-          const nx = x + dx;
-          const ny = y + dy;
-
-          if (nx < 0 || ny < 0 || nx >= PANEL_W || ny >= PANEL_H) continue;
-          if (mask[ny * PANEL_W + nx]) {
-            hit = true;
-            break;
-          }
-        }
-      }
-
-      if (hit) result[y * PANEL_W + x] = 1;
-    }
-  }
-
-  return result;
-}
-
-function erode(mask, radius) {
-  const result = new Uint8Array(PANEL_W * PANEL_H);
-
-  for (let y = 0; y < PANEL_H; y += 1) {
-    for (let x = 0; x < PANEL_W; x += 1) {
-      let keep = true;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let keep = true
 
       for (let dy = -radius; dy <= radius && keep; dy += 1) {
         for (let dx = -radius; dx <= radius; dx += 1) {
-          const nx = x + dx;
-          const ny = y + dy;
+          const nx = x + dx
+          const ny = y + dy
 
-          if (nx < 0 || ny < 0 || nx >= PANEL_W || ny >= PANEL_H) {
-            keep = false;
-            break;
-          }
-
-          if (!mask[ny * PANEL_W + nx]) {
-            keep = false;
-            break;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height || !mask[ny * width + nx]) {
+            keep = false
+            break
           }
         }
       }
 
-      if (keep) result[y * PANEL_W + x] = 1;
+      if (keep) result[y * width + x] = 1
     }
   }
 
-  return result;
+  return result
 }
 
-function fillHoles(mask) {
-  const outside = new Uint8Array(PANEL_W * PANEL_H);
-  const queue = [];
+function getNeighbors(index, width, height) {
+  const x = index % width
+  const y = Math.floor(index / width)
+  const neighbors = []
 
-  for (let x = 0; x < PANEL_W; x += 1) {
-    queue.push(x);
-    queue.push((PANEL_H - 1) * PANEL_W + x);
-  }
+  if (x > 0) neighbors.push(index - 1)
+  if (x < width - 1) neighbors.push(index + 1)
+  if (y > 0) neighbors.push(index - width)
+  if (y < height - 1) neighbors.push(index + width)
 
-  for (let y = 0; y < PANEL_H; y += 1) {
-    queue.push(y * PANEL_W);
-    queue.push(y * PANEL_W + PANEL_W - 1);
-  }
+  return neighbors
+}
 
-  while (queue.length) {
-    const current = queue.pop();
-    if (outside[current] || mask[current]) continue;
+function layoutWords(sourceWords, mask, width, height) {
+  const placedRects = []
+  const centers = buildCenters(mask, width, height, CENTER_STEP)
 
-    outside[current] = 1;
+  const maxWeight = d3.max(sourceWords, (word) => word[1]) || 10
+  const minWeight = d3.min(sourceWords, (word) => word[1]) || 3
 
-    const x = current % PANEL_W;
-    const y = Math.floor(current / PANEL_W);
-    const neighbors = [
-      current - 1,
-      current + 1,
-      current - PANEL_W,
-      current + PANEL_W,
-    ];
+  const sizeScale = d3
+    .scaleSqrt()
+    .domain([minWeight, maxWeight])
+    .range([MIN_WORD_SIZE, MAX_WORD_SIZE])
 
-    for (const next of neighbors) {
-      if (next < 0 || next >= mask.length) continue;
+  const words = expandWords(sourceWords, sizeScale, WORD_DENSITY)
+  const layouts = []
 
-      const nx = next % PANEL_W;
-      const ny = Math.floor(next / PANEL_W);
+  words.forEach((word, wordIndex) => {
+    const rotations = getRotationCandidates(wordIndex, word.text)
+    const preferredCenters = getPreferredCenters(centers, width, height, wordIndex, word)
 
-      if (Math.abs(nx - x) + Math.abs(ny - y) !== 1) continue;
-      if (!outside[next] && !mask[next]) queue.push(next);
+    let placed = false
+
+    for (let size = word.size; size >= MIN_WORD_SIZE && !placed; size -= 1) {
+      const measured = measureText(word.text, size)
+
+      for (const rotate of rotations) {
+        const textBox = getRotatedBounds(
+          measured.width + 3,
+          size * 1.06 + 3,
+          rotate
+        )
+
+        for (let index = 0; index < preferredCenters.length; index += 1) {
+          const center = preferredCenters[index]
+
+          const rect = {
+            x: center.x - textBox.width / 2,
+            y: center.y - textBox.height / 2,
+            width: textBox.width,
+            height: textBox.height,
+          }
+
+          if (!isRectInsideMask(mask, width, height, rect)) continue
+          if (placedRects.some((placedRect) => rectsOverlap(rect, placedRect, WORD_GAP))) continue
+
+          placedRects.push(rect)
+
+          layouts.push({
+            text: word.text,
+            size,
+            x: center.x,
+            y: center.y,
+            rotate,
+            opacity: word.opacity,
+          })
+
+          placed = true
+          break
+        }
+
+        if (placed) break
+      }
     }
-  }
+  })
 
-  const result = new Uint8Array(PANEL_W * PANEL_H);
-
-  for (let i = 0; i < mask.length; i += 1) {
-    result[i] = mask[i] || !outside[i] ? 1 : 0;
-  }
-
-  return result;
+  return layouts
 }
 
-function drawMaskShape(ctx, mask, role) {
-  const imageData = ctx.createImageData(PANEL_W, PANEL_H);
+function getPreferredCenters(centers, width, height, wordIndex, word) {
+  const cx = width / 2
+  const cy = height / 2
 
-  for (let i = 0; i < mask.length; i += 1) {
-    if (!mask[i]) continue;
+  const anchors = [
+    { x: cx, y: cy },
+    { x: width * 0.35, y: height * 0.32 },
+    { x: width * 0.65, y: height * 0.32 },
+    { x: width * 0.35, y: height * 0.52 },
+    { x: width * 0.65, y: height * 0.52 },
+    { x: width * 0.48, y: height * 0.70 },
+    { x: width * 0.30, y: height * 0.70 },
+    { x: width * 0.70, y: height * 0.70 },
+  ]
 
-    imageData.data[i * 4] = 100;
-    imageData.data[i * 4 + 1] = 100;
-    imageData.data[i * 4 + 2] = 100;
-    imageData.data[i * 4 + 3] = 180;
-  }
+  const anchor = anchors[wordIndex % anchors.length]
 
-  const temp = document.createElement('canvas');
-  temp.width = PANEL_W;
-  temp.height = PANEL_H;
+  const scored = centers.map((center) => {
+    const dx = center.x - anchor.x
+    const dy = center.y - anchor.y
+    const distanceToAnchor = Math.sqrt(dx * dx + dy * dy)
 
-  const tctx = temp.getContext('2d');
-  tctx.putImageData(imageData, 0, 0);
-  tctx.globalCompositeOperation = 'source-in';
-  tctx.fillStyle = role.color;
-  tctx.fillRect(0, 0, PANEL_W, PANEL_H);
+    const randomOffset = deterministicRandom(
+      `${word.text}-${wordIndex}-${center.x}-${center.y}`
+    ) * 18
 
-  ctx.drawImage(temp, role.x, role.y);
-}
-
-function isInside(mask, x, y) {
-  if (x < 0 || y < 0 || x >= PANEL_W || y >= PANEL_H) return false;
-  return mask[Math.floor(y) * PANEL_W + Math.floor(x)] === 1;
-}
-
-function rectPoints(cx, cy, w, h, angle, step = 2) {
-  const rad = (angle * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const points = [];
-
-  for (let y = -h / 2; y <= h / 2; y += step) {
-    for (let x = -w / 2; x <= w / 2; x += step) {
-      points.push({
-        x: cx + x * cos - y * sin,
-        y: cy + x * sin + y * cos,
-      });
+    return {
+      ...center,
+      localScore: distanceToAnchor + randomOffset,
     }
+  })
+
+  if (wordIndex < 8 && !word.isExtra) {
+    return scored.sort((a, b) => a.localScore - b.localScore)
   }
 
-  return points;
+  return scored.sort((a, b) => {
+    const ringA = Math.floor(a.score / 24)
+    const ringB = Math.floor(b.score / 24)
+
+    if (ringA !== ringB) return ringA - ringB
+
+    return (
+      deterministicRandom(`${word.text}-${a.x}-${a.y}`) -
+      deterministicRandom(`${word.text}-${b.x}-${b.y}`)
+    )
+  })
 }
+function expandWords(sourceWords, sizeScale, density = 1) {
+  const expanded = []
 
-function canPlace(mask, occupied, cx, cy, w, h, angle) {
-  const points = rectPoints(cx, cy, w, h, angle, 3);
+  sourceWords.forEach(([text, weight], index) => {
+    const baseSize = Math.round(sizeScale(weight))
 
-  for (const p of points) {
-    const x = Math.floor(p.x);
-    const y = Math.floor(p.y);
+    expanded.push({
+      text,
+      size: Math.max(MIN_WORD_SIZE, baseSize),
+      opacity: 0.95,
+      rank: index,
+      isExtra: false,
+    })
 
-    if (!isInside(mask, x, y)) return false;
-    if (occupied[y * PANEL_W + x]) return false;
-  }
+    const extraCount = Math.max(0, Math.round(density - 1))
 
-  return true;
-}
+    for (let i = 0; i < extraCount; i += 1) {
+      const smallSize = Math.max(
+        MIN_WORD_SIZE,
+        Math.round(baseSize * (0.72 + deterministicRandom(text + i) * 0.14))
+      )
 
-function occupy(occupied, cx, cy, w, h, angle) {
-  const points = rectPoints(cx, cy, w + 14, h + 11, angle, 3);
-
-  for (const p of points) {
-    const x = Math.floor(p.x);
-    const y = Math.floor(p.y);
-
-    if (x >= 0 && y >= 0 && x < PANEL_W && y < PANEL_H) {
-      occupied[y * PANEL_W + x] = 1;
+      expanded.push({
+        text,
+        size: smallSize,
+        opacity: 0.68 + deterministicRandom(text + i) * 0.18,
+        rank: index + 1000 + i,
+        isExtra: true,
+      })
     }
-  }
+  })
+
+  return expanded.sort((a, b) => {
+    if (a.isExtra !== b.isExtra) return a.isExtra ? 1 : -1
+    return b.size - a.size || a.rank - b.rank
+  })
 }
 
-function measureText(text, size) {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
+function getRotationCandidates(index, text) {
+  const base = Math.floor(deterministicRandom(text + index) * 6)
 
-  ctx.font = `${size >= 24 ? 700 : 500} ${size}px ${textFont}`;
+  const groups = [
+    [0, -6, 6, -12, 12],
+    [-4, 4, -10, 10, 0],
+    [-8, 8, -15, 15, 0],
+    [10, -10, 18, -18, 0],
+    [-14, 14, -6, 6, 0],
+    [5, -5, 13, -13, 0],
+  ]
 
-  return {
-    width: ctx.measureText(text).width,
-    height: size * 1.16,
-  };
+  if (index < 3) return [0, -5, 5, -10, 10]
+
+  return groups[base]
 }
 
-function buildCenters(mask) {
-  const centers = [];
+function buildCenters(mask, width, height, step = 1) {
+  const centers = []
+  const cx = width / 2
+  const cy = height / 2
 
-  for (let y = 8; y < PANEL_H - 8; y += 4) {
-    for (let x = 8; x < PANEL_W - 8; x += 4) {
-      if (!isInside(mask, x, y)) continue;
+  for (let y = 5; y < height - 5; y += step) {
+    for (let x = 5; x < width - 5; x += step) {
+      if (!isInside(mask, width, height, x, y)) continue
 
-      const dx = x - PANEL_W / 2;
-      const dy = y - PANEL_H / 2;
-      const noise = (Math.sin(x * 12.9898 + y * 78.233) + 1) * 5;
+      const dx = x - cx
+      const dy = y - cy
+      const distance = Math.sqrt(dx * dx + dy * dy)
+      const noise = deterministicRandom(`${x}-${y}`) * 20
 
       centers.push({
         x,
         y,
-        score: Math.sqrt(dx * dx + dy * dy) + noise,
-      });
+        score: distance + noise,
+      })
     }
   }
 
-  return centers.sort((a, b) => a.score - b.score);
+  return centers.sort((a, b) => {
+    const ringA = Math.floor(a.score / 26)
+    const ringB = Math.floor(b.score / 26)
+
+    if (ringA !== ringB) return ringA - ringB
+
+    return (
+      deterministicRandom(`${a.x}-${a.y}`) -
+      deterministicRandom(`${b.x}-${b.y}`)
+    )
+  })
 }
+function deterministicRandom(seed) {
+  let hash = 0
+  const str = String(seed)
 
-function drawWord(ctx, role, item) {
-  ctx.save();
+  for (let i = 0; i < str.length; i += 1) {
+    hash = (hash << 5) - hash + str.charCodeAt(i)
+    hash |= 0
+  }
 
-  const x = Math.round(role.x + item.x) + 0.5;
-  const y = Math.round(role.y + item.y) + 0.5;
-
-  ctx.translate(x, y);
-  ctx.rotate(item.angle * Math.PI / 180);
-
-  ctx.font = `${item.size >= 24 ? 700 : 500} ${item.size}px ${textFont}`;
-  ctx.fillStyle = item.size >= 24 ? 'rgba(29, 23, 18, 0.93)' : 'rgba(55, 46, 38, 0.76)';
-  ctx.globalAlpha = item.opacity ?? 1;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  ctx.fillText(item.text, 0, 0);
-
-  ctx.restore();
+  const value = Math.sin(hash) * 10000
+  return value - Math.floor(value)
 }
+function measureText(text, size) {
+  textMeasureContext.font = `700 ${size}px ${fontFamily}`
 
-function layoutWords(ctx, mask, role) {
-  const placedRects = [];
-  const centers = buildCenters(mask);
-
-  // 使用该角色专属的文字列表
-  const words = roleWords[role.wordKey] || [];
-  if (!words.length) return;
-
-  const orderedWords = [...words].sort((a, b) => a.rank - b.rank);
-
-  for (const word of orderedWords) {
-    const placement = findWordPlacement(mask, placedRects, centers, word);
-    if (!placement) continue;
-
-    placedRects.push(placement.rect);
-    drawWord(ctx, role, placement);
+  return {
+    width: textMeasureContext.measureText(text).width,
+    height: size,
   }
 }
 
-function findWordPlacement(mask, placedRects, centers, word) {
-  const candidates = buildPlacementCandidates(centers, word);
-  const angles = getAngleCandidates(word.anchor.angle, word.rank);
-  const minSize = Math.max(13, word.size - 6);
-
-  for (let size = word.size; size >= minSize; size -= 1) {
-    const measured = measureText(word.text, size);
-
-    for (const angle of angles) {
-      const bounds = getRotatedBounds(measured.width + 8, measured.height + 6, angle);
-
-      for (const candidate of candidates) {
-        const rect = {
-          x: candidate.x - bounds.width / 2,
-          y: candidate.y - bounds.height / 2,
-          width: bounds.width,
-          height: bounds.height,
-        };
-
-        if (!rectInsideMask(mask, rect)) continue;
-        if (placedRects.some(placed => rectsOverlap(rect, placed, 5))) continue;
-
-        return {
-          text: word.text,
-          x: candidate.x,
-          y: candidate.y,
-          size,
-          angle,
-          opacity: word.opacity,
-          rect,
-        };
-      }
-    }
-  }
-
-  return null;
-}
-
-function buildPlacementCandidates(centers, word) {
-  const anchorX = word.anchor.x * PANEL_W;
-  const anchorY = word.anchor.y * PANEL_H;
-  const offsets = buildAnchorOffsets(word.rank);
-  const candidates = offsets.map(([dx, dy]) => ({
-    x: anchorX + dx,
-    y: anchorY + dy,
-  }));
-
-  const centerStep = word.rank < 3 ? 3 : 5;
-  const start = centers.length ? (word.rank * 31) % centers.length : 0;
-
-  for (let i = 0; i < centers.length && candidates.length < 190; i += centerStep) {
-    const center = centers[(start + i) % centers.length];
-    candidates.push({ x: center.x, y: center.y });
-  }
-
-  return candidates;
-}
-
-function buildAnchorOffsets(rank) {
-  const maxRadius = rank < 2 ? 18 : 34;
-  const step = rank < 2 ? 9 : 11;
-  const offsets = [[0, 0]];
-
-  for (let radius = step; radius <= maxRadius; radius += step) {
-    offsets.push(
-      [-radius, 0],
-      [radius, 0],
-      [0, -radius],
-      [0, radius],
-      [-radius * 0.7, -radius * 0.7],
-      [radius * 0.7, radius * 0.7],
-      [-radius * 0.7, radius * 0.7],
-      [radius * 0.7, -radius * 0.7],
-    );
-  }
-
-  return offsets;
-}
-
-function getAngleCandidates(baseAngle, rank) {
-  if (rank === 0) return [baseAngle, 0];
-
-  const softerAngle = baseAngle > 0 ? baseAngle - 7 : baseAngle + 7;
-  return [baseAngle, softerAngle, 0];
-}
-
-function getRotatedBounds(width, height, angle) {
-  const rad = Math.abs(angle * Math.PI / 180);
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
+function getRotatedBounds(width, height, rotate) {
+  const rad = (rotate * Math.PI) / 180
+  const cos = Math.abs(Math.cos(rad))
+  const sin = Math.abs(Math.sin(rad))
 
   return {
     width: width * cos + height * sin,
     height: width * sin + height * cos,
-  };
+  }
 }
 
-function rectInsideMask(mask, rect) {
-  const left = Math.floor(rect.x + 2);
-  const top = Math.floor(rect.y + 2);
-  const right = Math.ceil(rect.x + rect.width - 2);
-  const bottom = Math.ceil(rect.y + rect.height - 2);
+function isRectInsideMask(mask, width, height, rect) {
+  const x0 = Math.floor(rect.x)
+  const y0 = Math.floor(rect.y)
+  const x1 = Math.ceil(rect.x + rect.width)
+  const y1 = Math.ceil(rect.y + rect.height)
 
-  if (left < 0 || top < 0 || right >= PANEL_W || bottom >= PANEL_H) return false;
+  if (x0 < 0 || y0 < 0 || x1 >= width || y1 >= height) return false
 
-  const points = [
-    [left, top],
-    [right, top],
-    [left, bottom],
-    [right, bottom],
-    [(left + right) / 2, (top + bottom) / 2],
-  ];
-
-  const cols = Math.max(2, Math.ceil((right - left) / 14));
-  const rows = Math.max(2, Math.ceil((bottom - top) / 10));
-
-  for (let i = 0; i <= cols; i += 1) {
-    const x = left + ((right - left) * i) / cols;
-    points.push([x, top], [x, bottom]);
+  for (let y = y0; y <= y1; y += 4) {
+    for (let x = x0; x <= x1; x += 4) {
+      if (!isInside(mask, width, height, x, y)) return false
+    }
   }
 
-  for (let i = 0; i <= rows; i += 1) {
-    const y = top + ((bottom - top) * i) / rows;
-    points.push([left, y], [right, y]);
-  }
-
-  return points.every(([x, y]) => isInside(mask, x, y));
+  return (
+    isInside(mask, width, height, x1, y0) &&
+    isInside(mask, width, height, x0, y1) &&
+    isInside(mask, width, height, x1, y1)
+  )
 }
 
 function rectsOverlap(a, b, gap = 0) {
-  return (
-    a.x < b.x + b.width + gap &&
-    a.x + a.width + gap > b.x &&
-    a.y < b.y + b.height + gap &&
-    a.y + a.height + gap > b.y
-  );
+  return !(
+    a.x + a.width + gap <= b.x ||
+    b.x + b.width + gap <= a.x ||
+    a.y + a.height + gap <= b.y ||
+    b.y + b.height + gap <= a.y
+  )
 }
 
-function getAnglesForWord(word, roleKey) {
-  if (word.rank < 2) return roleKey === 'dan' ? [-8, 0, 8] : [0, -10, 10];
-  if (word.rank % 4 === 0) return [-24, 0, 18];
-  if (word.rank % 4 === 1) return [18, 0, -18];
-  if (word.rank % 4 === 2) return [-12, 12, 0];
-  return [0, -24, 24];
+function isInside(mask, width, height, x, y) {
+  if (x < 0 || y < 0 || x >= width || y >= height) return false
+  return mask[Math.floor(y) * width + Math.floor(x)] === 1
 }
-
-/**
- * 生成多层淡化的文字列表
- */
-function generateRoleWords(sources) {
-  const words = {};
-
-  ['sheng', 'dan', 'jing'].forEach(roleKey => {
-    const source = Array.isArray(sources[roleKey]) ? sources[roleKey] : [];
-
-    words[roleKey] = source.slice(0, wordAnchors.length).map(([text], index) => ({
-        text,
-        size: levelSizes[wordAnchors[index].level],
-        opacity: index === 0 ? 0.96 : index < 3 ? 0.82 : index < 5 ? 0.7 : 0.62,
-        rank: index,
-        anchor: wordAnchors[index],
-      }));
-  });
-
-  return words;
-}
-
-async function render() {
-  await document.fonts?.ready;
-
-  const canvas = canvasRef.value;
-
-// 获取屏幕像素比，例如高清屏一般是 2
-const dpr = window.devicePixelRatio || 1;
-
-// 再额外提高清晰度，2 基本够用，想更清楚可以改 3
-const quality = 2.5;
-
-// 最终绘制倍率
-const ratio = dpr * quality;
-
-// canvas 内部真实像素变大
-canvas.width = Math.round(W * ratio);
-canvas.height = Math.round(H * ratio);
-
-// 注意：不要在这里改 canvas.style.width / height
-// 让 CSS 继续控制现在的视觉大小
-
-const ctx = canvas.getContext('2d');
-
-// 把绘图坐标缩放回原来的 W / H 逻辑尺寸
-ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-
-// 清空画布
-ctx.clearRect(0, 0, W, H);
-
-// 图片缩放质量设高
-ctx.imageSmoothingEnabled = true;
-ctx.imageSmoothingQuality = 'high';
-
-  // 获取文字列表（带降级处理）
-  const wordSources = roleWordSources;
-  roleWords = generateRoleWords(wordSources);
-
-  // 透明背景
-  for (const role of roles) {
-    const img = await loadImage(role.src);
-    const mask = createRoleMask(img);
-
-    drawMaskShape(ctx, mask, role);
-    layoutWords(ctx, mask, role);
-  }
-
-  console.log('海报渲染完成');
-}
-
-onMounted(async () => {
-  await nextTick();
-  render();
-});
 </script>
 
 <style scoped>
@@ -991,12 +658,15 @@ onMounted(async () => {
   border-radius: 2px;
 }
 
-.poster-canvas {
+.poster-svg {
   display: block;
-  width: min(100%, 620px);
+  width: min(100%, 540px);
   height: 100%;
   max-height: 100%;
-  aspect-ratio: 25 / 12;
-  object-fit: contain;
+  aspect-ratio: 16 / 9;
+}
+
+.poster-svg :deep(.role-figure) {
+  opacity: 0;
 }
 </style>

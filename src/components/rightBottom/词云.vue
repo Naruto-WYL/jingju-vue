@@ -5,457 +5,255 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import personImage from '../../assets/词云/生.jpg';
 import danImage from '../../assets/词云/旦.jpg';
 import jingImage from '../../assets/词云/净.jpg';
-import moImage from '../../assets/词云/丑.jpg';
 
 const canvasRef = ref(null);
 
-// 在384和640之间取中间值，适当放大
-const W = 512;   // 384 * 1.33，取中间值
-const H = 288;   // 216 * 1.33
+const W = 900;
+const H = 360;
 
-const PANEL_W = 112;  // 84 * 1.33
-const PANEL_H = 224;  // 168 * 1.33
+const PANEL_W = 260;
+const PANEL_H = 330;
 
-const textFont = '"Microsoft YaHei", "PingFang SC", sans-serif';
+const ROLE_GAP = 30;
+const ROLE_START_X = 15;
+const ROLE_START_Y = 15;
 
-// 每个角色独立的文字列表 - 字号适当增大（用作降级数据）
+const RENDER_QUALITY = 4;
+
+const MAX_WORDS_PER_ROLE = 88;
+const REPEAT_SMALL_WORDS = 3;
+
+const MIN_FONT_SIZE = 8;
+const MAX_FONT_SIZE = 36;
+
+const WORD_GAP = 1.2;
+const MASK_SAMPLE_STEP = 4;
+
+const textFont = '"FangSong", "STFangsong", "KaiTi", "STKaiti", "STSong", "SimSun", serif';
+
 const roleWordSources = {
   sheng: [
-    ['老生', 10],
-    ['武生', 9],
-    ['小生', 9],
-    ['唱腔', 9],
-    ['台步', 8],
-    ['身段', 8],
-    ['板眼', 8],
-    ['念白', 7],
-    ['亮相', 7],
-    ['行头', 7],
-    ['西皮', 7],
-    ['二黄', 6],
-    ['锣鼓', 6],
-    ['戏曲', 6],
-    ['梨园', 5],
-    ['票友', 5],
-    ['科班', 5],
-    ['角儿', 4],
+    ['老生', 100],
+    ['武生', 86],
+    ['小生', 82],
+    ['须生', 76],
+    ['红生', 68],
+    ['文生', 64],
+    ['娃娃生', 58],
+    ['穷生', 52],
+    ['唱腔', 90],
+    ['念白', 82],
+    ['身段', 78],
+    ['台步', 74],
+    ['亮相', 72],
+    ['起霸', 68],
+    ['走边', 66],
+    ['圆场', 64],
+    ['板眼', 62],
+    ['西皮', 60],
+    ['二黄', 58],
+    ['锣鼓', 56],
+    ['梨园', 54],
+    ['科班', 52],
+    ['角儿', 50],
+    ['戏曲', 48],
+    ['行头', 46],
+    ['髯口', 44],
+    ['马鞭', 42],
+    ['靠旗', 40],
+    ['把子', 38],
+    ['功架', 36],
+    ['唱念做打', 34],
+    ['忠义', 32],
+    ['儒雅', 30],
+    ['英武', 28],
+    ['气口', 26],
+    ['腔韵', 24],
+    ['文武兼备', 22],
+    ['台风', 20],
   ],
   dan: [
-    ['青衣', 10],
-    ['花旦', 9],
-    ['水袖', 9],
-    ['唱腔', 9],
-    ['台步', 8],
-    ['身段', 8],
-    ['亮相', 8],
-    ['行头', 7],
-    ['念白', 7],
-    ['板眼', 7],
-    ['锣鼓', 7],
-    ['戏曲', 6],
-    ['梨园', 6],
-    ['票友', 6],
-    ['科班', 5],
-    ['角儿', 5],
-    ['戏服', 4],
-    ['脸谱', 4],
+    ['青衣', 100],
+    ['花旦', 88],
+    ['刀马旦', 82],
+    ['武旦', 78],
+    ['老旦', 72],
+    ['闺门旦', 66],
+    ['彩旦', 58],
+    ['水袖', 90],
+    ['唱腔', 86],
+    ['身段', 80],
+    ['台步', 76],
+    ['亮相', 72],
+    ['念白', 68],
+    ['圆场', 66],
+    ['眼神', 64],
+    ['手势', 62],
+    ['板眼', 60],
+    ['西皮', 58],
+    ['二黄', 56],
+    ['锣鼓', 54],
+    ['梨园', 52],
+    ['科班', 50],
+    ['角儿', 48],
+    ['戏服', 46],
+    ['行头', 44],
+    ['云肩', 42],
+    ['霞帔', 40],
+    ['凤冠', 38],
+    ['裙褶', 36],
+    ['唱念做打', 34],
+    ['含蓄', 32],
+    ['端庄', 30],
+    ['灵巧', 28],
+    ['柔婉', 26],
+    ['腔韵', 24],
+    ['情态', 22],
+    ['台风', 20],
   ],
   jing: [
-    ['脸谱', 10],
-    ['花脸', 9],
-    ['武净', 9],
-    ['唱腔', 9],
-    ['亮相', 8],
-    ['行头', 8],
-    ['身段', 8],
-    ['锣鼓', 7],
-    ['念白', 7],
-    ['板眼', 7],
-    ['台步', 7],
-    ['戏曲', 6],
-    ['梨园', 6],
-    ['角儿', 6],
-    ['票友', 5],
-    ['科班', 5],
-    ['西皮', 4],
-    ['二黄', 4],
-  ],
-  mo: [
-    ['老末', 10],
-    ['末角', 9],
-    ['唱腔', 9],
-    ['台步', 9],
-    ['身段', 8],
-    ['念白', 8],
-    ['板眼', 8],
-    ['行头', 7],
-    ['亮相', 7],
-    ['锣鼓', 7],
-    ['戏曲', 6],
-    ['梨园', 6],
-    ['票友', 6],
-    ['科班', 5],
-    ['角儿', 5],
-    ['脸谱', 4],
-    ['水袖', 4],
-    ['戏服', 4],
+    ['脸谱', 100],
+    ['花脸', 90],
+    ['铜锤花脸', 84],
+    ['架子花脸', 78],
+    ['武净', 72],
+    ['正净', 66],
+    ['副净', 60],
+    ['唱腔', 86],
+    ['亮相', 82],
+    ['功架', 78],
+    ['身段', 74],
+    ['念白', 70],
+    ['台步', 68],
+    ['锣鼓', 66],
+    ['板眼', 64],
+    ['西皮', 62],
+    ['二黄', 60],
+    ['行头', 58],
+    ['靠旗', 56],
+    ['把子', 54],
+    ['髯口', 52],
+    ['勾脸', 50],
+    ['谱式', 48],
+    ['油彩', 46],
+    ['梨园', 44],
+    ['科班', 42],
+    ['角儿', 40],
+    ['戏曲', 38],
+    ['唱念做打', 36],
+    ['威严', 34],
+    ['刚烈', 32],
+    ['忠勇', 30],
+    ['豪迈', 28],
+    ['粗犷', 26],
+    ['气势', 24],
+    ['台风', 22],
   ],
 };
 
-// API 配置
-const API_CONFIG = {
-  // 后端接口地址（根据实际项目修改）
-  url: '/api/opera-words',
-  // 请求超时时间（毫秒）
-  timeout: 5000,
-  // 缓存有效期（毫秒）- 24小时
-  cacheDuration: 24 * 60 * 60 * 1000,
-  // localStorage 缓存键
-  cacheKey: 'opera_role_words_cache',
-};
-
-/**
- * 从 localStorage 获取缓存数据
- */
-function getCachedWords() {
-  try {
-    const cached = localStorage.getItem(API_CONFIG.cacheKey);
-    if (!cached) return null;
-
-    const { data, timestamp } = JSON.parse(cached);
-    const now = Date.now();
-
-    // 检查缓存是否过期
-    if (now - timestamp > API_CONFIG.cacheDuration) {
-      localStorage.removeItem(API_CONFIG.cacheKey);
-      return null;
-    }
-
-    return data;
-  } catch (error) {
-    console.warn('读取缓存失败:', error);
-    return null;
-  }
-}
-
-/**
- * 保存数据到 localStorage
- */
-function setCachedWords(data) {
-  try {
-    const cacheData = {
-      data,
-      timestamp: Date.now(),
-    };
-    localStorage.setItem(API_CONFIG.cacheKey, JSON.stringify(cacheData));
-  } catch (error) {
-    console.warn('保存缓存失败:', error);
-  }
-}
-
-/**
- * 模拟后端数据请求接口
- * 在实际项目中，替换为真实的 API 请求
- */
-async function fetchWordsFromAPI() {
-  // 模拟网络延迟
-  const delay = 500 + Math.random() * 1500;
-  
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      // 模拟成功响应（90% 成功率）
-      if (Math.random() > 0.1) {
-        resolve({
-          code: 200,
-          message: 'success',
-          data: {
-            sheng: [
-              ['老生', 10],
-              ['武生', 9],
-              ['小生', 9],
-              ['唱腔', 9],
-              ['台步', 8],
-              ['身段', 8],
-              ['板眼', 8],
-              ['念白', 7],
-              ['亮相', 7],
-              ['行头', 7],
-              ['西皮', 7],
-              ['二黄', 6],
-              ['锣鼓', 6],
-              ['戏曲', 6],
-              ['梨园', 5],
-              ['票友', 5],
-              ['科班', 5],
-              ['角儿', 4],
-            ],
-            dan: [
-              ['青衣', 10],
-              ['花旦', 9],
-              ['水袖', 9],
-              ['唱腔', 9],
-              ['台步', 8],
-              ['身段', 8],
-              ['亮相', 8],
-              ['行头', 7],
-              ['念白', 7],
-              ['板眼', 7],
-              ['锣鼓', 7],
-              ['戏曲', 6],
-              ['梨园', 6],
-              ['票友', 6],
-              ['科班', 5],
-              ['角儿', 5],
-              ['戏服', 4],
-              ['脸谱', 4],
-            ],
-            jing: [
-              ['脸谱', 10],
-              ['花脸', 9],
-              ['武净', 9],
-              ['唱腔', 9],
-              ['亮相', 8],
-              ['行头', 8],
-              ['身段', 8],
-              ['锣鼓', 7],
-              ['念白', 7],
-              ['板眼', 7],
-              ['台步', 7],
-              ['戏曲', 6],
-              ['梨园', 6],
-              ['角儿', 6],
-              ['票友', 5],
-              ['科班', 5],
-              ['西皮', 4],
-              ['二黄', 4],
-            ],
-            mo: [
-              ['老末', 10],
-              ['末角', 9],
-              ['唱腔', 9],
-              ['台步', 9],
-              ['身段', 8],
-              ['念白', 8],
-              ['板眼', 8],
-              ['行头', 7],
-              ['亮相', 7],
-              ['锣鼓', 7],
-              ['戏曲', 6],
-              ['梨园', 6],
-              ['票友', 6],
-              ['科班', 5],
-              ['角儿', 5],
-              ['脸谱', 4],
-              ['水袖', 4],
-              ['戏服', 4],
-            ],
-          },
-        });
-      } else {
-        // 模拟失败
-        reject(new Error('Network error'));
-      }
-    }, delay);
-  });
-
-  // ============================================
-  // 实际项目中替换为以下代码：
-  // ============================================
-  /*
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
-
-    const response = await fetch(API_CONFIG.url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    
-    // 根据后端返回的数据结构调整
-    if (result.code === 200) {
-      return result;
-    } else {
-      throw new Error(result.message || 'API返回异常');
-    }
-  } catch (error) {
-    console.error('请求文字列表失败:', error);
-    throw error;
-  }
-  */
-}
-
-/**
- * 获取文字列表（主函数）
- * 优先级：API响应 > 缓存数据 > 本地降级数据
- */
-async function getRoleWords() {
-  // 1. 尝试从 API 获取
-  try {
-    console.log('正在从API获取文字列表...');
-    const response = await fetchWordsFromAPI();
-    
-    // 验证数据格式
-    if (response && response.data && validateWordsData(response.data)) {
-      console.log('API请求成功，使用服务器数据');
-      // 保存到缓存
-      setCachedWords(response.data);
-      return response.data;
-    }
-    
-    throw new Error('API返回数据格式不正确');
-  } catch (apiError) {
-    console.warn('API请求失败，尝试使用缓存数据:', apiError.message);
-
-    // 2. API失败，尝试使用缓存
-    const cachedData = getCachedWords();
-    if (cachedData && validateWordsData(cachedData)) {
-      console.log('使用缓存数据');
-      return cachedData;
-    }
-
-    // 3. 缓存也失败，使用本地降级数据
-    console.log('使用本地降级数据');
-    return roleWordSources;
-  }
-}
-
-/**
- * 验证文字列表数据格式
- */
-function validateWordsData(data) {
-  const requiredKeys = ['sheng', 'dan', 'jing', 'mo'];
-  
-  // 检查是否包含所有角色
-  const hasAllKeys = requiredKeys.every(key => key in data);
-  if (!hasAllKeys) {
-    console.warn('数据缺少必要的角色键');
-    return false;
-  }
-
-  // 检查每个角色的数据格式
-  for (const key of requiredKeys) {
-    const words = data[key];
-    
-    if (!Array.isArray(words)) {
-      console.warn(`${key} 的文字列表不是数组`);
-      return false;
-    }
-
-    // 检查每个词条的格式：[文字, 字号]
-    const isValid = words.every(item => 
-      Array.isArray(item) && 
-      item.length === 2 && 
-      typeof item[0] === 'string' && 
-      typeof item[1] === 'number'
-    );
-
-    if (!isValid) {
-      console.warn(`${key} 的文字列表格式不正确`);
-      return false;
-    }
-  }
-
-  return true;
-}
-
-// 为每个角色生成多层淡化的文字列表 - 3层比较合适
-let roleWords = {};
-
-// 调整角色位置，保持合适的间距
-// 增加轮廓背景的不透明度
-// 添加角色名称颜色
 const roles = [
   {
     name: '生',
     src: personImage,
-    x: 50,
-    y: -5,
-    color: 'rgba(176, 198, 214, 0.75)',
-    textColor: 'rgba(90, 120, 140, 0.9)',
+    x: ROLE_START_X,
+    y: ROLE_START_Y,
+    color: 'rgba(181, 197, 188, 0.78)',
+    textColor: 'rgba(45, 55, 47, 0.94)',
+    strongTextColor: 'rgba(28, 34, 28, 0.98)',
     wordKey: 'sheng',
   },
   {
     name: '旦',
     src: danImage,
-    x: 150,
-    y: -5,
-    color: 'rgba(229, 158, 150, 0.75)',
-    textColor: 'rgba(160, 90, 85, 0.9)',
+    x: ROLE_START_X + PANEL_W + ROLE_GAP,
+    y: ROLE_START_Y,
+    color: 'rgba(224, 153, 125, 0.78)',
+    textColor: 'rgba(88, 53, 43, 0.94)',
+    strongTextColor: 'rgba(55, 31, 25, 0.98)',
     wordKey: 'dan',
   },
   {
     name: '净',
     src: jingImage,
-    x: 255,
-    y: -5,
-    color: 'rgba(168, 168, 168, 0.75)',
-    textColor: 'rgba(90, 90, 90, 0.9)',
+    x: ROLE_START_X + (PANEL_W + ROLE_GAP) * 2,
+    y: ROLE_START_Y,
+    color: 'rgba(207, 188, 129, 0.8)',
+    textColor: 'rgba(78, 64, 35, 0.94)',
+    strongTextColor: 'rgba(47, 39, 21, 0.98)',
     wordKey: 'jing',
   },
-  {
-    name: '末',
-    src: moImage,
-    x: 360,
-    y: -5,
-    color: 'rgba(222, 195, 112, 0.75)',
-    textColor: 'rgba(150, 130, 60, 0.9)',
-    wordKey: 'mo',
-  },
 ];
+
+const importantAnchors = [
+  { x: 0.5, y: 0.5, angle: -5 },
+  { x: 0.43, y: 0.36, angle: 10 },
+  { x: 0.58, y: 0.62, angle: -11 },
+  { x: 0.34, y: 0.52, angle: 17 },
+  { x: 0.67, y: 0.43, angle: -16 },
+  { x: 0.42, y: 0.72, angle: 8 },
+  { x: 0.61, y: 0.28, angle: 13 },
+  { x: 0.52, y: 0.79, angle: -2 },
+  { x: 0.25, y: 0.38, angle: -18 },
+  { x: 0.73, y: 0.58, angle: 18 },
+];
+
+let resizeTimer = null;
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
+
     img.onload = () => resolve(img);
+
     img.onerror = reject;
+
     img.src = src;
   });
 }
 
 function createRoleMask(img) {
   const canvas = document.createElement('canvas');
+
   canvas.width = PANEL_W;
   canvas.height = PANEL_H;
 
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#fff';
+
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, PANEL_W, PANEL_H);
 
-  const scale = Math.min(PANEL_W * 0.88 / img.width, PANEL_H * 0.88 / img.height);
+  const scale = Math.min((PANEL_W * 1.08) / img.width, (PANEL_H * 1.08) / img.height);
+
   const dw = img.width * scale;
   const dh = img.height * scale;
+
   const dx = (PANEL_W - dw) / 2;
-  const dy = 4;
+  const dy = (PANEL_H - dh) / 2;
 
   ctx.drawImage(img, dx, dy, dw, dh);
 
   const imageData = ctx.getImageData(0, 0, PANEL_W, PANEL_H);
+
   const data = imageData.data;
+
   let mask = new Uint8Array(PANEL_W * PANEL_H);
 
   for (let i = 0; i < PANEL_W * PANEL_H; i += 1) {
     const r = data[i * 4];
     const g = data[i * 4 + 1];
     const b = data[i * 4 + 2];
+    const a = data[i * 4 + 3];
 
-    const notWhite = !(r > 238 && g > 238 && b > 238);
-    if (notWhite) mask[i] = 1;
+    const isNotWhite = a > 8 && !(r > 238 && g > 238 && b > 238);
+
+    if (isNotWhite) {
+      mask[i] = 1;
+    }
   }
 
   mask = keepLargestComponent(mask);
@@ -468,6 +266,7 @@ function createRoleMask(img) {
 
 function keepLargestComponent(mask) {
   const visited = new Uint8Array(PANEL_W * PANEL_H);
+
   let best = [];
 
   for (let i = 0; i < mask.length; i += 1) {
@@ -475,14 +274,17 @@ function keepLargestComponent(mask) {
 
     const queue = [i];
     const component = [];
+
     visited[i] = 1;
 
     while (queue.length) {
       const current = queue.pop();
+
       component.push(current);
 
       const x = current % PANEL_W;
       const y = Math.floor(current / PANEL_W);
+
       const neighbors = [
         current - 1,
         current + 1,
@@ -497,17 +299,22 @@ function keepLargestComponent(mask) {
         const ny = Math.floor(next / PANEL_W);
 
         if (Math.abs(nx - x) + Math.abs(ny - y) !== 1) continue;
+
         if (!mask[next] || visited[next]) continue;
 
         visited[next] = 1;
+
         queue.push(next);
       }
     }
 
-    if (component.length > best.length) best = component;
+    if (component.length > best.length) {
+      best = component;
+    }
   }
 
   const result = new Uint8Array(PANEL_W * PANEL_H);
+
   best.forEach(index => {
     result[index] = 1;
   });
@@ -528,6 +335,7 @@ function dilate(mask, radius) {
           const ny = y + dy;
 
           if (nx < 0 || ny < 0 || nx >= PANEL_W || ny >= PANEL_H) continue;
+
           if (mask[ny * PANEL_W + nx]) {
             hit = true;
             break;
@@ -535,7 +343,9 @@ function dilate(mask, radius) {
         }
       }
 
-      if (hit) result[y * PANEL_W + x] = 1;
+      if (hit) {
+        result[y * PANEL_W + x] = 1;
+      }
     }
   }
 
@@ -566,7 +376,9 @@ function erode(mask, radius) {
         }
       }
 
-      if (keep) result[y * PANEL_W + x] = 1;
+      if (keep) {
+        result[y * PANEL_W + x] = 1;
+      }
     }
   }
 
@@ -575,6 +387,7 @@ function erode(mask, radius) {
 
 function fillHoles(mask) {
   const outside = new Uint8Array(PANEL_W * PANEL_H);
+
   const queue = [];
 
   for (let x = 0; x < PANEL_W; x += 1) {
@@ -589,12 +402,14 @@ function fillHoles(mask) {
 
   while (queue.length) {
     const current = queue.pop();
+
     if (outside[current] || mask[current]) continue;
 
     outside[current] = 1;
 
     const x = current % PANEL_W;
     const y = Math.floor(current / PANEL_W);
+
     const neighbors = [
       current - 1,
       current + 1,
@@ -609,7 +424,10 @@ function fillHoles(mask) {
       const ny = Math.floor(next / PANEL_W);
 
       if (Math.abs(nx - x) + Math.abs(ny - y) !== 1) continue;
-      if (!outside[next] && !mask[next]) queue.push(next);
+
+      if (!outside[next] && !mask[next]) {
+        queue.push(next);
+      }
     }
   }
 
@@ -631,16 +449,20 @@ function drawMaskShape(ctx, mask, role) {
     imageData.data[i * 4] = 100;
     imageData.data[i * 4 + 1] = 100;
     imageData.data[i * 4 + 2] = 100;
-    imageData.data[i * 4 + 3] = 180;
+    imageData.data[i * 4 + 3] = 190;
   }
 
   const temp = document.createElement('canvas');
+
   temp.width = PANEL_W;
   temp.height = PANEL_H;
 
   const tctx = temp.getContext('2d');
+
   tctx.putImageData(imageData, 0, 0);
+
   tctx.globalCompositeOperation = 'source-in';
+
   tctx.fillStyle = role.color;
   tctx.fillRect(0, 0, PANEL_W, PANEL_H);
 
@@ -649,67 +471,11 @@ function drawMaskShape(ctx, mask, role) {
 
 function isInside(mask, x, y) {
   if (x < 0 || y < 0 || x >= PANEL_W || y >= PANEL_H) return false;
+
   return mask[Math.floor(y) * PANEL_W + Math.floor(x)] === 1;
 }
 
-function rectPoints(cx, cy, w, h, angle, step = 3) {
-  const rad = (angle * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const points = [];
-
-  for (let y = -h / 2; y <= h / 2; y += step) {
-    for (let x = -w / 2; x <= w / 2; x += step) {
-      points.push({
-        x: cx + x * cos - y * sin,
-        y: cy + x * sin + y * cos,
-      });
-    }
-  }
-
-  return points;
-}
-
-function canPlace(mask, occupied, cx, cy, w, h, angle) {
-  const points = rectPoints(cx, cy, w, h, angle);
-
-  for (const p of points) {
-    const x = Math.floor(p.x);
-    const y = Math.floor(p.y);
-
-    if (!isInside(mask, x, y)) return false;
-    if (occupied[y * PANEL_W + x]) return false;
-  }
-
-  return true;
-}
-
-function occupy(occupied, cx, cy, w, h, angle) {
-  const points = rectPoints(cx, cy, w + 2, h + 2, angle, 2);
-
-  for (const p of points) {
-    const x = Math.floor(p.x);
-    const y = Math.floor(p.y);
-
-    if (x >= 0 && y >= 0 && x < PANEL_W && y < PANEL_H) {
-      occupied[y * PANEL_W + x] = 1;
-    }
-  }
-}
-
-function measureText(text, size) {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-
-  ctx.font = `${size}px ${textFont}`;
-
-  return {
-    width: ctx.measureText(text).width,
-    height: size * 1.1,
-  };
-}
-
-function buildCenters(mask) {
+function buildMaskCenters(mask) {
   const centers = [];
 
   for (let y = 8; y < PANEL_H - 8; y += 3) {
@@ -719,15 +485,310 @@ function buildCenters(mask) {
       const dx = x - PANEL_W / 2;
       const dy = y - PANEL_H / 2;
 
+      const centerDistance = Math.sqrt(dx * dx + dy * dy);
+
+      const noise = pseudoRandom(`${x}-${y}`) * 28;
+
       centers.push({
         x,
         y,
-        score: Math.sqrt(dx * dx + dy * dy) + Math.random() * 10,
+        score: centerDistance + noise,
       });
     }
   }
 
   return centers.sort((a, b) => a.score - b.score);
+}
+
+function pseudoRandom(seed) {
+  let h = 2166136261;
+
+  const str = String(seed);
+
+  for (let i = 0; i < str.length; i += 1) {
+    h ^= str.charCodeAt(i);
+    h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+  }
+
+  return ((h >>> 0) % 10000) / 10000;
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+function buildDenseWords(source) {
+  const weights = source.map(item => item[1]);
+
+  const maxWeight = Math.max(...weights);
+  const minWeight = Math.min(...weights);
+
+  const words = [];
+
+  source.forEach(([text, weight], index) => {
+    const t = (weight - minWeight) / Math.max(1, maxWeight - minWeight);
+
+    const size = index === 0
+      ? MAX_FONT_SIZE
+      : Math.round(lerp(13, 30, Math.pow(t, 0.82)));
+
+    const anchor = importantAnchors[index] || makeRandomAnchor(text, index);
+
+    words.push({
+      id: `${text}-main-${index}`,
+      text,
+      size,
+      minSize: Math.max(MIN_FONT_SIZE, size - 7),
+      rank: index,
+      anchor,
+      opacity: index < 3 ? 0.96 : index < 10 ? 0.88 : 0.78,
+      weight: index < 3 ? 700 : 600,
+      isMain: index < 3,
+    });
+  });
+
+  for (let repeat = 0; repeat < REPEAT_SMALL_WORDS; repeat += 1) {
+    source.forEach(([text, weight], index) => {
+      if (words.length >= MAX_WORDS_PER_ROLE) return;
+
+      const t = (weight - minWeight) / Math.max(1, maxWeight - minWeight);
+
+      const size = Math.round(lerp(8, 17, Math.pow(t, 0.72)) - repeat * 1.2);
+
+      const safeSize = clamp(size, MIN_FONT_SIZE, 17);
+
+      words.push({
+        id: `${text}-small-${repeat}-${index}`,
+        text,
+        size: safeSize,
+        minSize: Math.max(7, safeSize - 3),
+        rank: source.length + repeat * source.length + index,
+        anchor: makeRandomAnchor(`${text}-${repeat}`, index + repeat * 19),
+        opacity: repeat === 0 ? 0.72 : repeat === 1 ? 0.62 : 0.52,
+        weight: 500,
+        isMain: false,
+      });
+    });
+  }
+
+  return words.sort((a, b) => {
+    if (b.size !== a.size) return b.size - a.size;
+
+    return a.rank - b.rank;
+  });
+}
+
+function makeRandomAnchor(text, index) {
+  const r1 = pseudoRandom(`${text}-${index}-x`);
+  const r2 = pseudoRandom(`${text}-${index}-y`);
+  const r3 = pseudoRandom(`${text}-${index}-a`);
+
+  const angleList = [-24, -18, -12, -7, 0, 6, 11, 16, 22, 90, -90];
+
+  const angleIndex = Math.floor(r3 * angleList.length);
+
+  return {
+    x: 0.18 + r1 * 0.64,
+    y: 0.18 + r2 * 0.64,
+    angle: angleList[angleIndex],
+  };
+}
+
+function measureTextSize(ctx, text, size, weight) {
+  ctx.save();
+
+  ctx.font = `${weight} ${size}px ${textFont}`;
+
+  const width = ctx.measureText(text).width;
+
+  ctx.restore();
+
+  return {
+    width,
+    height: size * 1.02,
+  };
+}
+
+function getRotatedBounds(width, height, angle) {
+  const rad = Math.abs((angle * Math.PI) / 180);
+
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+
+  return {
+    width: width * cos + height * sin,
+    height: width * sin + height * cos,
+  };
+}
+
+function rectPoints(cx, cy, width, height, angle, step = MASK_SAMPLE_STEP) {
+  const rad = (angle * Math.PI) / 180;
+
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+
+  const points = [];
+
+  for (let y = -height / 2; y <= height / 2; y += step) {
+    for (let x = -width / 2; x <= width / 2; x += step) {
+      points.push({
+        x: cx + x * cos - y * sin,
+        y: cy + x * sin + y * cos,
+      });
+    }
+  }
+
+  points.push(
+    {
+      x: cx + (-width / 2) * cos - (-height / 2) * sin,
+      y: cy + (-width / 2) * sin + (-height / 2) * cos,
+    },
+    {
+      x: cx + (width / 2) * cos - (-height / 2) * sin,
+      y: cy + (width / 2) * sin + (-height / 2) * cos,
+    },
+    {
+      x: cx + (-width / 2) * cos - (height / 2) * sin,
+      y: cy + (-width / 2) * sin + (height / 2) * cos,
+    },
+    {
+      x: cx + (width / 2) * cos - (height / 2) * sin,
+      y: cy + (width / 2) * sin + (height / 2) * cos,
+    },
+  );
+
+  return points;
+}
+
+function rotatedRectInsideMask(mask, cx, cy, width, height, angle) {
+  const points = rectPoints(cx, cy, width, height, angle);
+
+  return points.every(point => isInside(mask, point.x, point.y));
+}
+
+function rectsOverlap(a, b, gap = WORD_GAP) {
+  return (
+    a.x < b.x + b.width + gap
+    && a.x + a.width + gap > b.x
+    && a.y < b.y + b.height + gap
+    && a.y + a.height + gap > b.y
+  );
+}
+
+function getAngleCandidates(word) {
+  const base = word.anchor.angle;
+
+  if (word.isMain) {
+    return [base, 0, base > 0 ? base - 8 : base + 8];
+  }
+
+  if (Math.abs(base) === 90) {
+    return [base, 0, base > 0 ? 14 : -14];
+  }
+
+  return [base, 0, base + 8, base - 8, base > 0 ? -base : Math.abs(base)];
+}
+
+function buildSpiralCandidates(word) {
+  const targetX = word.anchor.x * PANEL_W;
+  const targetY = word.anchor.y * PANEL_H;
+
+  const candidates = [];
+
+  const maxRadius = word.isMain ? 42 : 125;
+  const radiusStep = word.isMain ? 7 : 9;
+  const angleStep = word.isMain ? 36 : 22;
+
+  candidates.push({
+    x: targetX,
+    y: targetY,
+  });
+
+  for (let radius = radiusStep; radius <= maxRadius; radius += radiusStep) {
+    for (let angle = 0; angle < 360; angle += angleStep) {
+      const rad = (angle * Math.PI) / 180;
+
+      candidates.push({
+        x: targetX + Math.cos(rad) * radius,
+        y: targetY + Math.sin(rad) * radius,
+      });
+    }
+  }
+
+  return candidates;
+}
+
+function buildPlacementCandidates(centers, word) {
+  const targetX = word.anchor.x * PANEL_W;
+  const targetY = word.anchor.y * PANEL_H;
+
+  const candidates = buildSpiralCandidates(word);
+
+  const shuffledCenters = centers
+    .map(center => {
+      const dx = center.x - targetX;
+      const dy = center.y - targetY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      const noise = pseudoRandom(`${word.id}-${center.x}-${center.y}`) * 52;
+
+      return {
+        x: center.x,
+        y: center.y,
+        score: distance + noise,
+      };
+    })
+    .sort((a, b) => a.score - b.score)
+    .slice(0, word.isMain ? 260 : 620);
+
+  candidates.push(...shuffledCenters);
+
+  return candidates;
+}
+
+function findWordPlacement(ctx, mask, centers, placedRects, word) {
+  const angles = getAngleCandidates(word);
+
+  const candidates = buildPlacementCandidates(centers, word);
+
+  for (let size = word.size; size >= word.minSize; size -= 1) {
+    const measured = measureTextSize(ctx, word.text, size, word.weight);
+
+    for (const angle of angles) {
+      const textWidth = measured.width + 2;
+      const textHeight = measured.height + 1;
+
+      const bounds = getRotatedBounds(textWidth, textHeight, angle);
+
+      for (const candidate of candidates) {
+        const rect = {
+          x: candidate.x - bounds.width / 2,
+          y: candidate.y - bounds.height / 2,
+          width: bounds.width,
+          height: bounds.height,
+        };
+
+        if (!rotatedRectInsideMask(mask, candidate.x, candidate.y, textWidth, textHeight, angle)) continue;
+
+        if (placedRects.some(placed => rectsOverlap(rect, placed))) continue;
+
+        return {
+          ...word,
+          x: candidate.x,
+          y: candidate.y,
+          size,
+          angle,
+          rect,
+        };
+      }
+    }
+  }
+
+  return null;
 }
 
 function drawWord(ctx, role, item) {
@@ -737,12 +798,17 @@ function drawWord(ctx, role, item) {
   const y = Math.round(role.y + item.y) + 0.5;
 
   ctx.translate(x, y);
-  ctx.rotate(item.angle * Math.PI / 180);
 
-  ctx.font = `${item.size}px ${textFont}`;
-  ctx.fillStyle = '#111';
-  ctx.globalAlpha = 1;
+  ctx.rotate((item.angle * Math.PI) / 180);
+
+  ctx.font = `${item.weight} ${item.size}px ${textFont}`;
+
+  ctx.fillStyle = item.isMain ? role.strongTextColor : role.textColor;
+
+  ctx.globalAlpha = item.opacity;
+
   ctx.textAlign = 'center';
+
   ctx.textBaseline = 'middle';
 
   ctx.fillText(item.text, 0, 0);
@@ -750,65 +816,22 @@ function drawWord(ctx, role, item) {
   ctx.restore();
 }
 
-function layoutWords(ctx, mask, role) {
-  const occupied = new Uint8Array(PANEL_W * PANEL_H);
-  const centers = buildCenters(mask);
-  const angles = [0, -15, 15, 90];
+function drawWordsForRole(ctx, mask, role) {
+  const centers = buildMaskCenters(mask);
 
-  // 使用该角色专属的文字列表
-  const words = roleWords[role.wordKey] || [];
-  if (!words.length) return;
+  const words = buildDenseWords(roleWordSources[role.wordKey]);
 
-  const expandedWords = [...words].sort((a, b) => b.size - a.size);
+  const placedRects = [];
 
-  for (const word of expandedWords) {
-    let placed = false;
+  words.forEach(word => {
+    const placed = findWordPlacement(ctx, mask, centers, placedRects, word);
 
-    for (let size = word.size; size >= 6 && !placed; size -= 1) {
-      const measured = measureText(word.text, size);
+    if (!placed) return;
 
-      for (const angle of angles) {
-        const w = measured.width + 3;
-        const h = measured.height + 2;
+    placedRects.push(placed.rect);
 
-        for (const center of centers) {
-          if (canPlace(mask, occupied, center.x, center.y, w, h, angle)) {
-            drawWord(ctx, role, {
-              text: word.text,
-              x: center.x,
-              y: center.y,
-              size,
-              angle,
-            });
-
-            occupy(occupied, center.x, center.y, w, h, angle);
-            placed = true;
-            break;
-          }
-        }
-
-        if (placed) break;
-      }
-    }
-  }
-}
-
-/**
- * 生成多层淡化的文字列表
- */
-function generateRoleWords(sources) {
-  const words = {};
-  
-  Object.keys(sources).forEach(roleKey => {
-    words[roleKey] = Array.from({ length: 3 }).flatMap((_, round) =>
-      sources[roleKey].map(([text, size]) => ({
-        text,
-        size: Math.max(4, Math.round(size * (1 - round * 0.12))),
-      }))
-    );
+    drawWord(ctx, role, placed);
   });
-
-  return words;
 }
 
 async function render() {
@@ -816,60 +839,55 @@ async function render() {
 
   const canvas = canvasRef.value;
 
-// 获取屏幕像素比，例如高清屏一般是 2
-const dpr = window.devicePixelRatio || 1;
+  if (!canvas) return;
 
-// 再额外提高清晰度，2 基本够用，想更清楚可以改 3
-const quality = 2.5;
+  const dpr = window.devicePixelRatio || 1;
 
-// 最终绘制倍率
-const ratio = dpr * quality;
+  const ratio = dpr * RENDER_QUALITY;
 
-// canvas 内部真实像素变大
-canvas.width = Math.round(W * ratio);
-canvas.height = Math.round(H * ratio);
+  canvas.width = Math.round(W * ratio);
+  canvas.height = Math.round(H * ratio);
 
-// 注意：不要在这里改 canvas.style.width / height
-// 让 CSS 继续控制现在的视觉大小
+  const ctx = canvas.getContext('2d');
 
-const ctx = canvas.getContext('2d');
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 
-// 把绘图坐标缩放回原来的 W / H 逻辑尺寸
-ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, W, H);
 
-// 清空画布
-ctx.clearRect(0, 0, W, H);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
-// 图片缩放质量设高
-ctx.imageSmoothingEnabled = true;
-ctx.imageSmoothingQuality = 'high';
-
-  // 获取文字列表（带降级处理）
-  const wordSources = await getRoleWords();
-  roleWords = generateRoleWords(wordSources);
-
-  // 透明背景
   for (const role of roles) {
     const img = await loadImage(role.src);
+
     const mask = createRoleMask(img);
 
     drawMaskShape(ctx, mask, role);
-    layoutWords(ctx, mask, role);
 
-    ctx.save();
-    ctx.font = `700 10px ${textFont}`;
-    ctx.fillStyle = role.textColor;
-    ctx.textAlign = 'center';
-    ctx.fillText(role.name, role.x + PANEL_W / 2, role.y + PANEL_H - 103);
-    ctx.restore();
+    drawWordsForRole(ctx, mask, role);
   }
+}
 
-  console.log('海报渲染完成');
+function handleResize() {
+  window.clearTimeout(resizeTimer);
+
+  resizeTimer = window.setTimeout(() => {
+    render();
+  }, 120);
 }
 
 onMounted(async () => {
   await nextTick();
-  render();
+
+  await render();
+
+  window.addEventListener('resize', handleResize);
+});
+
+onBeforeUnmount(() => {
+  window.clearTimeout(resizeTimer);
+
+  window.removeEventListener('resize', handleResize);
 });
 </script>
 
@@ -886,11 +904,9 @@ onMounted(async () => {
 
 .poster-canvas {
   display: block;
-  width: min(100%, 540px);
-  max-height: 100%;
-  aspect-ratio: 16 / 9;
+  width: min(100%, 900px);
+  height: auto;
+  aspect-ratio: 5 / 2;
   object-fit: contain;
-  transform: translateY(24px) scale(1.28);
-  transform-origin: top center;
 }
 </style>
