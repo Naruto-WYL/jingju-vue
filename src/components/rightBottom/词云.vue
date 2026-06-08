@@ -10,17 +10,18 @@ import { nextTick, onMounted, ref } from 'vue';
 import personImage from '../../assets/词云/生.jpg';
 import danImage from '../../assets/词云/旦.jpg';
 import jingImage from '../../assets/词云/净.jpg';
+import moImage from '../../assets/词云/丑.jpg';
 
 const canvasRef = ref(null);
 
 // 在384和640之间取中间值，适当放大
-const W = 600;   // 三个词云横向铺满右下卡片
+const W = 512;   // 384 * 1.33，取中间值
 const H = 288;   // 216 * 1.33
 
-const PANEL_W = 186;
-const PANEL_H = 276;
+const PANEL_W = 112;  // 84 * 1.33
+const PANEL_H = 224;  // 168 * 1.33
 
-const textFont = '"FangSong", "STFangsong", "KaiTi", "STKaiti", "STSong", "SimSun", serif';
+const textFont = '"Microsoft YaHei", "PingFang SC", sans-serif';
 
 // 每个角色独立的文字列表 - 字号适当增大（用作降级数据）
 const roleWordSources = {
@@ -84,24 +85,26 @@ const roleWordSources = {
     ['西皮', 4],
     ['二黄', 4],
   ],
-};
-
-const wordAnchors = [
-  { x: 0.5, y: 0.47, angle: -6, level: 1 },
-  { x: 0.45, y: 0.34, angle: 9, level: 2 },
-  { x: 0.56, y: 0.6, angle: -10, level: 2 },
-  { x: 0.32, y: 0.5, angle: 14, level: 3 },
-  { x: 0.68, y: 0.44, angle: -14, level: 3 },
-  { x: 0.39, y: 0.68, angle: 7, level: 4 },
-  { x: 0.63, y: 0.29, angle: 13, level: 4 },
-  { x: 0.53, y: 0.77, angle: 0, level: 4 },
-];
-
-const levelSizes = {
-  1: 31,
-  2: 23,
-  3: 18,
-  4: 15,
+  mo: [
+    ['老末', 10],
+    ['末角', 9],
+    ['唱腔', 9],
+    ['台步', 9],
+    ['身段', 8],
+    ['念白', 8],
+    ['板眼', 8],
+    ['行头', 7],
+    ['亮相', 7],
+    ['锣鼓', 7],
+    ['戏曲', 6],
+    ['梨园', 6],
+    ['票友', 6],
+    ['科班', 5],
+    ['角儿', 5],
+    ['脸谱', 4],
+    ['水袖', 4],
+    ['戏服', 4],
+  ],
 };
 
 // API 配置
@@ -336,7 +339,7 @@ async function getRoleWords() {
  * 验证文字列表数据格式
  */
 function validateWordsData(data) {
-  const requiredKeys = ['sheng', 'dan', 'jing'];
+  const requiredKeys = ['sheng', 'dan', 'jing', 'mo'];
   
   // 检查是否包含所有角色
   const hasAllKeys = requiredKeys.every(key => key in data);
@@ -381,29 +384,38 @@ const roles = [
   {
     name: '生',
     src: personImage,
-    x: 8,
-    y: 6,
-    color: 'rgba(181, 197, 188, 0.76)',
-    textColor: 'rgba(50, 58, 50, 0.9)',
+    x: 50,
+    y: -5,
+    color: 'rgba(176, 198, 214, 0.75)',
+    textColor: 'rgba(90, 120, 140, 0.9)',
     wordKey: 'sheng',
   },
   {
     name: '旦',
     src: danImage,
-    x: 207,
-    y: 6,
-    color: 'rgba(224, 153, 125, 0.76)',
-    textColor: 'rgba(93, 58, 47, 0.92)',
+    x: 150,
+    y: -5,
+    color: 'rgba(229, 158, 150, 0.75)',
+    textColor: 'rgba(160, 90, 85, 0.9)',
     wordKey: 'dan',
   },
   {
     name: '净',
     src: jingImage,
-    x: 406,
-    y: 6,
-    color: 'rgba(207, 188, 129, 0.78)',
-    textColor: 'rgba(77, 64, 36, 0.9)',
+    x: 255,
+    y: -5,
+    color: 'rgba(168, 168, 168, 0.75)',
+    textColor: 'rgba(90, 90, 90, 0.9)',
     wordKey: 'jing',
+  },
+  {
+    name: '末',
+    src: moImage,
+    x: 360,
+    y: -5,
+    color: 'rgba(222, 195, 112, 0.75)',
+    textColor: 'rgba(150, 130, 60, 0.9)',
+    wordKey: 'mo',
   },
 ];
 
@@ -425,11 +437,11 @@ function createRoleMask(img) {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, PANEL_W, PANEL_H);
 
-  const scale = Math.min(PANEL_W * 1.1 / img.width, PANEL_H * 1.1 / img.height);
+  const scale = Math.min(PANEL_W * 0.88 / img.width, PANEL_H * 0.88 / img.height);
   const dw = img.width * scale;
   const dh = img.height * scale;
   const dx = (PANEL_W - dw) / 2;
-  const dy = (PANEL_H - dh) / 2;
+  const dy = 4;
 
   ctx.drawImage(img, dx, dy, dw, dh);
 
@@ -640,7 +652,7 @@ function isInside(mask, x, y) {
   return mask[Math.floor(y) * PANEL_W + Math.floor(x)] === 1;
 }
 
-function rectPoints(cx, cy, w, h, angle, step = 2) {
+function rectPoints(cx, cy, w, h, angle, step = 3) {
   const rad = (angle * Math.PI) / 180;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
@@ -659,7 +671,7 @@ function rectPoints(cx, cy, w, h, angle, step = 2) {
 }
 
 function canPlace(mask, occupied, cx, cy, w, h, angle) {
-  const points = rectPoints(cx, cy, w, h, angle, 3);
+  const points = rectPoints(cx, cy, w, h, angle);
 
   for (const p of points) {
     const x = Math.floor(p.x);
@@ -673,7 +685,7 @@ function canPlace(mask, occupied, cx, cy, w, h, angle) {
 }
 
 function occupy(occupied, cx, cy, w, h, angle) {
-  const points = rectPoints(cx, cy, w + 14, h + 11, angle, 3);
+  const points = rectPoints(cx, cy, w + 2, h + 2, angle, 2);
 
   for (const p of points) {
     const x = Math.floor(p.x);
@@ -689,29 +701,28 @@ function measureText(text, size) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
 
-  ctx.font = `${size >= 24 ? 700 : 500} ${size}px ${textFont}`;
+  ctx.font = `${size}px ${textFont}`;
 
   return {
     width: ctx.measureText(text).width,
-    height: size * 1.16,
+    height: size * 1.1,
   };
 }
 
 function buildCenters(mask) {
   const centers = [];
 
-  for (let y = 8; y < PANEL_H - 8; y += 4) {
-    for (let x = 8; x < PANEL_W - 8; x += 4) {
+  for (let y = 8; y < PANEL_H - 8; y += 3) {
+    for (let x = 8; x < PANEL_W - 8; x += 3) {
       if (!isInside(mask, x, y)) continue;
 
       const dx = x - PANEL_W / 2;
       const dy = y - PANEL_H / 2;
-      const noise = (Math.sin(x * 12.9898 + y * 78.233) + 1) * 5;
 
       centers.push({
         x,
         y,
-        score: Math.sqrt(dx * dx + dy * dy) + noise,
+        score: Math.sqrt(dx * dx + dy * dy) + Math.random() * 10,
       });
     }
   }
@@ -728,9 +739,9 @@ function drawWord(ctx, role, item) {
   ctx.translate(x, y);
   ctx.rotate(item.angle * Math.PI / 180);
 
-  ctx.font = `${item.size >= 24 ? 700 : 500} ${item.size}px ${textFont}`;
-  ctx.fillStyle = item.size >= 24 ? 'rgba(29, 23, 18, 0.93)' : 'rgba(55, 46, 38, 0.76)';
-  ctx.globalAlpha = item.opacity ?? 1;
+  ctx.font = `${item.size}px ${textFont}`;
+  ctx.fillStyle = '#111';
+  ctx.globalAlpha = 1;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
@@ -740,168 +751,46 @@ function drawWord(ctx, role, item) {
 }
 
 function layoutWords(ctx, mask, role) {
-  const placedRects = [];
+  const occupied = new Uint8Array(PANEL_W * PANEL_H);
   const centers = buildCenters(mask);
+  const angles = [0, -15, 15, 90];
 
   // 使用该角色专属的文字列表
   const words = roleWords[role.wordKey] || [];
   if (!words.length) return;
 
-  const orderedWords = [...words].sort((a, b) => a.rank - b.rank);
+  const expandedWords = [...words].sort((a, b) => b.size - a.size);
 
-  for (const word of orderedWords) {
-    const placement = findWordPlacement(mask, placedRects, centers, word);
-    if (!placement) continue;
+  for (const word of expandedWords) {
+    let placed = false;
 
-    placedRects.push(placement.rect);
-    drawWord(ctx, role, placement);
-  }
-}
+    for (let size = word.size; size >= 6 && !placed; size -= 1) {
+      const measured = measureText(word.text, size);
 
-function findWordPlacement(mask, placedRects, centers, word) {
-  const candidates = buildPlacementCandidates(centers, word);
-  const angles = getAngleCandidates(word.anchor.angle, word.rank);
-  const minSize = Math.max(13, word.size - 6);
+      for (const angle of angles) {
+        const w = measured.width + 3;
+        const h = measured.height + 2;
 
-  for (let size = word.size; size >= minSize; size -= 1) {
-    const measured = measureText(word.text, size);
+        for (const center of centers) {
+          if (canPlace(mask, occupied, center.x, center.y, w, h, angle)) {
+            drawWord(ctx, role, {
+              text: word.text,
+              x: center.x,
+              y: center.y,
+              size,
+              angle,
+            });
 
-    for (const angle of angles) {
-      const bounds = getRotatedBounds(measured.width + 8, measured.height + 6, angle);
+            occupy(occupied, center.x, center.y, w, h, angle);
+            placed = true;
+            break;
+          }
+        }
 
-      for (const candidate of candidates) {
-        const rect = {
-          x: candidate.x - bounds.width / 2,
-          y: candidate.y - bounds.height / 2,
-          width: bounds.width,
-          height: bounds.height,
-        };
-
-        if (!rectInsideMask(mask, rect)) continue;
-        if (placedRects.some(placed => rectsOverlap(rect, placed, 5))) continue;
-
-        return {
-          text: word.text,
-          x: candidate.x,
-          y: candidate.y,
-          size,
-          angle,
-          opacity: word.opacity,
-          rect,
-        };
+        if (placed) break;
       }
     }
   }
-
-  return null;
-}
-
-function buildPlacementCandidates(centers, word) {
-  const anchorX = word.anchor.x * PANEL_W;
-  const anchorY = word.anchor.y * PANEL_H;
-  const offsets = buildAnchorOffsets(word.rank);
-  const candidates = offsets.map(([dx, dy]) => ({
-    x: anchorX + dx,
-    y: anchorY + dy,
-  }));
-
-  const centerStep = word.rank < 3 ? 3 : 5;
-  const start = centers.length ? (word.rank * 31) % centers.length : 0;
-
-  for (let i = 0; i < centers.length && candidates.length < 190; i += centerStep) {
-    const center = centers[(start + i) % centers.length];
-    candidates.push({ x: center.x, y: center.y });
-  }
-
-  return candidates;
-}
-
-function buildAnchorOffsets(rank) {
-  const maxRadius = rank < 2 ? 18 : 34;
-  const step = rank < 2 ? 9 : 11;
-  const offsets = [[0, 0]];
-
-  for (let radius = step; radius <= maxRadius; radius += step) {
-    offsets.push(
-      [-radius, 0],
-      [radius, 0],
-      [0, -radius],
-      [0, radius],
-      [-radius * 0.7, -radius * 0.7],
-      [radius * 0.7, radius * 0.7],
-      [-radius * 0.7, radius * 0.7],
-      [radius * 0.7, -radius * 0.7],
-    );
-  }
-
-  return offsets;
-}
-
-function getAngleCandidates(baseAngle, rank) {
-  if (rank === 0) return [baseAngle, 0];
-
-  const softerAngle = baseAngle > 0 ? baseAngle - 7 : baseAngle + 7;
-  return [baseAngle, softerAngle, 0];
-}
-
-function getRotatedBounds(width, height, angle) {
-  const rad = Math.abs(angle * Math.PI / 180);
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-
-  return {
-    width: width * cos + height * sin,
-    height: width * sin + height * cos,
-  };
-}
-
-function rectInsideMask(mask, rect) {
-  const left = Math.floor(rect.x + 2);
-  const top = Math.floor(rect.y + 2);
-  const right = Math.ceil(rect.x + rect.width - 2);
-  const bottom = Math.ceil(rect.y + rect.height - 2);
-
-  if (left < 0 || top < 0 || right >= PANEL_W || bottom >= PANEL_H) return false;
-
-  const points = [
-    [left, top],
-    [right, top],
-    [left, bottom],
-    [right, bottom],
-    [(left + right) / 2, (top + bottom) / 2],
-  ];
-
-  const cols = Math.max(2, Math.ceil((right - left) / 14));
-  const rows = Math.max(2, Math.ceil((bottom - top) / 10));
-
-  for (let i = 0; i <= cols; i += 1) {
-    const x = left + ((right - left) * i) / cols;
-    points.push([x, top], [x, bottom]);
-  }
-
-  for (let i = 0; i <= rows; i += 1) {
-    const y = top + ((bottom - top) * i) / rows;
-    points.push([left, y], [right, y]);
-  }
-
-  return points.every(([x, y]) => isInside(mask, x, y));
-}
-
-function rectsOverlap(a, b, gap = 0) {
-  return (
-    a.x < b.x + b.width + gap &&
-    a.x + a.width + gap > b.x &&
-    a.y < b.y + b.height + gap &&
-    a.y + a.height + gap > b.y
-  );
-}
-
-function getAnglesForWord(word, roleKey) {
-  if (word.rank < 2) return roleKey === 'dan' ? [-8, 0, 8] : [0, -10, 10];
-  if (word.rank % 4 === 0) return [-24, 0, 18];
-  if (word.rank % 4 === 1) return [18, 0, -18];
-  if (word.rank % 4 === 2) return [-12, 12, 0];
-  return [0, -24, 24];
 }
 
 /**
@@ -909,17 +798,14 @@ function getAnglesForWord(word, roleKey) {
  */
 function generateRoleWords(sources) {
   const words = {};
-
-  ['sheng', 'dan', 'jing'].forEach(roleKey => {
-    const source = Array.isArray(sources[roleKey]) ? sources[roleKey] : [];
-
-    words[roleKey] = source.slice(0, wordAnchors.length).map(([text], index) => ({
+  
+  Object.keys(sources).forEach(roleKey => {
+    words[roleKey] = Array.from({ length: 3 }).flatMap((_, round) =>
+      sources[roleKey].map(([text, size]) => ({
         text,
-        size: levelSizes[wordAnchors[index].level],
-        opacity: index === 0 ? 0.96 : index < 3 ? 0.82 : index < 5 ? 0.7 : 0.62,
-        rank: index,
-        anchor: wordAnchors[index],
-      }));
+        size: Math.max(4, Math.round(size * (1 - round * 0.12))),
+      }))
+    );
   });
 
   return words;
@@ -959,7 +845,7 @@ ctx.imageSmoothingEnabled = true;
 ctx.imageSmoothingQuality = 'high';
 
   // 获取文字列表（带降级处理）
-  const wordSources = roleWordSources;
+  const wordSources = await getRoleWords();
   roleWords = generateRoleWords(wordSources);
 
   // 透明背景
@@ -969,6 +855,13 @@ ctx.imageSmoothingQuality = 'high';
 
     drawMaskShape(ctx, mask, role);
     layoutWords(ctx, mask, role);
+
+    ctx.save();
+    ctx.font = `700 10px ${textFont}`;
+    ctx.fillStyle = role.textColor;
+    ctx.textAlign = 'center';
+    ctx.fillText(role.name, role.x + PANEL_W / 2, role.y + PANEL_H - 103);
+    ctx.restore();
   }
 
   console.log('海报渲染完成');
@@ -993,10 +886,11 @@ onMounted(async () => {
 
 .poster-canvas {
   display: block;
-  width: min(100%, 620px);
-  height: 100%;
+  width: min(100%, 540px);
   max-height: 100%;
-  aspect-ratio: 25 / 12;
+  aspect-ratio: 16 / 9;
   object-fit: contain;
+  transform: translateY(24px) scale(1.28);
+  transform-origin: top center;
 }
 </style>
