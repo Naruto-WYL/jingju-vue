@@ -27,7 +27,39 @@
     </div>
 
     <div ref="chartRef" class="relation-network__stage">
-      <svg ref="svgRef" class="relation-network__svg" role="img" aria-label="人物关系网络图" />
+  <div class="relation-legend" aria-label="人物关系图例">
+    <button
+  class="relation-legend__item relation-legend__item--all"
+  :class="{ 'is-active': activeRelationType === 'all' }"
+  type="button"
+  @click="setRelationFilter('all')"
+>
+      <span class="relation-legend__all-dot"></span>
+      <span>全部关系</span>
+    </button>
+
+    <button
+      v-for="item in relationLegends"
+      :key="item.type"
+      class="relation-legend__item"
+      :class="{ 'is-active': activeRelationType === item.type }"
+      type="button"
+      @click="setRelationFilter(item.type)"
+    >
+      <svg class="relation-legend__mark" viewBox="0 0 42 12" aria-hidden="true">
+        <path
+          d="M4 6 H38"
+          :stroke="item.color"
+          :stroke-dasharray="item.dash"
+          stroke-width="4"
+          stroke-linecap="round"
+        />
+      </svg>
+      <span>{{ item.label }}</span>
+    </button>
+  </div>
+
+  <svg ref="svgRef" class="relation-network__svg" role="img" aria-label="人物关系网络图" />
 
       <div v-if="loading" class="chart-state">数据加载中...</div>
       <div v-else-if="errorMessage" class="chart-state chart-state--error">{{ errorMessage }}</div>
@@ -51,7 +83,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import * as d3 from 'd3'
 import * as XLSX from 'xlsx'
-import shengAvatar from '../../assets/step1/生.png'
+import coreAvatar from '../../assets/人物图象/核心.png'
+import majorAvatar from '../../assets/人物图象/主要.png'
+import minorAvatar from '../../assets/人物图象/次要.png'
 
 defineOptions({
   inheritAttrs: false,
@@ -64,13 +98,59 @@ const props = defineProps({
   },
 })
 
-const DATA_URL = '/数据表合集/2/new.xlsx'
+const DATA_URL = '/数据表合集/2/两剧本人物关系_简化版.csv'
 const VIEW_WIDTH = 1600
 const VIEW_HEIGHT = 1360
-const EDGE_COLOR = '#8f2f24'
-const PLAQUE_COLOR = '#8f2f24'
+
 const GOLD = '#d4a64a'
 const DEEP_GOLD = '#7a4b19'
+
+const EDGE_THEMES = {
+  kinship: {
+    label: '亲缘婚恋',
+    color: '#a65f8f',
+    glow: '#ead0e3',
+    dash: '',
+  },
+  command: {
+    label: '命令权力',
+    color: '#b33a2b',
+    glow: '#f1c88a',
+    dash: '',
+  },
+  alliance: {
+    label: '同盟协作',
+    color: '#2f6f8f',
+    glow: '#b9d7e6',
+    dash: '',
+  },
+  support: {
+    label: '扶助照应',
+    color: '#668a3d',
+    glow: '#d5e3b5',
+    dash: '12 8',
+  },
+  conflict: {
+    label: '对立冲突',
+    color: '#7a2323',
+    glow: '#dfa18e',
+    dash: '16 7',
+  },
+  info: {
+    label: '信息谋略',
+    color: '#b87924',
+    glow: '#efd08a',
+    dash: '7 7',
+  },
+  other: {
+    label: '其他复合',
+    color: '#9a5a2f',
+    glow: '#dfb866',
+    dash: '4 6',
+  },
+}
+
+const RELATION_TYPES = ['kinship', 'command', 'alliance', 'support', 'conflict', 'info', 'other']
 
 const chartRef = ref(null)
 const svgRef = ref(null)
@@ -88,7 +168,21 @@ const tooltip = reactive({
   sub: '',
   body: '',
 })
+const activeRelationType = ref('all')
 
+const relationLegends = computed(() => {
+  return RELATION_TYPES.map((type) => ({
+    type,
+    label: EDGE_THEMES[type].label,
+    color: EDGE_THEMES[type].color,
+    dash: EDGE_THEMES[type].dash,
+  }))
+})
+
+function setRelationFilter(type) {
+  activeRelationType.value = type
+  scheduleDraw()
+}
 let resizeObserver = null
 let drawFrame = 0
 let lastStageWidth = 0
@@ -189,13 +283,14 @@ function buildGraph(edgeRows) {
     upsertNode(nodeMap, row.target, row.targetLevel, row.weight)
 
     links.push({
-      id: `edge-${index}`,
-      source: row.source,
-      target: row.target,
-      relation: row.relation,
-      description: row.description,
-      weight: row.weight,
-    })
+  id: `edge-${index}`,
+  source: row.source,
+  target: row.target,
+  relation: row.relation,
+  relationType: getRelationType(row),
+  description: row.description,
+  weight: row.weight,
+})
   })
 
   const nodes = Array.from(nodeMap.values()).map((node) => {
@@ -207,7 +302,7 @@ function buildGraph(edgeRows) {
       ...node,
       level,
       r: isCore ? 96 : isMajor ? 70 : 58,
-      plateWidth: getPlateWidth(node.name, isCore),
+      plateWidth: getPlateWidth(node.name, isCore, level),
       core: isCore,
     }
   })
@@ -263,9 +358,18 @@ function strongerLevel(left, right) {
   return rank[normalizeLevel(right)] > rank[normalizeLevel(left)] ? right : left
 }
 
-function getPlateWidth(name, isCore) {
+function getPlateWidth(name, isCore, level = 'minor') {
   const charCount = Array.from(name).length
-  return Math.max(isCore ? 160 : 112, Math.min(isCore ? 220 : 170, charCount * (isCore ? 34 : 26) + 42))
+
+  if (isCore || level === 'core') {
+    return Math.max(240, Math.min(340, charCount * 48 + 76))
+  }
+
+  if (level === 'major') {
+    return Math.max(190, Math.min(280, charCount * 40 + 60))
+  }
+
+  return Math.max(160, Math.min(230, charCount * 36 + 58))
 }
 
 function scheduleDraw() {
@@ -299,9 +403,11 @@ function drawChart() {
   }))
 
   const nodeById = new Map(nodes.map((node) => [node.id, node]))
-  layoutPosterGraph(nodes, links)
+  layoutPosterGraph(nodes, links, nodeById)
 
   const defs = svg.append('defs')
+
+  
   drawDefs(defs)
 
   const viewport = svg.append('g')
@@ -320,7 +426,62 @@ function drawChart() {
   drawEdges(edgeLayer, links, nodeById)
   drawNodes(nodeLayer, nodes, links, nodeById)
 }
+function getRelationType(edge) {
+  const type = String(edge.relationType || edge.relation || '').trim().toLowerCase()
+  const content = `${edge.relation || ''}${edge.description || ''}`
 
+  if (['kinship', 'love', 'family'].includes(type)) return 'kinship'
+  if (type === 'command') return 'command'
+  if (type === 'alliance') return 'alliance'
+  if (type === 'support') return 'support'
+  if (type === 'conflict') return 'conflict'
+  if (type === 'info') return 'info'
+  if (type === 'other' || type === 'normal') return 'other'
+
+  if (/父子|母子|父女|母女|兄弟|姐妹|夫妻|恋人|婚约|姻亲|亲属|家人|血缘|祖孙|叔侄|婚恋|情感/.test(content)) {
+    return 'kinship'
+  }
+
+  if (/君臣|主仆|上下|上级|下级|统领|命令|指挥|差遣|率领|调度|主导|掌控|将帅|官民/.test(content)) {
+    return 'command'
+  }
+
+  if (/同盟|合作|协作|盟友|朋友|同僚|结盟|共同|相助|共同作战|共同谋事/.test(content)) {
+    return 'alliance'
+  }
+
+  if (/师徒|帮助|助力|支援|辅佐|协助|照应|保护|救助|托付|报恩|引导|指点|扶助/.test(content)) {
+    return 'support'
+  }
+
+  if (/对立|冲突|矛盾|敌对|争斗|抗衡|陷害|欺骗|仇恨|追杀|攻打|反叛|审判|误会/.test(content)) {
+    return 'conflict'
+  }
+
+  if (/传递|传信|通报|消息|情报|计策|献计|谋划|密谋|告密|试探|劝说|信息|间接/.test(content)) {
+    return 'info'
+  }
+
+  return 'other'
+}
+
+function getEdgeTheme(edge) {
+  const relationType = getRelationType(edge)
+  return EDGE_THEMES[relationType] || EDGE_THEMES.other
+}
+
+function getEdgeMarkerId(edge) {
+  const relationType = getRelationType(edge)
+
+  if (relationType === 'kinship') return 'relationArrowKinship'
+  if (relationType === 'command') return 'relationArrowCommand'
+  if (relationType === 'alliance') return 'relationArrowAlliance'
+  if (relationType === 'support') return 'relationArrowSupport'
+  if (relationType === 'conflict') return 'relationArrowConflict'
+  if (relationType === 'info') return 'relationArrowInfo'
+
+  return 'relationArrowOther'
+}
 function drawDefs(defs) {
   defs
     .append('filter')
@@ -336,6 +497,14 @@ function drawDefs(defs) {
     .attr('flood-color', '#3f180f')
     .attr('flood-opacity', 0.24)
 
+ createArrowMarker(defs, 'relationArrowKinship', EDGE_THEMES.kinship.color)
+createArrowMarker(defs, 'relationArrowCommand', EDGE_THEMES.command.color)
+createArrowMarker(defs, 'relationArrowAlliance', EDGE_THEMES.alliance.color)
+createArrowMarker(defs, 'relationArrowSupport', EDGE_THEMES.support.color)
+createArrowMarker(defs, 'relationArrowConflict', EDGE_THEMES.conflict.color)
+createArrowMarker(defs, 'relationArrowInfo', EDGE_THEMES.info.color)
+createArrowMarker(defs, 'relationArrowOther', EDGE_THEMES.other.color)
+
   const gradient = defs
     .append('linearGradient')
     .attr('id', 'plateGold')
@@ -347,504 +516,436 @@ function drawDefs(defs) {
   gradient.append('stop').attr('offset', '0%').attr('stop-color', '#fff2b2')
   gradient.append('stop').attr('offset', '48%').attr('stop-color', GOLD)
   gradient.append('stop').attr('offset', '100%').attr('stop-color', DEEP_GOLD)
+}
 
+
+function createArrowMarker(defs, id, color) {
   defs
     .append('marker')
-    .attr('id', 'relationArrow')
+    .attr('id', id)
     .attr('viewBox', '0 0 12 12')
-    .attr('markerWidth', 5.8)
-    .attr('markerHeight', 5.8)
-    .attr('refX', 9)
+    .attr('markerWidth', 7)
+    .attr('markerHeight', 7)
+    .attr('refX', 9.2)
     .attr('refY', 6)
-    .attr('orient', 'auto-start-reverse')
+    .attr('orient', 'auto')
     .attr('markerUnits', 'strokeWidth')
     .append('path')
-    .attr('d', 'M1.5,2 L10,6 L1.5,10 Z')
-    .attr('fill', EDGE_COLOR)
+    .attr('d', 'M1.8,2.2 L10,6 L1.8,9.8 Q3.4,6 1.8,2.2 Z')
+    .attr('fill', color)
 }
 
-function layoutPosterGraph(nodes, links) {
-  const coreNodes = pickCoreNodes(nodes)
-  const corePositions = getCorePositions(coreNodes.length)
+function layoutPosterGraph(nodes, links, nodeById) {
+  const coreNodes = pickLayoutCoreNodes(nodes)
 
-  coreNodes.forEach((node, index) => {
-    const point = corePositions[index] || corePositions[corePositions.length - 1]
-    setPosterNode(node, point.x, point.y, point.role === 'top' && coreNodes.length > 2 ? 92 : 108, true)
-    node.layoutRole = point.role
-  })
-
-  const clusters = buildRelationClusters(nodes, links, coreNodes)
-  assignClusterLanes(clusters)
-  placeClusters(clusters, coreNodes)
-  relaxLayout(nodes, coreNodes)
-  expandLayoutToCanvas(nodes)
-  spreadLayoutEvenly(nodes, coreNodes)
-  relaxLayout(nodes, coreNodes)
-  updateClusterHubs(clusters)
+  placeCoreNodes(coreNodes)
+  assignAnchorPositions(nodes, links, coreNodes)
+  runAnchorForceLayout(nodes, links, coreNodes, nodeById)
+  fitLayoutToPoster(nodes)
+  polishNodeCollisions(nodes, coreNodes)
+  fitLayoutToPoster(nodes)
+  updateEdgeHubs(nodes)
 }
 
-function pickCoreNodes(nodes) {
-  const explicit = nodes.filter((node) => node.core)
-  if (explicit.length) return explicit
+function pickLayoutCoreNodes(nodes) {
+  const priorityNames = ['周瑜', '诸葛亮', '鲁肃', '曹操', '孙权', '刘备']
 
-  const fallback = nodes
+  const explicitCoreNodes = nodes
+    .filter((node) => node.core)
+    .sort((a, b) => {
+      const aPriority = priorityNames.includes(a.name) ? priorityNames.indexOf(a.name) : 999
+      const bPriority = priorityNames.includes(b.name) ? priorityNames.indexOf(b.name) : 999
+
+      return aPriority - bPriority || b.score - a.score || b.degree - a.degree
+    })
+
+  if (explicitCoreNodes.length) return explicitCoreNodes
+
+  const fallbackCoreNodes = nodes
     .slice()
     .sort((a, b) => b.score - a.score || b.degree - a.degree)
     .slice(0, Math.min(3, nodes.length))
 
-  fallback.forEach((node) => {
+  fallbackCoreNodes.forEach((node) => {
     node.core = true
     node.level = 'core'
+    node.r = 108
+    node.plateWidth = getPlateWidth(node.name, true)
   })
 
-  return fallback
+  return fallbackCoreNodes
 }
 
-function buildRelationClusters(nodes, links, coreNodes) {
+function placeCoreNodes(coreNodes) {
+  const positions = getCorePositions(coreNodes.length)
+
+  coreNodes.forEach((node, index) => {
+    const position = positions[index] || positions[positions.length - 1]
+
+    setPosterNode(node, position.x, position.y, position.r, true)
+
+    node.layoutRole = position.role
+    node.anchorX = position.x
+    node.anchorY = position.y
+    node.clusterId = `core:${node.id}`
+    node.clusterHubX = position.x
+    node.clusterHubY = position.y
+    node.fx = position.x
+    node.fy = position.y
+  })
+}
+
+function getCorePositions(count) {
+  if (count <= 1) {
+    return [
+      {
+        x: VIEW_WIDTH * 0.5,
+        y: VIEW_HEIGHT * 0.5,
+        r: 118,
+        role: 'center',
+      },
+    ]
+  }
+
+  if (count === 2) {
+    return [
+      {
+        x: VIEW_WIDTH * 0.36,
+        y: VIEW_HEIGHT * 0.52,
+        r: 116,
+        role: 'left',
+      },
+      {
+        x: VIEW_WIDTH * 0.64,
+        y: VIEW_HEIGHT * 0.52,
+        r: 116,
+        role: 'right',
+      },
+    ]
+  }
+
+  if (count === 3) {
+    return [
+      {
+        x: VIEW_WIDTH * 0.5,
+        y: VIEW_HEIGHT * 0.33,
+        r: 112,
+        role: 'top',
+      },
+      {
+        x: VIEW_WIDTH * 0.32,
+        y: VIEW_HEIGHT * 0.65,
+        r: 118,
+        role: 'left',
+      },
+      {
+        x: VIEW_WIDTH * 0.69,
+        y: VIEW_HEIGHT * 0.65,
+        r: 116,
+        role: 'right',
+      },
+    ]
+  }
+
+  const centerX = VIEW_WIDTH * 0.5
+  const centerY = VIEW_HEIGHT * 0.52
+  const radiusX = VIEW_WIDTH * 0.26
+  const radiusY = VIEW_HEIGHT * 0.25
+
+  return d3.range(count).map((index) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / count
+
+    return {
+      x: centerX + Math.cos(angle) * radiusX,
+      y: centerY + Math.sin(angle) * radiusY,
+      r: 108,
+      role: Math.cos(angle) < -0.35 ? 'left' : Math.cos(angle) > 0.35 ? 'right' : 'top',
+    }
+  })
+}
+
+function assignAnchorPositions(nodes, links, coreNodes) {
   const coreIds = new Set(coreNodes.map((node) => node.id))
   const nonCoreNodes = nodes.filter((node) => !coreIds.has(node.id))
-  const nonCoreIds = new Set(nonCoreNodes.map((node) => node.id))
-  const unionFind = createUnionFind(nonCoreNodes.map((node) => node.id))
+  const groups = new Map()
 
-  links.forEach((link) => {
-    if (nonCoreIds.has(link.source) && nonCoreIds.has(link.target)) {
-      unionFind.union(link.source, link.target)
-    }
-  })
-
-  const peerComponents = new Map()
   nonCoreNodes.forEach((node) => {
-    const root = unionFind.find(node.id)
-    if (!peerComponents.has(root)) peerComponents.set(root, [])
-    peerComponents.get(root).push(node)
+    const coreLinks = getConnectedCores(node, links, coreNodes)
+
+    node.connectedCores = coreLinks
+
+    const groupKey =
+      coreLinks.length >= 2
+        ? `bridge:${coreLinks.map((item) => item.core.id).join('|')}`
+        : coreLinks.length === 1
+          ? `satellite:${coreLinks[0].core.id}`
+          : 'fringe'
+
+    node.clusterId = groupKey
+
+    if (!groups.has(groupKey)) groups.set(groupKey, [])
+    groups.get(groupKey).push(node)
   })
 
-  const coreSignatureById = new Map()
+  groups.forEach((groupNodes, groupKey) => {
+    groupNodes.sort((a, b) => b.score - a.score || b.degree - a.degree || a.order - b.order)
+
+    groupNodes.forEach((node, index) => {
+      if (groupKey.startsWith('bridge:')) {
+        setBridgeAnchor(node, node.connectedCores, index, groupNodes.length)
+      } else if (groupKey.startsWith('satellite:')) {
+        setSatelliteAnchor(node, node.connectedCores[0].core, index, groupNodes.length)
+      } else {
+        setFringeAnchor(node, index, groupNodes.length)
+      }
+
+      node.x = node.anchorX
+      node.y = node.anchorY
+      node.r = nodeRadius(node)
+      node.plateWidth = getPlateWidth(node.name, node.core, node.level)
+
+      keepNodeInBounds(node)
+    })
+  })
+
   nonCoreNodes.forEach((node) => {
-    coreSignatureById.set(node.id, getCoreLinks(node, links, coreNodes).map((item) => item.core.id).sort().join('__'))
-  })
-
-  const singleCoreBuckets = new Map()
-  const multiCoreBuckets = new Map()
-  const clusters = []
-
-  Array.from(peerComponents.values()).forEach((componentNodes) => {
-    const info = summarizeCluster(componentNodes, links, coreNodes)
-    const sameSingleCore = info.coreIds.length === 1 && !hasCrossCoreSignaturePeer(componentNodes, links, nonCoreIds, coreSignatureById)
-
-    if (sameSingleCore) {
-      const key = info.coreIds[0]
-      if (!singleCoreBuckets.has(key)) singleCoreBuckets.set(key, [])
-      singleCoreBuckets.get(key).push(...componentNodes)
-      return
-    }
-
-    if (componentNodes.length === 1 && info.coreIds.length > 1) {
-      const key = getCoreRelationSignature(componentNodes[0], links, coreNodes)
-      if (!multiCoreBuckets.has(key)) multiCoreBuckets.set(key, [])
-      multiCoreBuckets.get(key).push(componentNodes[0])
-      return
-    }
-
-    clusters.push(makeCluster(componentNodes, links, coreNodes))
-  })
-
-  singleCoreBuckets.forEach((bucketNodes) => {
-    splitClusterNodes(bucketNodes, 6).forEach((group) => {
-      clusters.push(makeCluster(group, links, coreNodes))
-    })
-  })
-
-  multiCoreBuckets.forEach((bucketNodes) => {
-    if (bucketNodes.length > 1) {
-      clusters.push(makeCluster(bucketNodes, links, coreNodes))
-      return
-    }
-
-    clusters.push(makeCluster(bucketNodes, links, coreNodes))
-  })
-
-  return clusters
-    .map((cluster, index) => ({ ...cluster, id: `cluster-${index}` }))
-    .sort((a, b) => clusterTypeRank(a.type) - clusterTypeRank(b.type) || b.weight - a.weight || b.nodes.length - a.nodes.length)
-}
-
-function createUnionFind(ids) {
-  const parent = new Map(ids.map((id) => [id, id]))
-
-  function find(id) {
-    const current = parent.get(id)
-    if (current === id) return id
-
-    const root = find(current)
-    parent.set(id, root)
-    return root
-  }
-
-  function union(left, right) {
-    if (!parent.has(left) || !parent.has(right)) return
-
-    const rootLeft = find(left)
-    const rootRight = find(right)
-    if (rootLeft !== rootRight) parent.set(rootRight, rootLeft)
-  }
-
-  return { find, union }
-}
-
-function makeCluster(clusterNodes, links, coreNodes) {
-  const info = summarizeCluster(clusterNodes, links, coreNodes)
-
-  return {
-    id: '',
-    nodes: clusterNodes.slice().sort((a, b) => b.score - a.score || a.order - b.order),
-    cores: info.cores,
-    coreIds: info.coreIds,
-    type: info.type,
-    weight: info.weight,
-  }
-}
-
-function summarizeCluster(clusterNodes, links, coreNodes) {
-  const coreWeights = new Map(coreNodes.map((core) => [core.id, 0]))
-
-  clusterNodes.forEach((node) => {
-    getCoreLinks(node, links, coreNodes).forEach((item) => {
-      coreWeights.set(item.core.id, (coreWeights.get(item.core.id) || 0) + item.weight)
-    })
-  })
-
-  const coreEntries = Array.from(coreWeights.entries())
-    .filter(([, weight]) => weight > 0)
-    .sort((a, b) => b[1] - a[1])
-
-  let cores = coreEntries
-    .map(([id]) => coreNodes.find((core) => core.id === id))
-    .filter(Boolean)
-  let coreIds = cores.map((core) => core.id)
-  let type = 'fringe'
-
-  if (coreIds.length === 1) {
-    type = 'satellite'
-  } else if (coreIds.length > 1) {
-    const firstWeight = coreEntries[0]?.[1] || 0
-    const secondWeight = coreEntries[1]?.[1] || 0
-
-    if (hasInternalLinks(clusterNodes, links) && firstWeight >= secondWeight * 1.45) {
-      cores = cores.slice(0, 1)
-      coreIds = coreIds.slice(0, 1)
-      type = 'satellite'
-    } else {
-      type = 'bridge'
-    }
-  }
-
-  return {
-    cores,
-    coreIds,
-    type,
-    weight: clusterNodes.reduce((sum, node) => sum + node.score, 0),
-  }
-}
-
-function splitClusterNodes(nodes, maxSize) {
-  const ordered = nodes.slice().sort((a, b) => b.score - a.score || a.order - b.order)
-  const groups = []
-
-  for (let index = 0; index < ordered.length; index += maxSize) {
-    groups.push(ordered.slice(index, index + maxSize))
-  }
-
-  return groups
-}
-
-function assignClusterLanes(clusters) {
-  const counts = new Map()
-
-  clusters.forEach((cluster) => {
-    const key = `${cluster.type}:${cluster.coreIds.slice().sort().join('__') || 'fringe'}`
-    const lane = counts.get(key) || 0
-    counts.set(key, lane + 1)
-    cluster.lane = lane
+    delete node.connectedCores
   })
 }
 
-function placeClusters(clusters, coreNodes) {
-  const placedRects = coreNodes.map((node) => nodeBounds(node))
-
-  clusters.forEach((cluster) => {
-    const candidates = getClusterCandidates(cluster)
-    const placement = chooseClusterPlacement(cluster, candidates, placedRects)
-
-    applyClusterPlacement(cluster, placement)
-    cluster.nodes.forEach((node) => placedRects.push(nodeBounds(node)))
-  })
-}
-
-function getClusterCandidates(cluster) {
-  if (cluster.type === 'bridge') return getBridgeCandidates(cluster)
-  if (cluster.type === 'satellite') return getSatelliteCandidates(cluster)
-  return getFringeCandidates(cluster)
-}
-
-function getSatelliteCandidates(cluster) {
-  const core = cluster.cores[0]
-  if (!core) return getFringeCandidates(cluster)
-
-  const angles = rotateValues(getSatelliteAngles(core), cluster.lane || 0)
-  const distances = [440, 580, 720, 850]
-  const candidates = []
-
-  distances.forEach((distance, ringIndex) => {
-    angles.forEach((angle, angleIndex) => {
-      const point = polarPoint(core.x, core.y, distance, angle)
-      candidates.push({
-        x: point.x,
-        y: point.y,
-        mode: getPackMode(cluster),
-        priority: ringIndex * 14 + angleIndex,
-      })
-    })
-  })
-
-  return candidates
-}
-
-function getSatelliteAngles(core) {
-  if (core.layoutRole === 'left') return [180, 135, 225, 90, 270, 45, 315]
-  if (core.layoutRole === 'right') return [0, 45, -45, 90, -90, 135, -135]
-  if (core.layoutRole === 'top') return [90, 135, 45, 180, 0, 225, -45]
-  return [-90, 90, 180, 0, 45, 135, -45, -135]
-}
-
-function getBridgeCandidates(cluster) {
-  const [coreA, coreB] = cluster.cores
-  if (!coreA || !coreB) return getFringeCandidates(cluster)
-
-  const midX = (coreA.x + coreB.x) / 2
-  const midY = (coreA.y + coreB.y) / 2
-  const dx = coreB.x - coreA.x
-  const dy = coreB.y - coreA.y
-  const distance = Math.hypot(dx, dy) || 1
-  const horizontalPair = Math.abs(dy) < 150
-  const axisX = dx / distance
-  const axisY = dy / distance
-  let normalX = -axisY
-  let normalY = axisX
-
-  if ((midX - VIEW_WIDTH / 2) * normalX + (midY - VIEW_HEIGHT / 2) * normalY < 0) {
-    normalX *= -1
-    normalY *= -1
-  }
-
-  const preferredSide = horizontalPair && (cluster.lane || 0) % 2 === 1 ? -1 : 1
-  const sides = horizontalPair ? [preferredSide, -preferredSide] : [1]
-  const radialOffsets = [270, 400, 540, 160]
-  const alongOffsets = [0, 220, -220, 380, -380]
-  const candidates = []
-
-  radialOffsets.forEach((radial, radialIndex) => {
-    sides.forEach((side, sideIndex) => {
-      alongOffsets.forEach((along, alongIndex) => {
-        candidates.push({
-          x: midX + normalX * radial * side + axisX * along,
-          y: midY + normalY * radial * side + axisY * along,
-          mode: getPackMode(cluster),
-          priority: radialIndex * 24 + sideIndex * 10 + alongIndex,
-        })
-      })
-    })
-  })
-
-  return candidates
-}
-
-function getFringeCandidates(cluster) {
-  const columns = Math.max(3, Math.ceil(Math.sqrt(cluster.nodes.length + 2)))
-  return d3.range(columns * 3).map((index) => ({
-    x: spreadValue(index % columns, columns, 260, VIEW_WIDTH - 260),
-    y: VIEW_HEIGHT - 120 - Math.floor(index / columns) * 230,
-    mode: getPackMode(cluster),
-    priority: index,
-  }))
-}
-
-function chooseClusterPlacement(cluster, candidates, placedRects) {
-  return candidates.reduce((best, candidate) => {
-    const placement = packCluster(cluster, candidate)
-    const score = scorePlacement(placement, placedRects, candidate.priority)
-    return !best || score < best.score ? { ...placement, score } : best
-  }, null)
-}
-
-function packCluster(cluster, candidate) {
-  const nodes = cluster.nodes
-  const gapX = 282
-  const gapY = 268
-  const positions = []
-
-  if (candidate.mode === 'row') {
-    nodes.forEach((node, index) => {
-      positions.push({ node, x: candidate.x + (index - (nodes.length - 1) / 2) * gapX, y: candidate.y })
-    })
-  } else if (candidate.mode === 'column') {
-    nodes.forEach((node, index) => {
-      positions.push({ node, x: candidate.x, y: candidate.y + (index - (nodes.length - 1) / 2) * gapY })
-    })
-  } else {
-    const columns = getGridColumns(cluster)
-    const rows = Math.ceil(nodes.length / columns)
-
-    nodes.forEach((node, index) => {
-      const row = Math.floor(index / columns)
-      const column = index % columns
-      positions.push({
-        node,
-        x: candidate.x + (column - (columns - 1) / 2) * gapX,
-        y: candidate.y + (row - (rows - 1) / 2) * gapY,
-      })
-    })
-  }
-
-  return shiftPlacementInsideBounds({ positions, candidate })
-}
-
-function shiftPlacementInsideBounds(placement) {
-  const bounds = placementBounds(placement.positions)
-  let dx = 0
-  let dy = 0
-
-  if (bounds.left < 82) dx = 82 - bounds.left
-  if (bounds.right > VIEW_WIDTH - 82) dx = VIEW_WIDTH - 82 - bounds.right
-  if (bounds.top < 24) dy = 24 - bounds.top
-  if (bounds.bottom > VIEW_HEIGHT - 44) dy = VIEW_HEIGHT - 44 - bounds.bottom
-
-  if (!dx && !dy) return placement
-
-  return {
-    ...placement,
-    positions: placement.positions.map((position) => ({
-      ...position,
-      x: position.x + dx,
-      y: position.y + dy,
-    })),
-  }
-}
-
-function scorePlacement(placement, placedRects, priority) {
-  let score = priority * 520
-  const rects = placement.positions.map((position) => nodeBounds(position.node, position.x, position.y))
-
-  rects.forEach((rect) => {
-    score += overflowPenalty(rect) * 9000
-
-    placedRects.forEach((placed) => {
-      const overlap = overlapArea(rect, placed)
-      if (overlap > 0) score += 500000 + overlap * 5
-    })
-  })
-
-  return score
-}
-
-function applyClusterPlacement(cluster, placement) {
-  const hub = averagePosition(placement.positions)
-
-  placement.positions.forEach((position) => {
-    setPosterNode(position.node, position.x, position.y, nodeRadius(position.node), false)
-    position.node.clusterId = cluster.id
-    position.node.anchorX = position.x
-    position.node.anchorY = position.y
-    position.node.clusterHubX = hub.x
-    position.node.clusterHubY = hub.y
-  })
-
-  cluster.hubX = hub.x
-  cluster.hubY = hub.y
-}
-
-function getCoreLinks(node, links, coreNodes) {
+function getConnectedCores(node, links, coreNodes) {
   return coreNodes
     .map((core) => {
-      const weight = links.reduce((total, link) => {
+      const weight = links.reduce((sum, link) => {
         const connected =
           (link.source === node.id && link.target === core.id) ||
           (link.target === node.id && link.source === core.id)
-        return connected ? total + link.weight : total
+
+        return connected ? sum + link.weight : sum
       }, 0)
 
-      return { core, weight }
+      return {
+        core,
+        weight,
+      }
     })
     .filter((item) => item.weight > 0)
-    .sort((a, b) => b.weight - a.weight || a.core.order - b.core.order)
+    .sort((a, b) => b.weight - a.weight)
 }
 
-function getCoreRelationSignature(node, links, coreNodes) {
-  return getCoreLinks(node, links, coreNodes)
-    .map((item) => {
-      const relations = links
-        .filter((link) => {
-          return (
-            (link.source === node.id && link.target === item.core.id) ||
-            (link.target === node.id && link.source === item.core.id)
-          )
-        })
-        .map((link) => link.relation)
-        .sort()
-        .join('&')
+function setSatelliteAnchor(node, core, index, count) {
+  const centerX = VIEW_WIDTH * 0.5
+  const centerY = VIEW_HEIGHT * 0.52
 
-      return `${item.core.id}:${relations}`
+  const baseAngle = Math.atan2(core.y - centerY, core.x - centerX)
+  const span = Math.min(Math.PI * 1.05, Math.PI * (0.42 + count * 0.085))
+  const t = count <= 1 ? 0.5 : index / (count - 1)
+
+  const ring = Math.floor(index / 5)
+const distance = 450 + ring * 170 + (index % 2) * 64
+  const angle = baseAngle - span / 2 + span * t
+
+  node.anchorX = core.x + Math.cos(angle) * distance
+  node.anchorY = core.y + Math.sin(angle) * distance
+
+  node.clusterHubX = core.x + Math.cos(baseAngle) * 190
+  node.clusterHubY = core.y + Math.sin(baseAngle) * 190
+}
+
+function setBridgeAnchor(node, coreLinks, index, count) {
+  const totalWeight = d3.sum(coreLinks, (item) => item.weight) || 1
+
+  const baseX = d3.sum(coreLinks, (item) => item.core.x * item.weight) / totalWeight
+  const baseY = d3.sum(coreLinks, (item) => item.core.y * item.weight) / totalWeight
+
+  const centerX = VIEW_WIDTH * 0.5
+  const centerY = VIEW_HEIGHT * 0.52
+
+  let dx = baseX - centerX
+  let dy = baseY - centerY
+
+  const length = Math.hypot(dx, dy) || 1
+
+  dx /= length
+  dy /= length
+
+  const tangentX = -dy
+  const tangentY = dx
+
+  const offset = (index - (count - 1) / 2) * 270
+const outward = 240 + Math.floor(index / 3) * 130
+
+  node.anchorX = baseX + dx * outward + tangentX * offset
+  node.anchorY = baseY + dy * outward + tangentY * offset
+
+  node.clusterHubX = baseX + dx * 95
+  node.clusterHubY = baseY + dy * 95
+}
+
+function setFringeAnchor(node, index, count) {
+  const columns = Math.max(3, Math.ceil(Math.sqrt(count)))
+  const rows = Math.ceil(count / columns)
+
+  const column = index % columns
+  const row = Math.floor(index / columns)
+
+  const left = VIEW_WIDTH * 0.16
+  const right = VIEW_WIDTH * 0.84
+  const top = VIEW_HEIGHT * 0.77
+  const bottom = VIEW_HEIGHT * 0.9
+
+  node.anchorX = columns <= 1 ? VIEW_WIDTH / 2 : left + ((right - left) * column) / (columns - 1)
+  node.anchorY = rows <= 1 ? top : top + ((bottom - top) * row) / (rows - 1)
+
+  node.clusterHubX = node.anchorX
+  node.clusterHubY = node.anchorY
+}
+
+function runAnchorForceLayout(nodes, links, coreNodes, nodeById) {
+  const simulationLinks = links
+    .map((link) => {
+      const source = nodeById.get(link.source)
+      const target = nodeById.get(link.target)
+
+      if (!source || !target) return null
+
+      return {
+        ...link,
+        source,
+        target,
+      }
     })
-    .sort()
-    .join('__')
-}
+    .filter(Boolean)
 
-function hasInternalLinks(nodes, links) {
-  const ids = new Set(nodes.map((node) => node.id))
-  return links.some((link) => ids.has(link.source) && ids.has(link.target))
-}
+  const coreIds = new Set(coreNodes.map((node) => node.id))
 
-function hasCrossCoreSignaturePeer(nodes, links, nonCoreIds, coreSignatureById) {
-  const ids = new Set(nodes.map((node) => node.id))
+  coreNodes.forEach((node) => {
+    node.fx = node.anchorX
+    node.fy = node.anchorY
+  })
 
-  return links.some((link) => {
-    const leftInGroup = ids.has(link.source)
-    const rightInGroup = ids.has(link.target)
-    if (leftInGroup === rightInGroup) return false
+  const simulation = d3
+    .forceSimulation(nodes)
+    .alpha(1)
+    .alphaDecay(0.028)
+    .velocityDecay(0.44)
+    .force(
+      'link',
+      d3
+        .forceLink(simulationLinks)
+        .distance((link) => {
+  if (link.source.core && link.target.core) return 560
+  if (link.source.core || link.target.core) return 380 - Math.min(80, link.weight * 10)
+  return 340
+})
+        .strength((link) => {
+          if (link.source.core && link.target.core) return 0.18
+          if (link.source.core || link.target.core) return 0.085 + link.weight * 0.012
+          return 0.05
+        }),
+    )
+    .force(
+      'charge',
+      d3.forceManyBody().strength((node) => {
+        if (node.core) return -1500
+        if (node.level === 'major') return -720
+        return -520
+      }),
+    )
+    .force(
+      'collide',
+      d3
+        .forceCollide()
+        .radius((node) => collisionRadius(node))
+        .strength(1)
+        .iterations(5),
+    )
+    .force(
+      'x',
+      d3
+        .forceX((node) => node.anchorX ?? VIEW_WIDTH * 0.5)
+        .strength((node) => {
+          if (coreIds.has(node.id)) return 0.95
+          if (String(node.clusterId || '').startsWith('bridge:')) return 0.22
+          return 0.14
+        }),
+    )
+    .force(
+      'y',
+      d3
+        .forceY((node) => node.anchorY ?? VIEW_HEIGHT * 0.52)
+        .strength((node) => {
+          if (coreIds.has(node.id)) return 0.95
+          if (String(node.clusterId || '').startsWith('bridge:')) return 0.22
+          return 0.14
+        }),
+    )
+    .force('bounds', forcePosterBounds())
+    .stop()
 
-    const insideId = leftInGroup ? link.source : link.target
-    const outsideId = leftInGroup ? link.target : link.source
-    if (!nonCoreIds.has(outsideId)) return false
+  for (let index = 0; index < 430; index += 1) {
+    simulation.tick()
+  }
 
-    return coreSignatureById.get(insideId) !== coreSignatureById.get(outsideId)
+  coreNodes.forEach((node) => {
+    delete node.fx
+    delete node.fy
+  })
+
+  nodes.forEach((node) => {
+    keepNodeInBounds(node)
   })
 }
 
-function relaxLayout(nodes, coreNodes) {
-  resolveNodeCollisions(nodes, coreNodes)
+function forcePosterBounds() {
+  let forceNodes = []
+
+  function force() {
+    forceNodes.forEach((node) => {
+      const bounds = nodeBounds(node)
+
+      if (bounds.left < 92) node.x += (92 - bounds.left) * 0.24
+      if (bounds.right > VIEW_WIDTH - 92) node.x -= (bounds.right - (VIEW_WIDTH - 92)) * 0.24
+      if (bounds.top < 80) node.y += (80 - bounds.top) * 0.24
+      if (bounds.bottom > VIEW_HEIGHT - 80) node.y -= (bounds.bottom - (VIEW_HEIGHT - 80)) * 0.24
+    })
+  }
+
+  force.initialize = (nodes) => {
+    forceNodes = nodes
+  }
+
+  return force
 }
 
-function expandLayoutToCanvas(nodes) {
-  if (nodes.length < 2) return
+function collisionRadius(node) {
+  if (node.core) return node.r + 130
+  if (node.level === 'major') return node.r + 110
+  return node.r + 96
+}
 
-  const minX = d3.min(nodes, (node) => node.x) ?? 0
-  const maxX = d3.max(nodes, (node) => node.x) ?? VIEW_WIDTH
-  const minY = d3.min(nodes, (node) => node.y) ?? 0
-  const maxY = d3.max(nodes, (node) => node.y) ?? VIEW_HEIGHT
-  const spanX = Math.max(1, maxX - minX)
-  const spanY = Math.max(1, maxY - minY)
+function fitLayoutToPoster(nodes) {
+  const bounds = getLayoutBounds(nodes)
+
   const target = {
-    left: 150,
-    right: VIEW_WIDTH - 150,
-    top: 145,
-    bottom: VIEW_HEIGHT - 145,
+    left: 130,
+    right: VIEW_WIDTH - 130,
+    top: 115,
+    bottom: VIEW_HEIGHT - 120,
   }
+
+  const sourceWidth = Math.max(1, bounds.right - bounds.left)
+  const sourceHeight = Math.max(1, bounds.bottom - bounds.top)
+
   const targetWidth = target.right - target.left
   const targetHeight = target.bottom - target.top
-  const scaleX = Math.max(1, Math.min(1.16, targetWidth / spanX))
-  const scaleY = Math.max(1, Math.min(1.42, targetHeight / spanY))
-  const sourceCenterX = (minX + maxX) / 2
-  const sourceCenterY = (minY + maxY) / 2
+
+  const scaleX = clamp(targetWidth / sourceWidth, 0.88, 1.26)
+  const scaleY = clamp(targetHeight / sourceHeight, 0.88, 1.26)
+
+  const sourceCenterX = (bounds.left + bounds.right) / 2
+  const sourceCenterY = (bounds.top + bounds.bottom) / 2
+
   const targetCenterX = (target.left + target.right) / 2
   const targetCenterY = (target.top + target.bottom) / 2
 
@@ -855,172 +956,86 @@ function expandLayoutToCanvas(nodes) {
   })
 }
 
-function spreadLayoutEvenly(nodes, coreNodes) {
-  const coreIds = new Set(coreNodes.map((node) => node.id))
+function getLayoutBounds(nodes) {
+  return nodes.reduce(
+    (result, node) => {
+      const bounds = nodeBounds(node)
 
-  nodes.forEach((node) => {
-    node.spreadAnchorX = node.x
-    node.spreadAnchorY = node.y
-  })
-
-  for (let pass = 0; pass < 90; pass += 1) {
-    const shifts = new Map(nodes.map((node) => [node.id, { x: 0, y: 0 }]))
-    let totalShift = 0
-
-    for (let i = 0; i < nodes.length; i += 1) {
-      for (let j = i + 1; j < nodes.length; j += 1) {
-        const left = nodes[i]
-        const right = nodes[j]
-        const dx = right.x - left.x
-        const dy = right.y - left.y
-        const distance = Math.hypot(dx, dy) || 1
-        const targetDistance = evenNodeDistance(left, right)
-
-        if (distance >= targetDistance) continue
-
-        const pressure = (targetDistance - distance) / targetDistance
-        const push = pressure * pressure * 18
-        const ux = dx / distance
-        const uy = dy / distance
-        const leftMobility = coreIds.has(left.id) ? 0.34 : 1
-        const rightMobility = coreIds.has(right.id) ? 0.34 : 1
-        const leftShift = shifts.get(left.id)
-        const rightShift = shifts.get(right.id)
-
-        leftShift.x -= ux * push * leftMobility
-        leftShift.y -= uy * push * leftMobility
-        rightShift.x += ux * push * rightMobility
-        rightShift.y += uy * push * rightMobility
-        totalShift += push
+      return {
+        left: Math.min(result.left, bounds.left),
+        right: Math.max(result.right, bounds.right),
+        top: Math.min(result.top, bounds.top),
+        bottom: Math.max(result.bottom, bounds.bottom),
       }
-    }
-
-    nodes.forEach((node) => {
-      const shift = shifts.get(node.id)
-      const anchorStrength = coreIds.has(node.id) ? 0.035 : 0.018
-
-      node.x += shift.x + (node.spreadAnchorX - node.x) * anchorStrength
-      node.y += shift.y + (node.spreadAnchorY - node.y) * anchorStrength
-      keepNodeInBounds(node)
-    })
-
-    if (totalShift < 0.18) break
-  }
-
-  nodes.forEach((node) => {
-    delete node.spreadAnchorX
-    delete node.spreadAnchorY
-  })
+    },
+    {
+      left: Infinity,
+      right: -Infinity,
+      top: Infinity,
+      bottom: -Infinity,
+    },
+  )
 }
 
-function updateClusterHubs(clusters) {
-  clusters.forEach((cluster) => {
-    const hub = averagePosition(cluster.nodes)
-    cluster.hubX = hub.x
-    cluster.hubY = hub.y
-
-    cluster.nodes.forEach((node) => {
-      node.clusterHubX = hub.x
-      node.clusterHubY = hub.y
-    })
-  })
-}
-
-function resolveNodeCollisions(nodes, coreNodes) {
+function polishNodeCollisions(nodes, coreNodes) {
   const coreIds = new Set(coreNodes.map((node) => node.id))
 
-  for (let pass = 0; pass < 90; pass += 1) {
+  for (let pass = 0; pass < 120; pass += 1) {
     let moved = false
 
     for (let i = 0; i < nodes.length; i += 1) {
       for (let j = i + 1; j < nodes.length; j += 1) {
         const left = nodes[i]
         const right = nodes[j]
-        const minDistance = minimumNodeDistance(left, right)
+
         const dx = right.x - left.x
         const dy = right.y - left.y
         const distance = Math.hypot(dx, dy) || 1
+
+        const sameCluster = left.clusterId && left.clusterId === right.clusterId
+        const minDistance = collisionRadius(left) + collisionRadius(right) + (sameCluster ? 36 : 72)
 
         if (distance >= minDistance) continue
 
         const push = (minDistance - distance) / 2
         const ux = dx / distance
         const uy = dy / distance
-        const leftLocked = coreIds.has(left.id)
-        const rightLocked = coreIds.has(right.id)
 
-        if (!leftLocked) {
-          left.x -= ux * (rightLocked ? push * 2 : push)
-          left.y -= uy * (rightLocked ? push * 2 : push)
-          keepNodeInBounds(left)
-        }
+        const leftMobility = coreIds.has(left.id) ? 0 : 1
+        const rightMobility = coreIds.has(right.id) ? 0 : 1
 
-        if (!rightLocked) {
-          right.x += ux * (leftLocked ? push * 2 : push)
-          right.y += uy * (leftLocked ? push * 2 : push)
-          keepNodeInBounds(right)
-        }
+        left.x -= ux * push * leftMobility
+        left.y -= uy * push * leftMobility
+
+        right.x += ux * push * rightMobility
+        right.y += uy * push * rightMobility
+
+        keepNodeInBounds(left)
+        keepNodeInBounds(right)
 
         moved = true
       }
     }
 
-    nodes.forEach((node) => {
-      if (!coreIds.has(node.id)) keepNodeInBounds(node)
-    })
-
     if (!moved) break
   }
 }
 
-function minimumNodeDistance(left, right) {
-  const sameCluster = left.clusterId && left.clusterId === right.clusterId
-  if (left.core || right.core) return left.r + right.r + 80
-
-  return Math.max(
-    left.r + right.r + (sameCluster ? 88 : 118),
-    (left.plateWidth || 120) / 2 + (right.plateWidth || 120) / 2 + (sameCluster ? 66 : 88),
-  )
-}
-
-function evenNodeDistance(left, right) {
-  const sameCluster = left.clusterId && left.clusterId === right.clusterId
-  const base = minimumNodeDistance(left, right)
-
-  if (left.core && right.core) return base + 120
-  if (left.core || right.core) return base + 135
-  if (sameCluster) return base + 70
-  return base + 175
-}
-
-function averagePosition(items) {
-  const total = items.reduce(
-    (sum, item) => ({
-      x: sum.x + item.x,
-      y: sum.y + item.y,
-    }),
-    { x: 0, y: 0 },
+function updateEdgeHubs(nodes) {
+  const groups = d3.group(
+    nodes.filter((node) => !node.core),
+    (node) => node.clusterId || 'none',
   )
 
-  return {
-    x: total.x / Math.max(1, items.length),
-    y: total.y / Math.max(1, items.length),
-  }
-}
+  groups.forEach((groupNodes) => {
+    const hubX = d3.mean(groupNodes, (node) => node.x) ?? VIEW_WIDTH / 2
+    const hubY = d3.mean(groupNodes, (node) => node.y) ?? VIEW_HEIGHT / 2
 
-function placementBounds(positions) {
-  return positions.reduce(
-    (bounds, position) => {
-      const rect = nodeBounds(position.node, position.x, position.y)
-      return {
-        left: Math.min(bounds.left, rect.left),
-        right: Math.max(bounds.right, rect.right),
-        top: Math.min(bounds.top, rect.top),
-        bottom: Math.max(bounds.bottom, rect.bottom),
-      }
-    },
-    { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity },
-  )
+    groupNodes.forEach((node) => {
+      node.clusterHubX = Number.isFinite(node.clusterHubX) ? (node.clusterHubX + hubX) / 2 : hubX
+      node.clusterHubY = Number.isFinite(node.clusterHubY) ? (node.clusterHubY + hubY) / 2 : hubY
+    })
+  })
 }
 
 function nodeBounds(node, x = node.x, y = node.y) {
@@ -1037,21 +1052,6 @@ function nodeBounds(node, x = node.x, y = node.y) {
   }
 }
 
-function overlapArea(left, right) {
-  const width = Math.min(left.right, right.right) - Math.max(left.left, right.left)
-  const height = Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top)
-  return width > 0 && height > 0 ? width * height : 0
-}
-
-function overflowPenalty(rect) {
-  return (
-    Math.max(0, 82 - rect.left) +
-    Math.max(0, rect.right - (VIEW_WIDTH - 82)) +
-    Math.max(0, 24 - rect.top) +
-    Math.max(0, rect.bottom - (VIEW_HEIGHT - 44))
-  )
-}
-
 function keepNodeInBounds(node) {
   const bounds = nodeBounds(node)
 
@@ -1060,16 +1060,26 @@ function keepNodeInBounds(node) {
   if (bounds.top < 24) node.y += 24 - bounds.top
   if (bounds.bottom > VIEW_HEIGHT - 44) node.y -= bounds.bottom - (VIEW_HEIGHT - 44)
 }
-
+function getNodeAvatar(node) {
+  if (node.level === 'core' || node.core) return coreAvatar
+  if (node.level === 'major') return majorAvatar
+  return minorAvatar
+}
+function getNodeTier(node) {
+  if (node.core || node.level === 'core') return 'core'
+  if (node.level === 'major') return 'major'
+  return 'minor'
+}
 function nodeRadius(node) {
   if (node.core) return node.r || 108
   return node.level === 'minor' ? 62 : 74
 }
 
 function getPlaqueHeight(node) {
-  return node.core ? 62 : 46
+  if (node.core || node.level === 'core') return 84
+  if (node.level === 'major') return 68
+  return 56
 }
-
 function getPlaqueOffset(node) {
   return node.r * 1.08 - getPlaqueHeight(node) / 2
 }
@@ -1078,87 +1088,19 @@ function setPosterNode(node, x, y, radius, isCore = node.core) {
   node.x = x
   node.y = y
   node.r = radius
-  node.plateWidth = getPlateWidth(node.name, isCore)
-}
-
-function spreadValue(index, count, min, max) {
-  if (count <= 1) return (min + max) / 2
-  return min + ((max - min) * index) / (count - 1)
-}
-
-function getCorePositions(count) {
-  if (count <= 1) return [{ x: VIEW_WIDTH / 2, y: VIEW_HEIGHT * 0.46, role: 'center' }]
-  if (count === 2) {
-    return [
-      { x: VIEW_WIDTH * 0.34, y: VIEW_HEIGHT * 0.46, role: 'left' },
-      { x: VIEW_WIDTH * 0.66, y: VIEW_HEIGHT * 0.46, role: 'right' },
-    ]
-  }
-
-  if (count === 3) {
-    return [
-      { x: VIEW_WIDTH * 0.32, y: VIEW_HEIGHT * 0.54, role: 'left' },
-      { x: VIEW_WIDTH * 0.5, y: VIEW_HEIGHT * 0.26, role: 'top' },
-      { x: VIEW_WIDTH * 0.72, y: VIEW_HEIGHT * 0.54, role: 'right' },
-    ]
-  }
-
-  return d3.range(count).map((index) => {
-    const angle = -155 + (310 * index) / Math.max(1, count - 1)
-    const point = polarPoint(VIEW_WIDTH / 2, VIEW_HEIGHT * 0.45, 285, angle)
-
-    return {
-      x: point.x,
-      y: point.y,
-      role: point.x < VIEW_WIDTH * 0.42 ? 'left' : point.x > VIEW_WIDTH * 0.58 ? 'right' : 'top',
-    }
-  })
-}
-
-function polarPoint(cx, cy, radius, angleDeg) {
-  const angle = (angleDeg * Math.PI) / 180
-  return {
-    x: cx + Math.cos(angle) * radius,
-    y: cy + Math.sin(angle) * radius,
-  }
-}
-
-function rotateValues(values, amount) {
-  return values.map((_, index) => values[(index + amount) % values.length])
-}
-
-function getPackMode(cluster) {
-  if (cluster.nodes.length === 1) return 'single'
-  if (cluster.type === 'bridge') return cluster.nodes.length <= 2 ? 'column' : 'grid'
-  if (cluster.type === 'fringe') return cluster.nodes.length <= 3 ? 'row' : 'grid'
-
-  const core = cluster.cores[0]
-  if (core?.layoutRole === 'top' && cluster.nodes.length <= 3) return 'row'
-  if ((core?.layoutRole === 'left' || core?.layoutRole === 'right') && cluster.nodes.length <= 2) return 'column'
-  return 'grid'
-}
-
-function getGridColumns(cluster) {
-  if (cluster.nodes.length <= 2) return 1
-
-  const core = cluster.cores[0]
-  if (cluster.type === 'satellite' && (core?.layoutRole === 'left' || core?.layoutRole === 'right')) {
-    return 2
-  }
-
-  return cluster.nodes.length <= 4 ? 2 : 3
-}
-
-function clusterTypeRank(type) {
-  return type === 'bridge' ? 0 : type === 'satellite' ? 1 : 2
+  node.plateWidth = getPlateWidth(node.name, isCore, node.level)
 }
 
 function drawEdges(edgeLayer, links, nodeById) {
   const edgeGroups = edgeLayer
-    .selectAll('g.edge')
-    .data(links)
-    .join('g')
-    .attr('class', 'edge')
+  .selectAll('g.edge')
+  .data(links)
+  .join('g')
+  .attr('class', 'edge')
+  .classed('is-filter-muted', (edge) => {
+    const relationType = getRelationType(edge)
+    return activeRelationType.value !== 'all' && relationType !== activeRelationType.value
+  })
     .on('mouseenter', (event, edge) => {
       setEdgeActive(edge)
       showEdgeTooltip(event, edge, nodeById)
@@ -1173,18 +1115,21 @@ function drawEdges(edgeLayer, links, nodeById) {
     })
 
   edgeGroups
-    .append('path')
-    .attr('class', 'edge__line-bg')
-    .attr('d', (edge, index) => edgePath(edge, nodeById, index))
+  .append('path')
+  .attr('class', 'edge__line-bg')
+  .attr('d', (edge, index) => edgePath(edge, nodeById, index))
+  .attr('stroke', (edge) => getEdgeTheme(edge).glow)
+  .attr('stroke-width', (edge) => Math.min(14, 8 + edge.weight * 0.7))
 
-  edgeGroups
-    .append('path')
-    .attr('id', (edge) => edge.uid)
-    .attr('class', 'edge__line')
-    .attr('d', (edge, index) => edgePath(edge, nodeById, index))
-    .attr('stroke-width', (edge) => Math.min(3.2, 1.5 + edge.weight * 0.26))
-    .attr('marker-start', 'url(#relationArrow)')
-    .attr('marker-end', 'url(#relationArrow)')
+edgeGroups
+  .append('path')
+  .attr('id', (edge) => edge.uid)
+  .attr('class', 'edge__line')
+  .attr('d', (edge, index) => edgePath(edge, nodeById, index))
+  .attr('stroke', (edge) => getEdgeTheme(edge).color)
+  .attr('stroke-width', (edge) => Math.min(8, 4.8 + edge.weight * 0.6))
+  .attr('stroke-dasharray', (edge) => getEdgeTheme(edge).dash)
+  .attr('marker-end', (edge) => `url(#${getEdgeMarkerId(edge)})`)
 
   edgeGroups
     .append('path')
@@ -1205,11 +1150,24 @@ function drawEdges(edgeLayer, links, nodeById) {
 }
 
 function drawNodes(nodeLayer, nodes, links, nodeById) {
+  const filteredNodeIds = new Set()
+
+  if (activeRelationType.value !== 'all') {
+    links.forEach((edge) => {
+      if (getRelationType(edge) === activeRelationType.value) {
+        filteredNodeIds.add(edge.source)
+        filteredNodeIds.add(edge.target)
+      }
+    })
+  }
   const nodeGroups = nodeLayer
-    .selectAll('g.node')
-    .data(nodes)
-    .join('g')
-    .attr('class', 'node')
+  .selectAll('g.node')
+  .data(nodes)
+  .join('g')
+  .attr('class', 'node')
+  .classed('is-filter-muted', (node) => {
+    return activeRelationType.value !== 'all' && !filteredNodeIds.has(node.id)
+  })
     .attr('transform', (node) => `translate(${node.x},${node.y})`)
     .on('mouseenter', (event, node) => {
       setNodeActive(node.id)
@@ -1229,20 +1187,20 @@ function drawNodes(nodeLayer, nodes, links, nodeById) {
   nodeGroups.append('circle').attr('class', 'node__ring-inner').attr('r', (node) => node.r)
 
   nodeGroups
-    .append('image')
-    .attr('class', 'node__avatar')
-    .attr('href', shengAvatar)
-    .attr('xlink:href', shengAvatar)
-    .attr('x', (node) => -node.r)
-    .attr('y', (node) => -node.r * 1.26)
-    .attr('width', (node) => node.r * 2)
-    .attr('height', (node) => node.r * 2.34)
-    .attr('preserveAspectRatio', 'xMidYMid meet')
+  .append('image')
+  .attr('class', 'node__avatar')
+  .attr('href', (node) => getNodeAvatar(node))
+  .attr('xlink:href', (node) => getNodeAvatar(node))
+  .attr('x', (node) => -node.r * 1.38)
+  .attr('y', (node) => -node.r * 1.55)
+  .attr('width', (node) => node.r * 2.76)
+  .attr('height', (node) => node.r * 2.76)
+  .attr('preserveAspectRatio', 'xMidYMid meet')
 
   nodeGroups
     .append('circle')
     .attr('class', 'node__avatar-border')
-    .attr('r', (node) => node.r)
+    .attr('r', (node) => node.r *1.18)
 
   const plaques = nodeGroups
     .append('g')
@@ -1250,21 +1208,27 @@ function drawNodes(nodeLayer, nodes, links, nodeById) {
     .attr('transform', (node) => `translate(0,${getPlaqueOffset(node)})`)
 
   plaques
-    .append('path')
-    .attr('d', (node) => plaquePath(node.plateWidth, getPlaqueHeight(node)))
-    .attr('fill', PLAQUE_COLOR)
+  .append('rect')
+  .attr('class', (node) => `node__plaque-bg node__plaque-bg--${getNodeTier(node)}`)
+  .attr('x', (node) => -node.plateWidth / 2)
+  .attr('y', 0)
+  .attr('width', (node) => node.plateWidth)
+  .attr('height', (node) => getPlaqueHeight(node))
+  .attr('rx', (node) => (node.core ? 18 : 14))
+  .attr('ry', (node) => (node.core ? 18 : 14))
+
+
 
   plaques
-    .append('path')
-    .attr('class', 'node__plaque-border')
-    .attr('d', (node) => plaquePath(node.plateWidth, getPlaqueHeight(node)))
+  .append('text')
+  .attr('class', (node) => `node__name node__name--${getNodeTier(node)}`)
+  .attr('x', 0)
+  .attr('y', (node) => getPlaqueHeight(node) / 2 + 2)
+  .attr('text-anchor', 'middle')
+  .attr('dominant-baseline', 'middle')
+  .text((node) => node.name)
 
-  plaques
-    .append('text')
-    .attr('class', (node) => `node__name ${node.core ? 'node__name--core' : ''}`)
-    .attr('y', (node) => getPlaqueHeight(node) * 0.7)
-    .attr('text-anchor', 'middle')
-    .text((node) => node.name)
+    
 }
 
 function edgePath(edge, nodeById, index) {
@@ -1286,26 +1250,27 @@ function edgePath(edge, nodeById, index) {
 }
 
 function edgeControlPoint(source, target, index) {
-  const clusterNode = source.core && !target.core ? target : target.core && !source.core ? source : null
-
-  if (clusterNode && Number.isFinite(clusterNode.clusterHubX) && Number.isFinite(clusterNode.clusterHubY)) {
-    const hub = { x: clusterNode.clusterHubX, y: clusterNode.clusterHubY }
-    const hubDistance = Math.hypot(hub.x - clusterNode.x, hub.y - clusterNode.y)
-
-    if (hubDistance > 14) return hub
-
-    return curvedMidPoint(source, target, index, 72)
-  }
-
-  if (!source.core && !target.core && source.clusterId && source.clusterId === target.clusterId) {
-    return curvedMidPoint(source, target, index, 58)
-  }
-
   if (source.core && target.core) {
-    return curvedMidPoint(source, target, index, 34)
+    return curvedMidPoint(source, target, index, 110)
   }
 
-  return null
+  const nonCoreNode = source.core && !target.core ? target : target.core && !source.core ? source : null
+
+  if (nonCoreNode) {
+    const hubX = Number.isFinite(nonCoreNode.clusterHubX) ? nonCoreNode.clusterHubX : (source.x + target.x) / 2
+    const hubY = Number.isFinite(nonCoreNode.clusterHubY) ? nonCoreNode.clusterHubY : (source.y + target.y) / 2
+
+    return {
+      x: hubX,
+      y: hubY,
+    }
+  }
+
+  if (source.clusterId && source.clusterId === target.clusterId) {
+    return curvedMidPoint(source, target, index, 54)
+  }
+
+  return curvedMidPoint(source, target, index, 76)
 }
 
 function curvedMidPoint(source, target, index, amount) {
@@ -1338,30 +1303,7 @@ function pointToward(node, target, padding) {
   }
 }
 
-function plaquePath(width, height) {
-  const half = width / 2
-  const tab = 13
-  const corner = 7
 
-  return [
-    `M ${-half + corner} 0`,
-    `L ${half - corner} 0`,
-    `Q ${half} 0 ${half} ${corner}`,
-    `L ${half} ${height * 0.32}`,
-    `L ${half + tab} ${height / 2}`,
-    `L ${half} ${height * 0.68}`,
-    `L ${half} ${height - corner}`,
-    `Q ${half} ${height} ${half - corner} ${height}`,
-    `L ${-half + corner} ${height}`,
-    `Q ${-half} ${height} ${-half} ${height - corner}`,
-    `L ${-half} ${height * 0.68}`,
-    `L ${-half - tab} ${height / 2}`,
-    `L ${-half} ${height * 0.32}`,
-    `L ${-half} ${corner}`,
-    `Q ${-half} 0 ${-half + corner} 0`,
-    'Z',
-  ].join(' ')
-}
 
 function setNodeActive(nodeId) {
   const connected = new Set([nodeId])
@@ -1426,9 +1368,11 @@ function showNodeTooltip(event, node, links, nodeById) {
 function showEdgeTooltip(event, edge, nodeById) {
   const source = nodeById.get(edge.source)
   const target = nodeById.get(edge.target)
+  const relationType = getRelationType(edge)
+  const themeLabel = EDGE_THEMES[relationType]?.label || '其他复合'
 
-  tooltip.title = edge.relation
-  tooltip.sub = `${source?.name || edge.source} → ${target?.name || edge.target}`
+  tooltip.title = edge.relation || themeLabel
+  tooltip.sub = `${themeLabel}｜${source?.name || edge.source} → ${target?.name || edge.target}`
   tooltip.body = edge.description
   moveTooltip(event)
   tooltip.visible = true
@@ -1559,51 +1503,139 @@ function clamp(value, min, max) {
   box-shadow: 0 0 0 2px rgba(212, 166, 74, 0.24);
 }
 
-/* 图表舞台区域，也就是 SVG 所在的大容器 */
 .relation-network__stage {
-  /* 设置为相对定位，方便 tooltip 绝对定位 */
   position: relative;
-
-  /* 占据剩余空间 */
   flex: 1;
-
-  /* 最小高度为 0，避免 flex 布局溢出 */
   min-height: 0;
-
-  /* 超出区域隐藏 */
   overflow: hidden;
-
-  /* 设置圆角 */
   border-radius: 8px;
-
-  /* 设置背景：前两层是浅红网格线，最后一层是画布底色 */
   background:
     linear-gradient(90deg, rgba(142, 47, 36, 0.035) 1px, transparent 1px),
     linear-gradient(0deg, rgba(142, 47, 36, 0.025) 1px, transparent 1px),
     #FDF8EB;
-
-  /* 设置网格背景尺寸 */
   background-size: 34px 34px, 34px 34px, auto;
+
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
 }
 
-/* SVG 画布 */
-.relation-network__svg {
-  /* 让 SVG 作为块级元素显示，去除底部空隙 */
-  display: block;
 
-  /* SVG 宽度占满容器 */
+.relation-legend {
+  position: relative;
+  z-index: 5;
   width: 100%;
+  box-sizing: border-box;
 
-  /* SVG 高度占满容器 */
-  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, 104px);
+  justify-content: center;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 4px;
 
-  /* 最小高度为 0，避免撑开布局 */
+  padding: 0 8px 4px;
+  margin-top: -2px;
+
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.relation-legend__item {
+  position: relative;
+
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: center;
+
+  width: 104px;
+  height: 24px;
+  padding: 0;
+
+  border: none;
+  border-radius: 0;
+  background: transparent;
+
+  color: #5a3518;
+  font-family:
+    "STKaiti",
+    "KaiTi",
+    "Microsoft YaHei",
+    "PingFang SC",
+    sans-serif;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  text-align: left;
+
+  cursor: pointer;
+  transition:
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.relation-legend__item.is-active {
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  color: #8f2f24;
+}
+
+
+.relation-legend__item--all {
+  background: transparent;
+  box-shadow: none;
+}
+
+.relation-legend__item--all:hover {
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.relation-legend__item--all.is-active {
+  background: transparent;
+  box-shadow: none;
+  color: #5a3518;
+}
+.relation-legend__mark {
+  width: 30px;
+  height: 12px;
+  justify-self: center;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.relation-legend__all-dot {
+  width: 10px;
+  height: 10px;
+  justify-self: center;
+  border-radius: 50%;
+  background:
+    linear-gradient(135deg, #b33a2b 0 20%, #2f6f8f 20% 40%, #668a3d 40% 60%, #7a2323 60% 80%, #b87924 80% 100%);
+  box-shadow: none;
+}
+
+:deep(.edge.is-filter-muted) {
+  opacity: 0.08;
+}
+
+:deep(.node.is-filter-muted) {
+  opacity: 0.2;
+}
+
+:deep(.node.is-filter-muted .node__plaque) {
+  opacity: 0.55;
+}
+.relation-network__svg {
+  display: block;
+  width: 100%;
+  flex: 1;
   min-height: 0;
-
-  /* 鼠标显示抓取样式，提示可以拖动画布 */
   cursor: grab;
-
-  /* 禁止选中文字，避免拖动画布时选中内容 */
   user-select: none;
 }
 
@@ -1613,46 +1645,19 @@ function clamp(value, min, max) {
   cursor: grabbing;
 }
 
-/* 关系线主体 */
 :deep(.edge__line) {
-  /* 不填充路径内部 */
   fill: none;
-
-  /* 设置关系线颜色 */
-  stroke: #8f2f24;
-
-  /* 线条端点为圆角 */
   stroke-linecap: round;
-
-  /* 线条连接处为圆角 */
   stroke-linejoin: round;
-
-  /* 设置透明度 */
-  opacity: 0.9;
-
-  /* 给线条加一点投影，让它从背景中浮出来 */
-  filter: drop-shadow(0 2px 1px rgba(74, 35, 15, 0.18));
+  opacity: 0.78;
+  filter: none;
 }
 
-/* 关系线底部金色衬线 */
 :deep(.edge__line-bg) {
-  /* 不填充路径内部 */
   fill: none;
-
-  /* 设置底线为金色 */
-  stroke: #d8ad4b;
-
-  /* 底线更粗，用来形成描边效果 */
-  stroke-width: 6.5;
-
-  /* 线条端点为圆角 */
   stroke-linecap: round;
-
-  /* 线条连接处为圆角 */
   stroke-linejoin: round;
-
-  /* 降低透明度，避免太抢眼 */
-  opacity: 0.24;
+  opacity: 0.18;
 }
 
 /* 关系线鼠标感应区域 */
@@ -1722,21 +1727,13 @@ function clamp(value, min, max) {
   opacity: 0.16;
 }
 
-/* 激活状态下的关系线 */
 :deep(.edge.is-active .edge__line) {
-  /* 激活线条完全显示 */
   opacity: 1;
-
-  /* 添加金色光晕和阴影 */
-  filter:
-    drop-shadow(0 0 4px rgba(255, 223, 134, 0.8))
-    drop-shadow(0 3px 4px rgba(86, 37, 13, 0.24));
+  filter: drop-shadow(0 0 4px rgba(140, 69, 35, 0.28));
 }
 
-/* 激活状态下关系线底部衬线 */
 :deep(.edge.is-active .edge__line-bg) {
-  /* 提高底线透明度 */
-  opacity: 0.52;
+  opacity: 0.34;
 }
 
 /* 激活状态下显示关系标签 */
@@ -1766,31 +1763,17 @@ function clamp(value, min, max) {
   stroke-dasharray: 12 8;
 }
 
-/* 节点外圈 */
 :deep(.node__ring-outer) {
-  /* 设置浅米色填充 */
-  fill: rgba(255, 244, 213, 0.72);
-
-  /* 使用 SVG 中定义的金色渐变描边 */
+  fill: rgba(255, 244, 213, 0.18);
   stroke: url(#plateGold);
-
-  /* 设置外圈描边宽度 */
-  stroke-width: 7;
-
-  /* 使用 SVG 中定义的阴影滤镜 */
+  stroke-width: 5;
   filter: url(#nodeShadow);
 }
 
-/* 节点内圈 */
 :deep(.node__ring-inner) {
-  /* 设置半透明米黄色填充 */
-  fill: rgba(248, 230, 189, 0.58);
-
-  /* 设置深金棕色描边 */
-  stroke: #7a4b19;
-
-  /* 设置描边宽度 */
-  stroke-width: 2.2;
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 0;
 }
 
 /* 节点头像图片 */
@@ -1820,49 +1803,34 @@ function clamp(value, min, max) {
   filter: drop-shadow(0 4px 3px rgba(70, 30, 12, 0.28));
 }
 
-/* 名牌边框 */
-:deep(.node__plaque-border) {
-  /* 不填充，只显示边框 */
-  fill: none;
 
-  /* 使用金色渐变描边 */
-  stroke: url(#plateGold);
 
-  /* 设置边框宽度 */
-  stroke-width: 3.2;
-}
-
-/* 人物姓名文字 */
 :deep(.node__name) {
-  /* 设置姓名文字颜色 */
-  fill: #fff1bf;
-
-  /* 设置普通节点姓名字号 */
-  font-size: 26px;
-
-  /* 字体加粗 */
   font-weight: 900;
-
-  /* 先描边再填充，增强文字清晰度 */
   paint-order: stroke;
-
-  /* 设置文字深色描边 */
-  stroke: rgba(46, 20, 10, 0.5);
-
-  /* 设置文字描边宽度 */
-  stroke-width: 2px;
-
-  /* 设置描边连接处圆润 */
   stroke-linejoin: round;
-
-  /* 禁止姓名文字响应鼠标事件 */
   pointer-events: none;
 }
 
-/* 核心人物姓名文字 */
 :deep(.node__name--core) {
-  /* 核心人物名字更大 */
-  font-size: 38px;
+  fill: #ffffff;
+  font-size: 60px;
+  
+  stroke-width: 2.5px;
+}
+
+:deep(.node__name--major) {
+  fill: #000000;
+  font-size: 50px;
+  stroke: rgba(24, 64, 70, 0.42);
+  stroke-width: 2px;
+}
+
+:deep(.node__name--minor) {
+  fill: #ffffff;
+  font-size: 40px;
+  stroke: rgba(255, 255, 255, 0.38);
+  stroke-width: 1.8px;
 }
 
 /* 节点激活状态 */
@@ -2031,5 +1999,21 @@ function clamp(value, min, max) {
     /* 给 SVG 设置最小宽度，避免图表被压得太窄 */
     min-width: 920px;
   }
+}
+:deep(.node__plaque-bg) {
+  stroke: none;
+  stroke-width: 0;
+}
+
+:deep(.node__plaque-bg--core) {
+  fill: #8f2f24;
+}
+
+:deep(.node__plaque-bg--major) {
+  fill: #869a9c;
+}
+
+:deep(.node__plaque-bg--minor) {
+  fill: #74775e;
 }
 </style>

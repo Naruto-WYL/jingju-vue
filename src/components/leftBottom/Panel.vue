@@ -45,7 +45,7 @@ const panelTitle = computed(() => (view.value === 'a' ? '主要角色互动弧�
   display: flex;
   flex-direction: column;
   isolation: isolate;
-  padding: 14px 15px 13px;
+  padding: 14px 15px 14px;
   overflow: hidden;
   border: 1px solid rgba(143, 47, 36, 0.58);
   border-radius: 2px;
@@ -91,8 +91,8 @@ const panelTitle = computed(() => (view.value === 'a' ? '主要角色互动弧�
   flex: 0 0 auto;
   align-items: flex-start;
   min-height: 53px;
-  margin-bottom: 8px;
-  padding: 0 2px 8px;
+  margin-bottom: 2px;
+  padding: 0 2px 0px;
   border-bottom: 1px solid rgba(143, 47, 36, 0.32);
 }
 
