@@ -1,682 +1,536 @@
 <template>
-  <section ref="panelRef" class="vertical-upset-panel" aria-label="纵向版主题组合 UpSet 图">
-    <div v-if="loading" class="upset-state">主题组合加载中...</div>
-    <div v-else-if="error" class="upset-state upset-state--error">{{ error }}</div>
-    <svg v-else ref="svgRef" class="vertical-upset-svg" role="img" aria-label="跨剧本主题组合纵向 UpSet 图" />
-    <div ref="tooltipRef" class="upset-tooltip" />
-  </section>
+  <div ref="panelRef" class="scatter-panel">
+    <svg ref="svgRef" class="scatter-chart" role="img" aria-label="网络结构散点图" />
+
+    <div v-if="loading" class="chart-state">数据加载中...</div>
+    <div v-else-if="errorMessage" class="chart-state chart-state--error">{{ errorMessage }}</div>
+    <div v-else-if="!points.length" class="chart-state">暂无散点数据</div>
+
+    <div ref="tooltipRef" class="scatter-tooltip" />
+  </div>
 </template>
 
 <script setup>
-import * as d3 from 'd3'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { groupRowsByPlay, useThemeCsv } from './themeCsv'
+import * as d3 from 'd3'
 
-const { rows, loading, error } = useThemeCsv()
+const DATA_URL = '/数据表合集/2/京剧剧本_网络指标总表.csv'
+const width = 760
+const height = 700
+const margin = {
+  top: 12,
+  right: 20,
+  bottom: 120,
+  left: 80,
+}
 
-const panelRef = ref(null)
-const svgRef = ref(null)
-const tooltipRef = ref(null)
+const chartUid = `script-scatter-${Math.random().toString(36).slice(2, 10)}`
+const paperInset = 0
 
-const MIN_THEME_SHARE = 0.16
-const TOP_COMBO_LIMIT = 18
-const KAI_FONT = '"STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif'
-
-const THEME_ORDER = [
-  '家庭伦理',
-  '隐恋情感',
-  '身份变换',
-  '公案审判',
-  '复仇伸冤',
-  '忠义家国',
-  '战争冲突',
-  '权力斗争',
-]
-
-const themeAlias = new Map([
-  ['1', '家庭伦理'],
-  ['2', '隐恋情感'],
-  ['3', '身份变换'],
-  ['4', '公案审判'],
-  ['5', '复仇伸冤'],
-  ['家庭伦理', '家庭伦理'],
-  ['婚恋情感', '隐恋情感'],
-  ['隐恋情感', '隐恋情感'],
-  ['爱情牺牲', '隐恋情感'],
-  ['才子佳人', '隐恋情感'],
-  ['触景伤情', '隐恋情感'],
-  ['身份变换', '身份变换'],
-  ['真假识别', '身份变换'],
-  ['恃才傲物', '身份变换'],
-  ['公案审判', '公案审判'],
-  ['审判', '公案审判'],
-  ['复仇伸冤', '复仇伸冤'],
-  ['复仇', '复仇伸冤'],
-  ['女性冤情', '复仇伸冤'],
-  ['忠义家国', '忠义家国'],
-  ['忠君爱国', '忠义家国'],
-  ['忠直殉志', '忠义家国'],
-  ['忠贞守节', '忠义家国'],
-  ['战争冲突', '战争冲突'],
-  ['战争策略', '战争冲突'],
-  ['权力斗争', '权力斗争'],
-  ['权谋斗争', '权力斗争'],
-  ['谋略联盟', '权力斗争'],
+const categoryColors = new Map([
+  ['历史戏', '#d84f5d'],
+  ['家庭戏', '#e68a57'],
+  ['神怪戏', '#36a8b6'],
+  ['公案戏', '#d0a53c'],
+  ['江湖戏', '#5f82c8'],
+  ['战争戏', '#aa72c8'],
+  ['综合戏', '#b78263'],
 ])
 
-const themePalette = [
-  '#b64a3a',
-  '#d9853f',
-  '#567f9b',
-  '#4f9689',
-  '#7f73a8',
-  '#9a7350',
-  '#7f9667',
-  '#ad697d',
-]
-
+const svgRef = ref(null)
+const panelRef = ref(null)
+const tooltipRef = ref(null)
+const rows = ref([])
+const loading = ref(false)
+const errorMessage = ref('')
 let resizeObserver = null
+let drawFrame = 0
+let lastPanelWidth = 0
+let lastPanelHeight = 0
 
-const plays = computed(() =>
-  groupRowsByPlay(rows.value).filter((play) => play.playId && play.themes.length),
+defineProps({
+  plays: {
+    type: Array,
+    default: () => [],
+  },
+})
+
+const points = computed(() =>
+  rows.value
+    .map((row) => ({
+      id: normalizeText(row['剧本ID']),
+      title: normalizeText(row['剧本名称']),
+      category: normalizeText(row['剧目类别']) || '其他',
+      nodeCount: toNumber(row['角色总数'], 0),
+      edgeCount: toNumber(row['实际关系数'], 0),
+      density: toNumber(row['网络密度'], Number.NaN),
+      centralization: toNumber(row['度中心化'], Number.NaN),
+    }))
+    .filter(
+      (row) =>
+        row.title &&
+        Number.isFinite(row.density) &&
+        Number.isFinite(row.centralization) &&
+        row.density >= 0 &&
+        row.centralization >= 0,
+    ),
 )
 
-const upsetData = computed(() => buildUpsetData(plays.value))
-
-watch(
-  [upsetData, loading, error],
-  async () => {
-    await nextTick()
-    renderUpset()
-  },
-  { deep: true, flush: 'post' },
+const categories = computed(() =>
+  Array.from(new Set(points.value.map((point) => point.category))).sort((a, b) => a.localeCompare(b, 'zh-CN')),
 )
 
 onMounted(async () => {
-  resizeObserver = new ResizeObserver(() => renderUpset())
-  if (panelRef.value) resizeObserver.observe(panelRef.value)
+  resizeObserver = new ResizeObserver((entries) => {
+    const entry = entries[0]
+    const nextWidth = Math.round(entry?.contentRect.width || 0)
+    const nextHeight = Math.round(entry?.contentRect.height || 0)
 
-  await nextTick()
-  renderUpset()
+    if (nextWidth === lastPanelWidth && nextHeight === lastPanelHeight) return
+
+    lastPanelWidth = nextWidth
+    lastPanelHeight = nextHeight
+    scheduleDraw()
+  })
+
+  if (panelRef.value) {
+    resizeObserver.observe(panelRef.value)
+  }
+
+  await loadRows()
 })
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
+  if (drawFrame) cancelAnimationFrame(drawFrame)
+  d3.select(svgRef.value).selectAll('*').remove()
 })
 
-function buildUpsetData(sourcePlays) {
-  const themeCounts = new Map(THEME_ORDER.map((theme) => [theme, 0]))
-  const comboCounts = new Map()
-  const comboPlayTitles = new Map()
+watch(points, async () => {
+  await nextTick()
+  scheduleDraw()
+})
 
-  sourcePlays.forEach((play) => {
-    const selectedThemes = combinationThemes(play)
-    if (!selectedThemes.length) return
+async function loadRows() {
+  loading.value = true
+  errorMessage.value = ''
 
-    selectedThemes.forEach((theme) => {
-      themeCounts.set(theme, (themeCounts.get(theme) || 0) + 1)
-    })
+  try {
+    const response = await fetch(encodeURI(DATA_URL))
+    if (!response.ok) throw new Error(`读取失败：${response.status}`)
 
-    const key = selectedThemes.join('|')
-    comboCounts.set(key, (comboCounts.get(key) || 0) + 1)
-
-    if (!comboPlayTitles.has(key)) comboPlayTitles.set(key, [])
-    comboPlayTitles.get(key).push(play.title || play.playId || '未知剧本')
-  })
-
-  const themes = THEME_ORDER.map((name, index) => ({
-    name,
-    index,
-    count: themeCounts.get(name) || 0,
-    color: themePalette[index % themePalette.length],
-  }))
-
-  const colorMap = new Map(themes.map((theme) => [theme.name, theme.color]))
-  const combos = Array.from(comboCounts.entries())
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hans-CN'))
-    .slice(0, TOP_COMBO_LIMIT)
-    .map(([key, count], index) => {
-      const comboThemes = key.split('|')
-      return {
-        key,
-        count,
-        index,
-        themes: comboThemes,
-        color: colorMap.get(comboThemes[0]) || themePalette[index % themePalette.length],
-        playTitles: comboPlayTitles.get(key) || [],
-      }
-    })
-
-  return { themes, combos }
+    const text = await response.text()
+    rows.value = d3.csvParse(text.replace(/^\uFEFF/, ''))
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '数据读取失败'
+  } finally {
+    loading.value = false
+  }
 }
 
-function combinationThemes(play) {
-  const picked = play.themes
-    .filter((theme) => Number(theme.share || 0) >= MIN_THEME_SHARE)
-    .map((theme) => normalizeThemeName(theme.name))
-    .filter(Boolean)
-
-  const fallback = play.themes
-    .slice(0, 3)
-    .map((theme) => normalizeThemeName(theme.name))
-    .filter(Boolean)
-
-  return uniqueOrderedThemes(picked.length ? picked : fallback)
+function normalizeText(value) {
+  return String(value ?? '').trim()
 }
 
-function normalizeThemeName(name) {
-  const value = String(name || '').trim()
-  const normalized = themeAlias.get(value)
-  return THEME_ORDER.includes(normalized) ? normalized : ''
+function toNumber(value, fallback = 0) {
+  const numberValue = Number(String(value ?? '').replace(/,/g, '').trim())
+  return Number.isFinite(numberValue) ? numberValue : fallback
 }
 
-function uniqueOrderedThemes(names) {
-  const selected = new Set(names)
-  return THEME_ORDER.filter((theme) => selected.has(theme))
-}
+function drawChart() {
+  const svgElement = svgRef.value
+  const tooltipElement = tooltipRef.value
+  if (!svgElement || !tooltipElement) return
 
-function renderUpset() {
-  if (loading.value || error.value || !panelRef.value || !svgRef.value) return
-
-  const width = Math.max(280, Math.round(panelRef.value.clientWidth || 0))
-  const height = Math.max(260, Math.round(panelRef.value.clientHeight || 0))
-  const svg = d3.select(svgRef.value)
-
+  const chartWidth = width
+  const chartHeight = getResponsiveHeight(svgElement)
+  const svg = d3.select(svgElement)
   svg.selectAll('*').remove()
-  hideTooltip()
+  svg.attr('viewBox', `0 0 ${chartWidth} ${chartHeight}`).attr('preserveAspectRatio', 'xMidYMid meet')
+
+  const renderPoints = points.value.slice().sort((a, b) => a.nodeCount - b.nodeCount)
+  if (!renderPoints.length) return
+
+  const plotWidth = chartWidth - margin.left - margin.right
+  const plotHeight = chartHeight - margin.top - margin.bottom
+  const x = d3.scaleLinear().domain([0, 1]).range([margin.left, margin.left + plotWidth])
+  const y = d3.scaleLinear().domain([0, 1]).range([margin.top + plotHeight, margin.top])
+  const nodeExtent = d3.extent(renderPoints, (point) => point.nodeCount)
+  const nodeDomain = nodeExtent[0] === nodeExtent[1] ? [0, nodeExtent[1] || 1] : nodeExtent
+  const radius = d3.scaleSqrt().domain(nodeDomain).range([4.5, 17])
+  const xTicks = d3.range(0, 1.01, 0.2)
+  const yTicks = d3.range(0, 1.01, 0.2)
+  const paperFilterId = `${chartUid}-paper-grain`
+  const plotClipId = `${chartUid}-plot-clip`
+
+  const defs = svg.append('defs')
+
+  const paperFilter = defs
+    .append('filter')
+    .attr('id', paperFilterId)
+    .attr('x', '0')
+    .attr('y', '0')
+    .attr('width', '100%')
+    .attr('height', '100%')
+
+  paperFilter
+    .append('feTurbulence')
+    .attr('type', 'fractalNoise')
+    .attr('baseFrequency', '0.85')
+    .attr('numOctaves', 2)
+    .attr('seed', 8)
+    .attr('result', 'noise')
+
+  paperFilter
+    .append('feColorMatrix')
+    .attr('in', 'noise')
+    .attr('type', 'matrix')
+    .attr('values', '0 0 0 0 0.55 0 0 0 0 0.36 0 0 0 0 0.18 0 0 0 .08 0')
+    .attr('result', 'grain')
+
+  paperFilter.append('feBlend').attr('in', 'SourceGraphic').attr('in2', 'grain').attr('mode', 'multiply')
+
+  defs
+    .append('clipPath')
+    .attr('id', plotClipId)
+    .append('rect')
+    .attr('x', margin.left)
+    .attr('y', margin.top)
+    .attr('width', plotWidth)
+    .attr('height', plotHeight)
 
   svg
-    .attr('viewBox', `0 0 ${width} ${height}`)
-    .attr('preserveAspectRatio', 'none')
-
-  const data = upsetData.value
-  if (!data.combos.length) {
-    drawEmptyState(svg, width, height)
-    return
-  }
-
-  const margin = {
-    top: 3,
-    right: 8,
-    bottom: 8,
-    left: 8,
-  }
-
-  const rightBarsWidth = Math.max(34, Math.min(46, width * 0.14))
-  const rightBarsGap = 6
-  const matrixLeft = margin.left
-  const matrixMaxRight = width - margin.right - rightBarsWidth - rightBarsGap
-  const matrixWidth = matrixMaxRight - matrixLeft
-  const matrixRight = matrixLeft + matrixWidth
-  const topHeight = Math.max(72, Math.min(96, height * 0.22))
-  const matrixTop = topHeight + 3
-  const matrixBottom = height - margin.bottom
-
-  const xBand = d3
-    .scaleBand()
-    .domain(data.themes.map((theme) => theme.name))
-    .range([matrixLeft, matrixRight])
-    .paddingInner(0.24)
-    .paddingOuter(0.1)
-
-  const themeX = (themeName) => xBand(themeName) + xBand.bandwidth() / 2
-
-  drawTopThemeBars(svg, data, {
-    xBand,
-    themeX,
-    y: margin.top,
-    height: topHeight - margin.top - 6,
-    left: matrixLeft,
-    right: matrixRight,
-  })
-
-  drawVerticalMatrix(svg, data, {
-    themeX,
-    xBand,
-    y: matrixTop,
-    bottom: matrixBottom,
-    left: matrixLeft,
-    right: matrixRight,
-    rightBarsX: matrixRight + rightBarsGap,
-    rightBarsWidth,
-  })
-}
-
-function drawTopThemeBars(svg, data, layout) {
-  const chartTop = layout.y
-  const chartBottom = layout.y + layout.height
-  const maxCount = Math.max(1, d3.max(data.themes, (theme) => theme.count) || 1)
-  const yScale = d3.scaleLinear().domain([0, maxCount]).nice().range([chartBottom - 3, chartTop + 9])
-
-  const groups = svg
-    .append('g')
-    .attr('class', 'top-theme-bars')
-    .selectAll('g')
-    .data(data.themes)
-    .join('g')
-    .attr('class', 'theme-count-group')
-    .on('pointerenter', (event, theme) => {
-      highlightTheme(svg, theme.name)
-      showTooltip(event, themeTooltip(theme))
-    })
-    .on('pointermove', moveTooltip)
-    .on('pointerleave', () => {
-      clearHighlight(svg)
-      hideTooltip()
-    })
-
-  groups
     .append('rect')
-    .attr('class', 'theme-count-rect')
-    .attr('x', (theme) => layout.xBand(theme.name) + layout.xBand.bandwidth() * 0.18)
-    .attr('y', (theme) => yScale(theme.count))
-    .attr('width', Math.max(8, layout.xBand.bandwidth() * 0.64))
-    .attr('height', (theme) => chartBottom - yScale(theme.count))
-    .attr('rx', 3)
-    .attr('fill', (theme) => theme.color)
-    .attr('opacity', (theme) => (theme.count ? 0.9 : 0.2))
-}
+    .attr('class', 'paper-background')
+    .attr('x', paperInset)
+    .attr('y', paperInset)
+    .attr('width', chartWidth - paperInset * 2)
+    .attr('height', chartHeight - paperInset * 2)
+    .attr('filter', `url(#${paperFilterId})`)
 
-function drawVerticalMatrix(svg, data, layout) {
-  const labelTop = layout.y + 4
-  const labelBottom = labelTop + 58
-  const lineTop = labelBottom + 0
-  const lineBottom = layout.bottom - 2
-  const rowScale = d3
-    .scalePoint()
-    .domain(data.combos.map((combo) => combo.key))
-    .range([lineTop + 6, lineBottom - 6])
-    .padding(0.28)
-  const countBadgeWidth = layout.rightBarsWidth
-  const countBadgeHeight = 20
+  svg
+    .append('rect')
+    .attr('class', 'plot-background')
+    .attr('x', margin.left)
+    .attr('y', margin.top)
+    .attr('width', plotWidth)
+    .attr('height', plotHeight)
 
-  const themeHeaders = svg
-    .append('g')
-    .attr('class', 'matrix-theme-headers')
-    .selectAll('g')
-    .data(data.themes)
-    .join('g')
-    .attr('class', 'theme-column')
-    .attr('transform', (theme) => `translate(${layout.themeX(theme.name)},0)`)
-    .on('pointerenter', (event, theme) => {
-      highlightTheme(svg, theme.name)
-      showTooltip(event, themeTooltip(theme))
-    })
-    .on('pointermove', moveTooltip)
-    .on('pointerleave', () => {
-      clearHighlight(svg)
-      hideTooltip()
-    })
+  const grid = svg.append('g').attr('class', 'grid-lines')
 
-  themeHeaders.each(function appendVerticalLabel(theme) {
-    drawVerticalLabel(d3.select(this), theme.name, 0, labelTop)
-  })
+  grid
+    .selectAll('line.vertical')
+    .data(xTicks)
+    .join('line')
+    .attr('class', 'vertical')
+    .attr('x1', (d) => x(d))
+    .attr('x2', (d) => x(d))
+    .attr('y1', margin.top)
+    .attr('y2', margin.top + plotHeight)
 
-  themeHeaders
+  grid
+    .selectAll('line.horizontal')
+    .data(yTicks)
+    .join('line')
+    .attr('class', 'horizontal')
+    .attr('x1', margin.left)
+    .attr('x2', margin.left + plotWidth)
+    .attr('y1', (d) => y(d))
+    .attr('y2', (d) => y(d))
+
+  const quadrantLines = svg.append('g').attr('class', 'quadrant-lines')
+
+  quadrantLines
     .append('line')
-    .attr('class', 'theme-track')
-    .attr('y1', lineTop)
-    .attr('y2', lineBottom)
-    .attr('stroke', 'rgba(92, 68, 48, 0.2)')
+    .attr('x1', x(0.5))
+    .attr('x2', x(0.5))
+    .attr('y1', margin.top)
+    .attr('y2', margin.top + plotHeight)
 
-  svg
+  quadrantLines
     .append('line')
-    .attr('class', 'right-count-divider')
-    .attr('x1', layout.rightBarsX - 7)
-    .attr('x2', layout.rightBarsX - 7)
-    .attr('y1', lineTop)
-    .attr('y2', lineBottom)
+    .attr('x1', margin.left)
+    .attr('x2', margin.left + plotWidth)
+    .attr('y1', y(0.5))
+    .attr('y2', y(0.5))
 
-  const comboRows = svg
+  const xAxis = d3.axisBottom(x).tickValues(xTicks).tickSize(5).tickPadding(9).tickFormat(formatTick)
+  const yAxis = d3.axisLeft(y).tickValues(yTicks).tickSize(5).tickPadding(8).tickFormat(formatTick)
+
+  svg
     .append('g')
-    .attr('class', 'combo-rows')
-    .selectAll('g')
-    .data(data.combos)
-    .join('g')
-    .attr('class', 'combo-row')
-    .attr('transform', (combo) => `translate(0,${rowScale(combo.key)})`)
-    .on('pointerenter', (event, combo) => {
-      highlightCombo(svg, combo.index)
-      showTooltip(event, comboTooltip(combo))
-    })
-    .on('pointermove', moveTooltip)
-    .on('pointerleave', () => {
-      clearHighlight(svg)
-      hideTooltip()
-    })
+    .attr('class', 'axis axis-x')
+    .attr('transform', `translate(0,${margin.top + plotHeight})`)
+    .call(xAxis)
 
-  comboRows.each(function drawComboConnector(combo) {
-    const activeXs = combo.themes
-      .map((theme) => layout.themeX(theme))
-      .filter((value) => Number.isFinite(value))
+  svg.append('g').attr('class', 'axis axis-y').attr('transform', `translate(${margin.left},0)`).call(yAxis)
 
-    if (activeXs.length > 1) {
-      d3.select(this)
-        .append('line')
-        .attr('class', 'combo-connector')
-        .attr('x1', d3.min(activeXs))
-        .attr('x2', d3.max(activeXs))
-        .attr('stroke', combo.color)
-    }
-  })
-
-  comboRows
-    .selectAll('circle')
-    .data((combo) =>
-      data.themes.map((theme) => ({
-        comboIndex: combo.index,
-        comboKey: combo.key,
-        theme: theme.name,
-        active: combo.themes.includes(theme.name),
-        color: theme.color,
-      })),
-    )
-    .join('circle')
-    .attr('class', 'matrix-dot')
-    .attr('cx', (cell) => layout.themeX(cell.theme))
-    .attr('r', (cell) => (cell.active ? 5.7 : 2.5))
-    .attr('fill', (cell) => (cell.active ? cell.color : 'rgba(88, 68, 51, 0.13)'))
-    .attr('stroke', (cell) => (cell.active ? '#fff8e8' : 'transparent'))
-    .attr('stroke-width', (cell) => (cell.active ? 0.8 : 0))
-
-  comboRows
-    .append('rect')
-    .attr('class', 'combo-count-badge')
-    .attr('x', layout.rightBarsX)
-    .attr('y', -countBadgeHeight / 2)
-    .attr('width', countBadgeWidth)
-    .attr('height', countBadgeHeight)
-    .attr('rx', 5)
-    .attr('fill', (combo) => colorWithOpacity(combo.color, 0.14))
-    .attr('stroke', (combo) => colorWithOpacity(combo.color, 0.42))
-
-  comboRows
-    .append('text')
-    .attr('class', 'combo-count-label')
-    .attr('x', layout.rightBarsX + countBadgeWidth / 2)
-    .attr('dy', '0.32em')
-    .attr('text-anchor', 'middle')
-    .attr('fill', (combo) => combo.color)
-    .text((combo) => combo.count)
-
-  comboRows
-    .append('rect')
-    .attr('class', 'combo-hover-zone')
-    .attr('x', layout.left)
-    .attr('y', -7)
-    .attr('width', layout.rightBarsX + layout.rightBarsWidth - layout.left)
-    .attr('height', 14)
-}
-
-function drawVerticalLabel(group, text, x, y) {
-  const label = group
-    .append('text')
-    .attr('class', 'vertical-theme-label')
-    .attr('x', x)
-    .attr('y', y)
-    .attr('text-anchor', 'middle')
-
-  Array.from(text).forEach((char, index) => {
-    label
-      .append('tspan')
-      .attr('x', x)
-      .attr('dy', index === 0 ? 0 : 16)
-      .text(char)
-  })
-}
-
-function drawEmptyState(svg, width, height) {
   svg
     .append('text')
-    .attr('class', 'empty-state')
-    .attr('x', width / 2)
-    .attr('y', height / 2)
+    .attr('class', 'axis-label axis-label-y')
+    .attr('transform', `translate(${margin.left - 40},${margin.top + plotHeight / 2}) rotate(-90)`)
     .attr('text-anchor', 'middle')
-    .text('暂无可统计的主题组合')
-}
+    .text('中心化')
 
-function highlightCombo(svg, comboIndex) {
-  svg.selectAll('.combo-row')
-    .attr('opacity', (combo) => (combo.index === comboIndex ? 1 : 0.22))
+  svg
+    .append('text')
+    .attr('class', 'axis-label axis-label-x')
+    .attr('x', margin.left + plotWidth / 2)
+    .attr('y', margin.top + plotHeight + 50)
+    .attr('text-anchor', 'middle')
+    .text('密度')
 
-  svg.selectAll('.matrix-dot')
-    .attr('opacity', (cell) => (cell.comboIndex === comboIndex ? 1 : cell.active ? 0.18 : 0.06))
-    .attr('r', (cell) => {
-      if (cell.comboIndex !== comboIndex) return cell.active ? 5.1 : 2.3
-      return cell.active ? 7 : 3
+  const dotGroups = svg
+    .append('g')
+    .attr('class', 'dot-layer')
+    .attr('clip-path', `url(#${plotClipId})`)
+    .selectAll('g')
+    .data(renderPoints)
+    .join('g')
+    .attr('class', 'scatter-dot')
+    .attr('transform', (d) => `translate(${x(d.density)},${y(d.centralization)})`)
+    .on('mouseenter', (event, d) => {
+      d3.select(event.currentTarget).raise().classed('is-active', true)
+      showTooltip(event, d, tooltipElement)
+    })
+    .on('mousemove', (event, d) => showTooltip(event, d, tooltipElement))
+    .on('mouseleave', (event) => {
+      d3.select(event.currentTarget).classed('is-active', false)
+      hideTooltip(tooltipElement)
     })
 
-  svg.selectAll('.combo-count-badge, .combo-count-label')
-    .attr('opacity', (combo) => (combo.index === comboIndex ? 1 : 0.18))
+  dotGroups
+    .append('circle')
+    .attr('class', 'scatter-circle')
+    .attr('r', (d) => radius(d.nodeCount))
+    .attr('fill', (d) => getCategoryColor(d.category))
 
-  svg.selectAll('.combo-connector')
-    .attr('opacity', function connectorOpacity() {
-      return d3.select(this.parentNode).datum().index === comboIndex ? 0.82 : 0.12
-    })
+  drawLegend(svg, chartWidth, chartHeight)
 }
 
-function highlightTheme(svg, themeName) {
-  svg.selectAll('.theme-count-group')
-    .attr('opacity', (theme) => (theme.name === themeName ? 1 : 0.28))
+function scheduleDraw() {
+  if (drawFrame) cancelAnimationFrame(drawFrame)
 
-  svg.selectAll('.theme-column')
-    .attr('opacity', (theme) => (theme.name === themeName ? 1 : 0.32))
-
-  svg.selectAll('.matrix-dot')
-    .attr('opacity', (cell) => {
-      if (cell.theme === themeName && cell.active) return 1
-      return cell.active ? 0.18 : 0.06
-    })
-    .attr('r', (cell) => (cell.theme === themeName && cell.active ? 7 : cell.active ? 5.1 : 2.3))
-
-  svg.selectAll('.combo-row')
-    .attr('opacity', (combo) => (combo.themes.includes(themeName) ? 1 : 0.24))
-
-  svg.selectAll('.combo-count-badge, .combo-count-label')
-    .attr('opacity', (combo) => (combo.themes.includes(themeName) ? 0.95 : 0.18))
+  drawFrame = requestAnimationFrame(() => {
+    drawFrame = 0
+    drawChart()
+  })
 }
 
-function clearHighlight(svg) {
-  svg.selectAll('.theme-count-group').attr('opacity', 1)
-  svg.selectAll('.theme-column').attr('opacity', 1)
-  svg.selectAll('.combo-row').attr('opacity', 1)
-  svg.selectAll('.combo-count-badge, .combo-count-label').attr('opacity', 1)
-  svg.selectAll('.combo-connector').attr('opacity', 0.7)
-  svg.selectAll('.matrix-dot')
-    .attr('opacity', 1)
-    .attr('r', (cell) => (cell.active ? 5.7 : 2.5))
+function getResponsiveHeight(svgElement) {
+  const rect = svgElement.getBoundingClientRect()
+
+  if (!rect.width || !rect.height) return height
+
+  return Math.max(360, Math.round((width * rect.height) / rect.width))
 }
 
-function comboTooltip(combo) {
-  const themes = combo.themes.map(escapeHtml).join('、')
-  return `
-    <strong>主题组合</strong>
-    <span>${themes}</span>
-    <em>${combo.count} 个剧本</em>
+function drawLegend(svg, chartWidth, chartHeight) {
+  const legend = svg
+    .append('g')
+    .attr('class', 'legend')
+    .attr('transform', `translate(${margin.left},${chartHeight - 46})`)
+
+  const titleWidth = 104
+  const rowGap = 28
+  const itemsPerRow = Math.max(1, Math.ceil(categories.value.length / 2))
+  const itemStep = Math.min(
+    138,
+    Math.max(104, (chartWidth - margin.left - margin.right - titleWidth) / itemsPerRow),
+  )
+
+  legend.append('text').attr('class', 'legend-title').attr('x', 0).attr('y', 6).text('剧目类别')
+
+  categories.value.forEach((category, index) => {
+    const row = Math.floor(index / itemsPerRow)
+    const column = index % itemsPerRow
+    const item = legend
+      .append('g')
+      .attr('transform', `translate(${titleWidth + column * itemStep},${row * rowGap})`)
+
+    item.append('circle').attr('class', 'legend-dot').attr('r', 8).attr('fill', getCategoryColor(category))
+
+    item
+      .append('text')
+      .attr('x', 18)
+      .attr('y', 6)
+      .text(category)
+  })
+}
+
+function getCategoryColor(category) {
+  return categoryColors.get(category) || d3.schemeTableau10[categories.value.indexOf(category) % 10]
+}
+
+function formatTick(value) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1)
+}
+
+function showTooltip(event, point, tooltipElement) {
+  tooltipElement.innerHTML = `
+    <b>${point.title}</b>
+    <span>类别：${point.category}</span>
+    <span>密度：${point.density.toFixed(4)}</span>
+    <span>中心化：${point.centralization.toFixed(4)}</span>
+    <span>角色：${point.nodeCount} 关系：${point.edgeCount}</span>
   `
+  tooltipElement.style.left = `${event.offsetX + 14}px`
+  tooltipElement.style.top = `${event.offsetY + 14}px`
+  tooltipElement.classList.add('is-visible')
 }
 
-function themeTooltip(theme) {
-  return `
-    <strong>${escapeHtml(theme.name)}</strong>
-    <span>出现在 ${theme.count} 个剧本中</span>
-  `
-}
-
-function showTooltip(event, html) {
-  if (!tooltipRef.value) return
-
-  tooltipRef.value.innerHTML = html
-  tooltipRef.value.style.display = 'grid'
-  moveTooltip(event)
-}
-
-function moveTooltip(event) {
-  if (!tooltipRef.value || !panelRef.value) return
-
-  const panelRect = panelRef.value.getBoundingClientRect()
-  const tooltipRect = tooltipRef.value.getBoundingClientRect()
-  const x = event.clientX - panelRect.left + 12
-  const y = event.clientY - panelRect.top + 12
-
-  tooltipRef.value.style.left = `${Math.min(x, panelRect.width - tooltipRect.width - 8)}px`
-  tooltipRef.value.style.top = `${Math.min(y, panelRect.height - tooltipRect.height - 8)}px`
-}
-
-function hideTooltip() {
-  if (!tooltipRef.value) return
-
-  tooltipRef.value.style.display = 'none'
-}
-
-function colorWithOpacity(color, opacity) {
-  const parsedColor = d3.color(color)
-  if (!parsedColor) return color
-
-  parsedColor.opacity = opacity
-  return parsedColor.formatRgb()
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
+function hideTooltip(tooltipElement) {
+  tooltipElement.classList.remove('is-visible')
 }
 </script>
 
 <style scoped>
-.vertical-upset-panel {
+.scatter-panel {
+  display: block;
   position: relative;
   width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  color: #39251c;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+  border-radius: 2px;
 }
 
-.vertical-upset-panel::before {
-  position: absolute;
-  inset: 10px 12px auto auto;
-  width: 72px;
-  height: 32px;
-  border-top: 1px solid rgba(143, 47, 36, 0.08);
-  border-right: 1px solid rgba(143, 47, 36, 0.08);
-  border-radius: 0 10px 0 0;
-  content: "";
-  pointer-events: none;
-}
-
-.vertical-upset-svg {
-  position: relative;
-  z-index: 1;
+.scatter-chart {
   display: block;
   width: 100%;
   height: 100%;
+  min-height: 0;
 }
 
-.vertical-upset-svg :deep(.combo-count-label) {
-  font-size: 16px;
-  font-weight: 1200;
+.scatter-chart :deep(.paper-background) {
+  fill: #fef9ed;
 }
 
-.vertical-upset-svg :deep(.theme-count-rect) {
-  filter: drop-shadow(0 1px 2px rgba(70, 40, 22, 0.12));
+.scatter-chart :deep(.plot-background) {
+  fill: #f7efde;
+  stroke: rgba(143, 47, 36, 0.2);
+  stroke-width: 1;
 }
 
-.vertical-upset-svg :deep(.theme-count-group),
-.vertical-upset-svg :deep(.theme-column),
-.vertical-upset-svg :deep(.combo-row) {
+.scatter-chart :deep(.axis-label) {
+  fill: #5e251d;
+  font-family: 'STKaiti', 'KaiTi', 'Microsoft YaHei', sans-serif;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.scatter-chart :deep(.grid-lines line) {
+  stroke: #c7a87a;
+  stroke-width: 1;
+  stroke-dasharray: 2 7;
+  opacity: 0.54;
+}
+
+.scatter-chart :deep(.quadrant-lines line) {
+  stroke: #9f2f24;
+  stroke-width: 1.1;
+  stroke-dasharray: 6 5;
+  opacity: 0.54;
+}
+
+.scatter-chart :deep(.axis path) {
+  stroke: #8f2f24;
+  stroke-width: 1.4;
+}
+
+.scatter-chart :deep(.axis line) {
+  stroke: #8f2f24;
+  stroke-width: 1.2;
+}
+
+.scatter-chart :deep(.axis text) {
+  fill: #4b3328;
+  font-family: 'Times New Roman', 'Microsoft YaHei', serif;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.scatter-chart :deep(.scatter-dot) {
   cursor: pointer;
 }
 
-.vertical-upset-svg :deep(.vertical-theme-label) {
-  fill: #332820;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 16px;
-  font-weight: 900;
+.scatter-chart :deep(.scatter-circle) {
+  fill-opacity: 0.72;
+  transition:
+    fill-opacity 0.15s ease,
+    r 0.15s ease;
 }
 
-.vertical-upset-svg :deep(.theme-track) {
-  stroke-width: 3.2;
-  stroke-linecap: round;
-  opacity: 1;
+.scatter-chart :deep(.scatter-dot.is-active .scatter-circle) {
+  fill-opacity: 0.94;
 }
 
-.vertical-upset-svg :deep(.combo-connector) {
-  stroke-width: 4.2;
-  stroke-linecap: round;
-  opacity: 0.72;
+.scatter-chart :deep(.legend text) {
+  fill: #4b3328;
+  font-family: 'STKaiti', 'KaiTi', 'Microsoft YaHei', sans-serif;
+  font-size: 19px;
+  font-weight: 800;
 }
 
-.vertical-upset-svg :deep(.right-count-divider) {
-  stroke: rgba(92, 68, 48, 0.16);
-  stroke-width: 1;
+.scatter-chart :deep(.legend-title) {
+  fill: #8f2f24;
+  font-size: 21px;
+  font-weight: 800;
 }
 
-.vertical-upset-svg :deep(.combo-count-badge) {
-  stroke-width: 1;
-  filter: drop-shadow(0 1px 1px rgba(70, 40, 22, 0.08));
+.scatter-chart :deep(.legend-dot) {
+  fill-opacity: 0.84;
 }
 
-.vertical-upset-svg :deep(.combo-hover-zone) {
-  fill: transparent;
-  pointer-events: all;
-}
-
-.vertical-upset-svg :deep(.empty-state) {
-  fill: #6b4628;
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.upset-tooltip {
+.chart-state {
   position: absolute;
-  z-index: 5;
-  display: none;
-  max-width: 180px;
-  gap: 3px;
-  padding: 7px 9px;
-  border: 1px solid rgba(88, 68, 51, 0.16);
-  border-radius: 7px;
-  color: #39251c;
-  font-size: 11px;
-  line-height: 1.35;
-  pointer-events: none;
-  background: rgba(255, 253, 247, 0.96);
-  box-shadow: 0 8px 18px rgba(70, 40, 22, 0.14);
-}
-
-.upset-tooltip :deep(strong) {
-  color: #5b1e17;
-  font-size: 12px;
-}
-
-.upset-tooltip :deep(span),
-.upset-tooltip :deep(em) {
-  display: block;
-  font-style: normal;
-}
-
-.upset-tooltip :deep(em) {
-  color: #7a241d;
-  font-weight: 900;
-}
-
-.upset-state {
+  inset: 0;
   display: grid;
-  height: 100%;
-  min-height: 0;
   place-items: center;
-  color: #6b4628;
-  font-size: 15px;
-  font-weight: 900;
+  color: #6b4d35;
+  background: rgba(244, 234, 214, 0.72);
+  font-size: 13px;
+  pointer-events: none;
 }
 
-.upset-state--error {
+.chart-state--error {
+  color: #9b2f2a;
+}
+
+.scatter-tooltip {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  gap: 3px;
+  max-width: 230px;
+  padding: 8px 10px;
+  border: 1px solid rgba(143, 47, 36, 0.32);
+  border-radius: 6px;
+  color: #3f2c20;
+  background: rgba(248, 238, 216, 0.97);
+  box-shadow: 0 10px 24px rgba(88, 45, 28, 0.2);
+  font-family: 'Microsoft YaHei', sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+}
+
+.scatter-tooltip b {
   color: #8f2f24;
+  font-weight: 800;
+}
+
+.scatter-tooltip span {
+  overflow-wrap: anywhere;
+}
+
+.scatter-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 </style>

@@ -1,29 +1,42 @@
 <template>
-  <PanelCard class="right-top-card" title="核心主题分析" eyebrow="核心主题、剧本组合与共现强度">
+  <PanelCard
+    class="right-top-card"
+    :class="{ 'right-top-card--network': view === 'a', 'right-top-card--structure': view === 'b' }"
+    :title="panelTitle"
+    eyebrow="角色关系网络"
+  >
     <template #action>
-      <ChartToggle v-model="view" />
+      <div class="right-top-actions">
+        <ChartToggle v-model="view" />
+        <div v-show="view === 'a'" id="right-top-script-select-anchor" class="right-top-script-select-anchor" />
+      </div>
     </template>
 
-    <ThemeRingChartOne v-if="view === 'a'" />
-    <ThemeRingChartTwo v-else />
+    <ChartOne v-if="view === 'a'" :arc-relations="arcRelations" select-target="#right-top-script-select-anchor" />
+    <ChartTwo v-else :plays="plays" />
   </PanelCard>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import ChartToggle from '../ChartToggle.vue'
 import PanelCard from '../PanelCard.vue'
-import ThemeRingChartOne from './ChartOne.vue'
-import ThemeRingChartTwo from './ChartTwo.vue'
+import ChartOne from './ChartOne.vue'
+import ChartTwo from './ChartTwo.vue'
 
 defineProps({
-  data: {
+  plays: {
     type: Array,
+    required: true,
+  },
+  arcRelations: {
+    type: Object,
     required: true,
   },
 })
 
 const view = ref('a')
+const panelTitle = computed(() => (view.value === 'a' ? '角色关系弧线图' : '关系网络结构特征'))
 </script>
 
 <style scoped>
@@ -32,7 +45,7 @@ const view = ref('a')
   display: flex;
   flex-direction: column;
   isolation: isolate;
-  padding: 14px 10px 10px;
+  padding: 14px 15px 14px;
   overflow: hidden;
   border: 1px solid rgba(143, 47, 36, 0.58);
   border-radius: 2px;
@@ -74,13 +87,32 @@ const view = ref('a')
 
 .right-top-card :deep(.panel-card__header) {
   position: relative;
-  z-index: 3;
+  z-index: 1;
   flex: 0 0 auto;
   align-items: flex-start;
-  min-height: 50px;
-  margin-bottom: 8px;
-  padding: 0 2px 8px;
+  min-height: 53px;
+  margin-bottom: 2px;
+  padding: 0 2px 0px;
   border-bottom: 1px solid rgba(143, 47, 36, 0.32);
+}
+
+.right-top-card--network :deep(.panel-card__header) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 1fr);
+  grid-template-rows: 20px 24px;
+  column-gap: 4px;
+  align-items: center;
+  padding-right: 0;
+}
+
+.right-top-card--network :deep(.panel-card__header > div:first-child) {
+  display: contents;
+}
+
+.right-top-card--network :deep(.panel-card__eyebrow) {
+  grid-column: 1 / 3;
+  grid-row: 1;
+  justify-self: start;
 }
 
 .right-top-card :deep(.panel-card__eyebrow) {
@@ -101,6 +133,42 @@ const view = ref('a')
   letter-spacing: 0;
 }
 
+.right-top-card--network :deep(h2) {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: end;
+  font-size: 18px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.right-top-card--structure :deep(.panel-card__header) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-rows: 20px 24px;
+  align-items: center;
+  padding-right: 0;
+}
+
+.right-top-card--structure :deep(.panel-card__header > div:first-child) {
+  display: contents;
+}
+
+.right-top-card--structure :deep(.panel-card__eyebrow) {
+  grid-column: 1 / 3;
+  grid-row: 1;
+  justify-self: start;
+}
+
+.right-top-card--structure :deep(h2) {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: center;
+  font-size: 18px;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .right-top-card :deep(.panel-card__body) {
   position: relative;
   z-index: 1;
@@ -111,7 +179,9 @@ const view = ref('a')
 }
 
 .right-top-card :deep(.chart-toggle) {
-  position: relative;
+  position: absolute;
+  top: 0;
+  right: 0;
   z-index: 4;
   width: 78px;
   height: 28px;
@@ -132,5 +202,36 @@ const view = ref('a')
 .right-top-card :deep(.chart-toggle .active) {
   color: #fff8ed;
   background: #8f2f24;
+}
+
+.right-top-actions {
+  position: static;
+}
+
+.right-top-card--network .right-top-actions {
+  display: contents;
+}
+
+.right-top-script-select-anchor {
+  z-index: 3;
+  width: clamp(140px, 42%, 190px);
+  height: 22px;
+}
+
+.right-top-card--network .right-top-script-select-anchor {
+  grid-column: 3;
+  grid-row: 2;
+  justify-self: start;
+}
+
+.right-top-card--network :deep(.script-select) {
+  width: 100%;
+  height: 22px;
+  padding: 0 20px 0 6px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 20px;
+  text-align: center;
+  text-align-last: center;
 }
 </style>

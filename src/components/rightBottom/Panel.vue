@@ -1,11 +1,11 @@
 <template>
-  <PanelCard class="right-bottom-card" title="脸谱主题词云" eyebrow="行当意象与叙事关键词">
+  <PanelCard class="right-bottom-card" title="核心主题分析" eyebrow="核心主题、剧本组合与共现强度">
     <template #action>
       <ChartToggle v-model="view" />
     </template>
 
-    <ChartOne v-if="view === 'a'" />
-    <ChartTwo v-else />
+    <ThemeRingChartOne v-if="view === 'a'" />
+    <ThemeRingChartTwo v-else />
   </PanelCard>
 </template>
 
@@ -13,8 +13,15 @@
 import { ref } from 'vue'
 import ChartToggle from '../ChartToggle.vue'
 import PanelCard from '../PanelCard.vue'
-import ChartOne from './ChartOne.vue'
-import ChartTwo from './ChartTwo.vue'
+import ThemeRingChartOne from './ChartOne.vue'
+import ThemeRingChartTwo from './ChartTwo.vue'
+
+defineProps({
+  data: {
+    type: Array,
+    required: true,
+  },
+})
 
 const view = ref('a')
 </script>
@@ -25,16 +32,16 @@ const view = ref('a')
   display: flex;
   flex-direction: column;
   isolation: isolate;
-  padding: 11px 10px 9px;
+  padding: 14px 10px 10px;
   overflow: hidden;
-  border: 1px solid rgba(143, 47, 36, 0.54);
+  border: 1px solid rgba(143, 47, 36, 0.58);
   border-radius: 2px;
   background:
-    linear-gradient(180deg, rgba(255, 251, 241, 0.9), rgba(246, 235, 213, 0.78)),
+    linear-gradient(180deg, rgba(255, 251, 241, 0.88), rgba(246, 235, 213, 0.76)),
     #f7edd8;
   box-shadow:
-    inset 0 0 0 1px rgba(198, 121, 73, 0.13),
-    0 0 0 1px rgba(255, 248, 232, 0.45);
+    inset 0 0 0 1px rgba(198, 121, 73, 0.14),
+    0 0 0 1px rgba(255, 248, 232, 0.5);
 }
 
 .right-bottom-card.panel-card::before,
@@ -47,39 +54,40 @@ const view = ref('a')
 .right-bottom-card.panel-card::before {
   inset: 5px;
   z-index: -1;
-  border: 1px solid rgba(143, 47, 36, 0.16);
+  border: 1px solid rgba(143, 47, 36, 0.2);
 }
 
 .right-bottom-card.panel-card::after {
   inset: 0;
   z-index: 2;
   background:
-    linear-gradient(#a84d36, #a84d36) left 4px top 4px / 24px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) left 4px top 4px / 1px 24px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px top 4px / 24px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px top 4px / 1px 24px no-repeat,
-    linear-gradient(#a84d36, #a84d36) left 4px bottom 4px / 24px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) left 4px bottom 4px / 1px 24px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px bottom 4px / 24px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px bottom 4px / 1px 24px no-repeat;
-  opacity: 0.7;
+    linear-gradient(#a84d36, #a84d36) left 4px top 4px / 26px 1px no-repeat,
+    linear-gradient(#a84d36, #a84d36) left 4px top 4px / 1px 26px no-repeat,
+    linear-gradient(#a84d36, #a84d36) right 4px top 4px / 26px 1px no-repeat,
+    linear-gradient(#a84d36, #a84d36) right 4px top 4px / 1px 26px no-repeat,
+    linear-gradient(#a84d36, #a84d36) left 4px bottom 4px / 26px 1px no-repeat,
+    linear-gradient(#a84d36, #a84d36) left 4px bottom 4px / 1px 26px no-repeat,
+    linear-gradient(#a84d36, #a84d36) right 4px bottom 4px / 26px 1px no-repeat,
+    linear-gradient(#a84d36, #a84d36) right 4px bottom 4px / 1px 26px no-repeat;
+  opacity: 0.72;
 }
 
 .right-bottom-card :deep(.panel-card__header) {
   position: relative;
   z-index: 3;
   flex: 0 0 auto;
-  min-height: 40px;
-  margin-bottom: 4px;
-  padding: 0 2px 6px;
-  border-bottom: 1px solid rgba(143, 47, 36, 0.3);
+  align-items: flex-start;
+  min-height: 50px;
+  margin-bottom: 8px;
+  padding: 0 2px 8px;
+  border-bottom: 1px solid rgba(143, 47, 36, 0.32);
 }
 
 .right-bottom-card :deep(.panel-card__eyebrow) {
-  margin: 0 0 3px;
+  margin: 0 0 4px;
   color: #7a241d;
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 800;
   line-height: 1.1;
 }
@@ -87,7 +95,7 @@ const view = ref('a')
 .right-bottom-card :deep(h2) {
   color: #5b1e17;
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 18px;
+  font-size: 21px;
   font-weight: 900;
   line-height: 1.12;
   letter-spacing: 0;
@@ -96,10 +104,10 @@ const view = ref('a')
 .right-bottom-card :deep(.panel-card__body) {
   position: relative;
   z-index: 1;
-  display: grid;
   flex: 1 1 auto;
+  height: auto;
   min-height: 0;
-  place-items: center;
+  gap: 4px;
 }
 
 .right-bottom-card :deep(.chart-toggle) {

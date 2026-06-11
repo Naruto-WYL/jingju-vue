@@ -3,10 +3,10 @@
     <div class="dashboard-grid">
       <div class="left-stack">
         <section class="layout-block block-left-top">
-          <TopRolesPanel :stats="viewModel.stats" />
+          <LeftTopPanel :stats="viewModel.stats" />
         </section>
         <section class="layout-block block-left-bottom">
-          <ScenePanel :plays="viewModel.topPlays" :arc-relations="viewModel.arcRelations" />
+          <LeftBottomPanel />
         </section>
       </div>
 
@@ -14,7 +14,7 @@
         <NetworkPanel :graph="viewModel.network" />
       </section>
       <section class="layout-block block-right-top">
-        <ThemePanel :data="viewModel.themes" />
+        <RightTopPanel :plays="viewModel.topPlays" :arc-relations="viewModel.arcRelations" />
       </section>
 
       <section class="layout-block block-main-bottom">
@@ -22,7 +22,7 @@
       </section>
 
       <section class="layout-block block-right-bottom">
-        <RightBottomPanel />
+        <RightBottomPanel :data="viewModel.themes" />
       </section>
     </div>
 
@@ -39,12 +39,12 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import LeftBottomPanel from './components/leftBottom/Panel.vue'
+import LeftTopPanel from './components/leftTop/Panel.vue'
 import BottomTimelinePanel from './components/mainBottom/Panel.vue'
 import NetworkPanel from './components/mainTop/Panel.vue'
-import ScenePanel from './components/leftBottom/Panel.vue'
-import ThemePanel from './components/rightTop/Panel.vue'
-import TopRolesPanel from './components/leftTop/Panel.vue'
 import RightBottomPanel from './components/rightBottom/Panel.vue'
+import RightTopPanel from './components/rightTop/Panel.vue'
 import { fetchJingjuData } from './services/jingjuApi'
 
 const loading = ref(true)
@@ -304,14 +304,14 @@ function cleanTitle(title, id) {
   left: 0;
   top: 0;
   width: 26.52vw;
-  height: 47.69vh;
+  height: 68.49vh;
 }
 
 .block-left-bottom {
   left: 0;
-  top: 47.69vh;
+  top: 68.49vh;
   width: 26.52vw;
-  height: 52.31vh;
+  height: 31.51vh;
 }
 
 .block-main-top {
@@ -325,7 +325,7 @@ function cleanTitle(title, id) {
   left: 74.03vw;
   top: 0;
   width: 25.97vw;
-  height: 68.49vh;
+  height: 47.69vh;
 }
 
 .block-main-bottom {
@@ -337,9 +337,9 @@ function cleanTitle(title, id) {
 
 .block-right-bottom {
   left: 74.03vw;
-  top: 68.49vh;
+  top: 47.69vh;
   width: 25.97vw;
-  height: 31.51vh;
+  height: 52.31vh;
 }
 
 .app-mask {

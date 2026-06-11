@@ -270,61 +270,53 @@ async function renderPlums() {
     renderSinglePlum(container, play, index)
   })
 }
-function createSoftCloverPetalPath(angleDegree, innerRadius, length, width) {
+
+function createHeartCloverLeafPath(angleDegree, rootRadius, length, halfWidth) {
   const angle = toRadians(angleDegree)
 
   const ux = Math.cos(angle)
   const uy = Math.sin(angle)
+
   const px = -uy
   const py = ux
 
   const point = (localX, localY) => {
     const x = ux * localX + px * localY
     const y = uy * localX + py * localY
+
     return `${x.toFixed(2)},${y.toFixed(2)}`
   }
 
-  // 根部窄，藏到中心圆后面
-  const rootX = innerRadius * 0.92
-  const rootW = width * 0.08
+  const heartMinY = -17
+  const heartMaxY = 11.92
+  const heartRangeY = heartMaxY - heartMinY
+  const heartHalfX = 16
 
-  // 花瓣沿长度方向的控制点
-  const x1 = innerRadius + length * 0.10
-  const x2 = innerRadius + length * 0.30
-  const x3 = innerRadius + length * 0.55
-  const x4 = innerRadius + length * 0.78
-  const x5 = innerRadius + length * 0.98
+  const points = []
 
-  // 花瓣横向鼓起程度
-  const w1 = width * 0.18
-  const w2 = width * 0.42
-  const w3 = width * 0.56
-  const w4 = width * 0.48
-  const w5 = width * 0.28
+  const steps = 96
 
-  return [
-    `M ${point(rootX, -rootW)}`,
+  for (let i = 0; i <= steps; i += 1) {
+    const t = Math.PI + Math.PI * 2 * (i / steps)
 
-    // 左边上升
-    `C ${point(x1, -w1)} ${point(x2, -w2)} ${point(x3, -w3)}`,
+    const rawX = 16 * Math.pow(Math.sin(t), 3)
 
-    // 左上小云头
-    `C ${point(x3 + length * 0.07, -w3 * 1.04)} ${point(x4, -w4)} ${point(x4 + length * 0.03, -w5)}`,
+    const rawY =
+      13 * Math.cos(t) -
+      5 * Math.cos(2 * t) -
+      2 * Math.cos(3 * t) -
+      Math.cos(4 * t)
 
-    // 顶部圆头
-    `C ${point(x5 + length * 0.06, -w5)} ${point(x5 + length * 0.06, w5)} ${point(x4 + length * 0.03, w5)}`,
+    const radial = (rawY - heartMinY) / heartRangeY
 
-    // 右上小云头
-    `C ${point(x4, w4)} ${point(x3 + length * 0.07, w3 * 1.04)} ${point(x3, w3)}`,
+    const localX = rootRadius + radial * length
 
-    // 右边回收
-    `C ${point(x2, w2)} ${point(x1, w1)} ${point(rootX, rootW)}`,
+    const localY = rawX / heartHalfX * halfWidth
 
-    // 根部闭合
-    `Q ${point(rootX - length * 0.05, 0)} ${point(rootX, -rootW)}`,
+    points.push(point(localX, localY))
+  }
 
-    'Z',
-  ].join(' ')
+  return `M ${points[0]} L ${points.slice(1).join(' L ')} Z`
 }
 function renderSinglePlum(container, play, slotIndex) {
   const width = Math.max(190, container.clientWidth || 260)
@@ -341,32 +333,22 @@ function renderSinglePlum(container, play, slotIndex) {
 
   const petalCount = Math.max(themes.length, 1)
 
-  const centerRadius = minSide * 0.17
+  const centerRadius = minSide * 0.18
 
-  const angleStep = Math.PI * 2 / petalCount
+  const angleStepDegree = 360 / petalCount
 
-  const gapAngle = Math.min(angleStep * 0.14, toRadians(11))
+  const petalGapDegree = Math.min(angleStepDegree * 0.16, 12)
 
-  const innerRadius = centerRadius * 0.78
+  const rootRadius = centerRadius * 0.42
 
-  const baseOuterRadius = minSide * (
+  const baseLeafLength = minSide * (
     petalCount <= 4
-      ? 0.43
+      ? 0.31
       : petalCount <= 6
-        ? 0.42
+        ? 0.29
         : petalCount <= 8
-          ? 0.405
-          : 0.38
-  )
-
-  const maxExtraRadius = minSide * 0.045
-
-  const cornerRadius = minSide * (
-    petalCount <= 4
-      ? 0.055
-      : petalCount <= 6
-        ? 0.047
-        : 0.038
+          ? 0.265
+          : 0.235
   )
 
   const svg = d3
@@ -381,147 +363,122 @@ function renderSinglePlum(container, play, slotIndex) {
     .attr('class', 'plum-chart-group')
     .attr('transform', `translate(${cx}, ${cy})`)
 
-  const angleStepDegree = 360 / petalCount
+  const petalData = themes.map((theme, index) => {
+    const angleDegree = -90 + index * angleStepDegree
 
-const petalGapDegree = Math.min(angleStepDegree * 0.12, 10)
+    const length = baseLeafLength + minSide * 0.03 * Math.sqrt(theme.share)
 
-const rootRadius = centerRadius * 0.58
+    const middleRadius = rootRadius + length * 0.68
 
-const basePetalLength = minSide * (
-  petalCount <= 4
-    ? 0.34
-    : petalCount <= 6
-      ? 0.32
-      : petalCount <= 8
-        ? 0.30
-        : 0.27
-)
+    const safeHalfWidth = Math.tan(toRadians((angleStepDegree - petalGapDegree) / 2)) * middleRadius * 0.72
 
-const petalData = themes.map((theme, index) => {
-  const angleDegree = -90 + index * angleStepDegree
-
-  const length = basePetalLength + minSide * 0.04 * Math.sqrt(theme.share)
-
-  const middleRadius = rootRadius + length * 0.62
-
-  const safeHalfWidth = Math.tan(toRadians((angleStepDegree - petalGapDegree) / 2)) * middleRadius * 0.82
-
-  const maxHalfWidth = minSide * (
-    petalCount <= 4
-      ? 0.145
-      : petalCount <= 6
-        ? 0.118
-        : petalCount <= 8
-          ? 0.095
-          : 0.074
-  )
-
-  const minHalfWidth = minSide * (
-    petalCount <= 4
-      ? 0.075
-      : petalCount <= 6
-        ? 0.062
-        : 0.05
-  )
-
-  const halfWidth = Math.max(
-    minHalfWidth,
-    Math.min(maxHalfWidth, safeHalfWidth),
-  )
-
-  return {
-    ...theme,
-    angleDegree,
-    rootRadius,
-    length,
-    halfWidth,
-  }
-})
-
-chartGroup
-  .selectAll('.plum-petal-back')
-  .data(petalData)
-  .join('path')
-  .attr('class', 'plum-petal-back')
-  .attr('d', (d) => {
-    return createPlumPetalPath(
-      d.angleDegree,
-      d.rootRadius,
-      d.length,
-      d.halfWidth * 1.06,
+    const maxHalfWidth = minSide * (
+      petalCount <= 4
+        ? 0.17
+        : petalCount <= 6
+          ? 0.135
+          : petalCount <= 8
+            ? 0.105
+            : 0.078
     )
-  })
-  .attr('fill', 'none')
-  .attr('stroke', 'rgba(115, 77, 39, 0.46)')
-  .attr('stroke-width', 3)
-  .attr('stroke-linejoin', 'round')
-  .attr('pointer-events', 'none')
 
-const petals = chartGroup
-  .selectAll('.plum-petal')
-  .data(petalData)
-  .join('path')
-  .attr('class', 'plum-petal')
-  .attr('d', (d) => {
-    return createPlumPetalPath(
-      d.angleDegree,
-      d.rootRadius,
-      d.length,
-      d.halfWidth,
+    const minHalfWidth = minSide * (
+      petalCount <= 4
+        ? 0.105
+        : petalCount <= 6
+          ? 0.082
+          : 0.06
     )
-  })
-  .attr('fill', (d) => themeColor(d.name))
-  .attr('stroke', 'rgba(255, 249, 235, 0.96)')
-  .attr('stroke-width', 1.45)
-  .attr('stroke-linejoin', 'round')
-  .attr('opacity', 0.96)
-  .style('cursor', 'pointer')
 
-chartGroup
-  .selectAll('.plum-petal-vein')
-  .data(petalData)
-  .join('path')
-  .attr('class', 'plum-petal-vein')
-  .attr('d', (d) => {
-    return createPetalVeinPath(d.angleDegree, d.rootRadius, d.length)
-  })
-  .attr('fill', 'none')
-  .attr('stroke', 'rgba(255, 250, 238, 0.34)')
-  .attr('stroke-width', 1)
-  .attr('stroke-linecap', 'round')
-  .attr('pointer-events', 'none')
+    const halfWidth = Math.max(
+      minHalfWidth,
+      Math.min(maxHalfWidth, safeHalfWidth),
+    )
 
-petals
-  .on('mouseenter', (event, d) => {
-    chartGroup.selectAll('.plum-petal').attr('opacity', 0.28)
-
-    chartGroup.selectAll('.plum-petal-vein').attr('opacity', 0.18)
-
-    d3.select(event.currentTarget).attr('opacity', 1)
-
-    showTooltip(event, play, d)
-  })
-  .on('mousemove', (event) => {
-    moveTooltip(event)
-  })
-  .on('mouseleave', () => {
-    chartGroup.selectAll('.plum-petal').attr('opacity', 0.96)
-
-    chartGroup.selectAll('.plum-petal-vein').attr('opacity', 1)
-
-    hideTooltip()
+    return {
+      ...theme,
+      angleDegree,
+      rootRadius,
+      length,
+      halfWidth,
+    }
   })
 
-drawPercentLabels(chartGroup, petalData, petalCount)
+  chartGroup
+    .selectAll('.plum-petal-back')
+    .data(petalData)
+    .join('path')
+    .attr('class', 'plum-petal-back')
+    .attr('d', (d) => {
+      return createHeartCloverLeafPath(
+        d.angleDegree,
+        d.rootRadius,
+        d.length,
+        d.halfWidth * 1.08,
+      )
+    })
+    .attr('fill', 'none')
+    .attr('stroke', 'rgba(105, 70, 35, 0.38)')
+    .attr('stroke-width', 3)
+    .attr('stroke-linejoin', 'round')
+    .attr('pointer-events', 'none')
 
-  drawPercentLabels(
-    chartGroup,
-    themes,
-    innerRadius,
-    baseOuterRadius,
-    maxExtraRadius,
-    petalCount,
-  )
+  const petals = chartGroup
+    .selectAll('.plum-petal')
+    .data(petalData)
+    .join('path')
+    .attr('class', 'plum-petal')
+    .attr('d', (d) => {
+      return createHeartCloverLeafPath(
+        d.angleDegree,
+        d.rootRadius,
+        d.length,
+        d.halfWidth,
+      )
+    })
+    .attr('fill', (d) => themeColor(d.name))
+    .attr('stroke', 'rgba(255, 249, 235, 0.98)')
+    .attr('stroke-width', 1.5)
+    .attr('stroke-linejoin', 'round')
+    .attr('opacity', 0.96)
+    .style('cursor', 'pointer')
+
+  chartGroup
+    .selectAll('.plum-petal-vein')
+    .data(petalData)
+    .join('path')
+    .attr('class', 'plum-petal-vein')
+    .attr('d', (d) => {
+      return createPetalVeinPath(d.angleDegree, d.rootRadius, d.length)
+    })
+    .attr('fill', 'none')
+    .attr('stroke', 'rgba(255, 250, 238, 0.38)')
+    .attr('stroke-width', 1)
+    .attr('stroke-linecap', 'round')
+    .attr('pointer-events', 'none')
+
+  petals
+    .on('mouseenter', (event, d) => {
+      chartGroup.selectAll('.plum-petal').attr('opacity', 0.28)
+
+      chartGroup.selectAll('.plum-petal-vein').attr('opacity', 0.16)
+
+      d3.select(event.currentTarget).attr('opacity', 1)
+
+      showTooltip(event, play, d)
+    })
+    .on('mousemove', (event) => {
+      moveTooltip(event)
+    })
+    .on('mouseleave', () => {
+      chartGroup.selectAll('.plum-petal').attr('opacity', 0.96)
+
+      chartGroup.selectAll('.plum-petal-vein').attr('opacity', 1)
+
+      hideTooltip()
+    })
+
+  drawPercentLabels(chartGroup, petalData, petalCount)
 
   const center = chartGroup
     .append('g')
@@ -540,74 +497,14 @@ drawPercentLabels(chartGroup, petalData, petalCount)
 
   center
     .append('circle')
-    .attr('r', centerRadius * 0.82)
+    .attr('r', centerRadius * 0.78)
     .attr('fill', 'none')
     .attr('stroke', 'rgba(173, 57, 54, 0.18)')
     .attr('stroke-width', 0.9)
 
   drawCenterSelect(center, play, slotIndex, centerRadius)
 }
- function createPlumPetalPath(angleDegree, rootRadius, length, halfWidth) {
-  const angle = toRadians(angleDegree)
-
-  const ux = Math.cos(angle)
-  const uy = Math.sin(angle)
-
-  const px = -uy
-  const py = ux
-
-  const point = (localX, localY) => {
-    const x = ux * localX + px * localY
-    const y = uy * localX + py * localY
-
-    return `${x.toFixed(2)},${y.toFixed(2)}`
-  }
-
-  const rootBack = rootRadius * 0.72
-
-  const neck = halfWidth * 0.12
-
-  const x0 = rootRadius
-
-  const x1 = rootRadius + length * 0.12
-
-  const x2 = rootRadius + length * 0.34
-
-  const x3 = rootRadius + length * 0.58
-
-  const x4 = rootRadius + length * 0.82
-
-  const tip = rootRadius + length
-
-  const w1 = halfWidth * 0.22
-
-  const w2 = halfWidth * 0.72
-
-  const w3 = halfWidth * 1.05
-
-  const w4 = halfWidth * 0.82
-
-  const tipWidth = halfWidth * 0.28
-
-  return [
-    `M ${point(rootBack, -neck)}`,
-
-    `C ${point(x0, -w1)} ${point(x1, -w2)} ${point(x2, -w3)}`,
-
-    `C ${point(x3, -w3 * 1.05)} ${point(x4, -w4)} ${point(tip, -tipWidth)}`,
-
-    `C ${point(tip + length * 0.12, -tipWidth * 0.5)} ${point(tip + length * 0.12, tipWidth * 0.5)} ${point(tip, tipWidth)}`,
-
-    `C ${point(x4, w4)} ${point(x3, w3 * 1.05)} ${point(x2, w3)}`,
-
-    `C ${point(x1, w2)} ${point(x0, w1)} ${point(rootBack, neck)}`,
-
-    `Q ${point(rootBack - length * 0.06, 0)} ${point(rootBack, -neck)}`,
-
-    'Z',
-  ].join(' ')
-}
-
+ 
 function createPetalVeinPath(angleDegree, rootRadius, length) {
   const angle = toRadians(angleDegree)
 
@@ -621,68 +518,18 @@ function createPetalVeinPath(angleDegree, rootRadius, length) {
     return `${x.toFixed(2)},${y.toFixed(2)}`
   }
 
-  const start = rootRadius + length * 0.14
+  const start = rootRadius + length * 0.08
 
-  const middle = rootRadius + length * 0.54
+  const middle = rootRadius + length * 0.45
 
-  const end = rootRadius + length * 0.86
+  const end = rootRadius + length * 0.73
 
   return [
     `M ${point(start, 0)}`,
     `C ${point(middle, 0)} ${point(middle, 0)} ${point(end, 0)}`,
   ].join(' ')
 }
-function createPalaceFanPetalPath(angleDegree, innerRadius, length, width) {
-  const angle = toRadians(angleDegree)
 
-  const ux = Math.cos(angle)
-  const uy = Math.sin(angle)
-
-  const px = -uy
-  const py = ux
-
-  const point = (localX, localY) => {
-    const x = ux * localX + px * localY
-    const y = uy * localX + py * localY
-    return `${x.toFixed(2)},${y.toFixed(2)}`
-  }
-
-  const rootX = innerRadius * 0.2
-  const neck = width * 0.18
-
-  const x0 = innerRadius
-  const x1 = innerRadius + length * 0.14
-  const x2 = innerRadius + length * 0.34
-  const x3 = innerRadius + length * 0.56
-  const x4 = innerRadius + length * 0.77
-  const x5 = innerRadius + length * 0.98
-
-  // 这里整体加宽，让花瓣之间更近
-  const w1 = width * 0.34
-const w2 = width * 0.68
-const w3 = width * 0.88
-const w4 = width * 1.02
-
-  return [
-    `M ${point(rootX, -neck)}`,
-
-    `C ${point(x0, -w1)} ${point(x1, -w2)} ${point(x2, -w3)}`,
-
-    `C ${point(x2 + length * 0.03, -w4)} ${point(x3, -w4)} ${point(x3 + length * 0.05, -w3)}`,
-
-    `C ${point(x4, -w4)} ${point(x5 + length * 0.04, -w2)} ${point(x5, 0)}`,
-
-    `C ${point(x5 + length * 0.04, w2)} ${point(x4, w4)} ${point(x3 + length * 0.05, w3)}`,
-
-    `C ${point(x3, w4)} ${point(x2 + length * 0.03, w4)} ${point(x2, w3)}`,
-
-    `C ${point(x1, w2)} ${point(x0, w1)} ${point(rootX, neck)}`,
-
-    `Q ${point(rootX - length * 0.04, 0)} ${point(rootX, -neck)}`,
-
-    'Z',
-  ].join(' ')
-}
 
 function drawPercentLabels(chartGroup, petalData, petalCount) {
   const minVisibleShare = petalCount >= 8 ? 0.06 : 0.035
@@ -695,14 +542,14 @@ function drawPercentLabels(chartGroup, petalData, petalCount) {
     .attr('x', (d) => {
       const angle = toRadians(d.angleDegree)
 
-      const distance = d.rootRadius + d.length * 0.66
+      const distance = d.rootRadius + d.length * 0.55
 
       return Math.cos(angle) * distance
     })
     .attr('y', (d) => {
       const angle = toRadians(d.angleDegree)
 
-      const distance = d.rootRadius + d.length * 0.66
+      const distance = d.rootRadius + d.length * 0.55
 
       return Math.sin(angle) * distance
     })
@@ -711,7 +558,6 @@ function drawPercentLabels(chartGroup, petalData, petalCount) {
     .style('font-size', petalCount >= 8 ? '9px' : '12px')
     .text((d) => formatPercent(d.share))
 }
-
 
 function drawCenterSelect(center, play, slotIndex, centerRadius) {
   const selectWidth = centerRadius * 1.85
