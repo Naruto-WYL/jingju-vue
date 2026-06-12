@@ -1,6 +1,6 @@
 import type { LoopFlow, ScriptRecord } from '../types/loop';
 
-const DATA_URL = '/数据表合集/5/data/loop_data.json';
+const DATA_URL = '/data/loop_data.json';
 
 interface LoopDataset {
   flows: LoopFlow[];

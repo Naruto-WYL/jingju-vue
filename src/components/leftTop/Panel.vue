@@ -1,8 +1,9 @@
 <template>
   <PanelCard class="left-top-card" title="" eyebrow="" :style="cardStyle">
+    <ChartToggle v-model="view" />
+
     <div ref="scaleHost" class="left-top-scale-host">
       <div class="pattern-mode-heading">角色-行当-时期对应模式</div>
-      <ChartToggle v-model="view" />
       <ChartOne v-if="view === 'a'" :stats="stats" />
       <ChartTwo v-else />
     </div>
@@ -16,7 +17,7 @@ import PanelCard from '../PanelCard.vue'
 import ChartOne from './ChartOne.vue'
 import ChartTwo from './ChartTwo.vue'
 
-const DESIGN_WIDTH = 467
+const MIN_DESIGN_WIDTH = 467
 const DESIGN_HEIGHT = 711
 
 defineProps({
@@ -29,9 +30,11 @@ defineProps({
 const view = ref('a')
 const scaleHost = ref(null)
 const leftTopScale = ref(1)
+const leftTopContentWidth = ref(MIN_DESIGN_WIDTH)
 
 const cardStyle = computed(() => ({
   '--left-top-scale': leftTopScale.value,
+  '--left-top-content-width': `${leftTopContentWidth.value}px`,
 }))
 
 let resizeObserver = null
@@ -56,8 +59,10 @@ function updateScale() {
   if (!body) return
 
   const { width, height } = body.getBoundingClientRect()
-  const nextScale = Math.min(width / DESIGN_WIDTH, height / DESIGN_HEIGHT, 1)
-  leftTopScale.value = Number(Math.max(nextScale, 0.1).toFixed(4))
+  const nextScale = Math.min(width / MIN_DESIGN_WIDTH, height / DESIGN_HEIGHT, 1)
+  const boundedScale = Number(Math.max(nextScale, 0.1).toFixed(4))
+  leftTopScale.value = boundedScale
+  leftTopContentWidth.value = Math.max(MIN_DESIGN_WIDTH, Math.floor(width / boundedScale))
 }
 </script>
 
@@ -121,7 +126,7 @@ function updateScale() {
 
 .left-top-scale-host {
   position: relative;
-  width: 467px;
+  width: var(--left-top-content-width, 467px);
   height: 711px;
   padding-top: 32px;
   transform: scale(var(--left-top-scale, 1));
@@ -146,11 +151,11 @@ function updateScale() {
   pointer-events: none;
 }
 
-.left-top-scale-host :deep(.chart-toggle) {
+.left-top-card :deep(.chart-toggle) {
   position: absolute;
   top: 0;
   right: 0;
-  z-index: 3;
+  z-index: 4;
   width: 78px;
   height: 28px;
   border-color: rgba(143, 47, 36, 0.48);
@@ -160,7 +165,7 @@ function updateScale() {
   pointer-events: auto;
 }
 
-.left-top-scale-host :deep(.chart-toggle span) {
+.left-top-card :deep(.chart-toggle span) {
   height: 22px;
   color: #7a241d;
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
@@ -168,7 +173,7 @@ function updateScale() {
   font-weight: 800;
 }
 
-.left-top-scale-host :deep(.chart-toggle .active) {
+.left-top-card :deep(.chart-toggle .active) {
   color: #fff8ed;
   background: #8f2f24;
 }

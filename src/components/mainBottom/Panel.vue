@@ -7,13 +7,12 @@
   >
     <template #action>
       <div class="main-bottom-actions">
-        <ChartToggle v-model="view" />
-        <div v-show="view === 'a'" id="main-bottom-script-select-anchor" class="main-bottom-script-select-anchor" />
+        <ChartToggle v-model="view" label-a="气韵推演" label-b="模式对比" />
       </div>
     </template>
 
-    <ChartOne v-if="view === 'a'" select-target="#main-bottom-script-select-anchor" />
-    <ChartTwo v-else :data="data" />
+    <ChartOne v-if="view === 'a'" />
+    <ChartTwo v-else />
   </PanelCard>
 </template>
 
@@ -32,7 +31,7 @@ defineProps({
 })
 
 const view = ref('a')
-const panelTitle = computed(() => (view.value === 'a' ? '剧情节奏河流图' : '剧情节奏结构特征'))
+const panelTitle = computed(() => (view.value === 'a' ? '气韵推演' : '模式对比'))
 </script>
 
 <style scoped>
@@ -86,31 +85,27 @@ const panelTitle = computed(() => (view.value === 'a' ? '剧情节奏河流图' 
   z-index: 1;
   flex: 0 0 auto;
   align-items: flex-start;
-  min-height: 44px;
-  margin-bottom: 3px;
-  padding: 0 2px 4px;
-  border-bottom: 1px solid rgba(143, 47, 36, 0.32);
+  min-height: 30px;
+  margin-bottom: 0;
+  padding: 0 2px;
+  border-bottom: 0;
 }
 
 .main-bottom-card--river :deep(.panel-card__header) {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 1fr);
-  grid-template-rows: 17px 22px;
-  column-gap: 4px;
-  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
   padding-right: 0;
 }
 
 .main-bottom-card--river :deep(.panel-card__header > div:first-child),
 .main-bottom-card--summary :deep(.panel-card__header > div:first-child) {
-  display: contents;
+  display: none;
 }
 
 .main-bottom-card--river :deep(.panel-card__eyebrow),
 .main-bottom-card--summary :deep(.panel-card__eyebrow) {
-  grid-column: 1 / 3;
-  grid-row: 1;
-  justify-self: start;
+  display: none;
 }
 
 .main-bottom-card :deep(.panel-card__eyebrow) {
@@ -123,6 +118,7 @@ const panelTitle = computed(() => (view.value === 'a' ? '剧情节奏河流图' 
 }
 
 .main-bottom-card :deep(h2) {
+  display: none;
   color: #5b1e17;
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
   font-size: 21px;
@@ -142,10 +138,9 @@ const panelTitle = computed(() => (view.value === 'a' ? '剧情节奏河流图' 
 }
 
 .main-bottom-card--summary :deep(.panel-card__header) {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  grid-template-rows: 17px 22px;
-  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
   padding-right: 0;
 }
 
@@ -163,7 +158,7 @@ const panelTitle = computed(() => (view.value === 'a' ? '剧情节奏河流图' 
   position: relative;
   z-index: 1;
   flex: 1 1 auto;
-  height: auto;
+  height: calc(100% - 30px);
   min-height: 0;
   gap: 4px;
 }
@@ -173,7 +168,7 @@ const panelTitle = computed(() => (view.value === 'a' ? '剧情节奏河流图' 
   top: 0;
   right: 0;
   z-index: 4;
-  width: 78px;
+  width: 164px;
   height: 28px;
   border-color: rgba(143, 47, 36, 0.48);
   color: #7a241d;
@@ -185,7 +180,7 @@ const panelTitle = computed(() => (view.value === 'a' ? '剧情节奏河流图' 
   height: 22px;
   color: #7a241d;
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -199,30 +194,6 @@ const panelTitle = computed(() => (view.value === 'a' ? '剧情节奏河流图' 
 }
 
 .main-bottom-card--river .main-bottom-actions {
-  display: contents;
-}
-
-.main-bottom-script-select-anchor {
-  z-index: 3;
-  width: clamp(140px, 42%, 190px);
-  height: 22px;
-}
-
-.main-bottom-card--river .main-bottom-script-select-anchor {
-  grid-column: 3;
-  grid-row: 2;
-  justify-self: start;
-  transform: translateY(-4px);
-}
-
-.main-bottom-card--river :deep(.script-select) {
-  width: 100%;
-  height: 22px;
-  padding: 0 20px 0 6px;
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 20px;
-  text-align: center;
-  text-align-last: center;
+  display: block;
 }
 </style>

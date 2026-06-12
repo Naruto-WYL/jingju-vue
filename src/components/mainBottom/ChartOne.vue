@@ -1,1070 +1,1329 @@
-<template>
-  <div class="stage-river-panel">
-    <div class="chart-toolbar" :class="{ 'chart-toolbar--teleported': props.selectTarget }">
-      <Teleport v-if="props.selectTarget" :to="props.selectTarget" defer>
-        <select
-          v-model="selectedScriptKey"
-          class="script-select"
-          aria-label="选择剧本"
-          :disabled="loading || !scriptOptions.length"
-        >
-          <option v-for="script in scriptOptions" :key="script.key" :value="script.key">
-            {{ script.name }}
-          </option>
-        </select>
-      </Teleport>
-      <label v-else class="script-field">
-        <span>剧本</span>
-        <select
-          v-model="selectedScriptKey"
-          class="script-select"
-          aria-label="选择剧本"
-          :disabled="loading || !scriptOptions.length"
-        >
-          <option v-for="script in scriptOptions" :key="script.key" :value="script.key">
-            {{ script.name }}
-          </option>
-        </select>
-      </label>
-    </div>
+﻿<template>
+  <section class="chart-one-shell historical-bg text-[#4A3B32] font-serif">
+    <div class="chart-one-card">
+      <div class="chart-one-header">
+        <div class="script-select-row">
+          <select
+            id="scriptSelector"
+            v-model="currentScriptKey"
+            class="script-selector"
+            :disabled="loading || !scriptOptions.length"
+            @change="switchScript(currentScriptKey)"
+          >
+            <option v-if="loading" value="">剧本数据加载中...</option>
+            <option v-else-if="!scriptOptions.length" value="">暂无五阶段剧本</option>
+            <option v-for="script in scriptOptions" :key="script.key" :value="script.key">
+              {{ script.name }}
+            </option>
+          </select>
+          <span id="scriptMeta" class="script-meta">{{ scriptMeta }}</span>
+        </div>
 
-    <div class="chart-content">
-      <div ref="chartBodyRef" class="chart-body">
-        <svg ref="svgRef" class="river-svg" role="img" aria-label="剧情节奏河流图"></svg>
-        <div ref="tooltipRef" class="river-tooltip"></div>
-        <div v-if="loading" class="chart-state">数据加载中...</div>
-        <div v-else-if="errorMessage" class="chart-state chart-state--error">{{ errorMessage }}</div>
-        <div v-else-if="!hasRiverData" class="chart-state">暂无河流图数据</div>
+        <div class="header-tools">
+          <div id="stageContainer" class="stage-container">
+            <button
+              v-for="stage in currentStages"
+              :key="stage"
+              type="button"
+              class="stage-btn"
+              :class="{ active: currentState.stage === stage }"
+              :data-stg="stage"
+              @click="jumpToStage(stage)"
+            >
+              {{ stage }}
+            </button>
+          </div>
+
+          <div class="legend-box">
+            <span class="legend-title">图例：</span>
+            <div class="legend-item"><span style="background: rgba(0, 76, 126, 0.8);"></span>表演</div>
+            <div class="legend-item"><span style="background: rgba(0, 111, 68, 0.8);"></span>活跃</div>
+            <div class="legend-item"><span style="background: rgba(160, 82, 45, 0.8);"></span>冲突</div>
+            <div class="legend-item"><span style="background: rgba(102, 51, 153, 0.8);"></span>关系</div>
+            <div class="legend-item"><span style="background: rgba(178, 34, 34, 0.9);"></span>情绪</div>
+            <div class="legend-item"><span style="background: rgba(28, 28, 28, 0.9);"></span>综合</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-one-grid">
+        <div id="canvasContainer" ref="canvasContainerRef" class="canvas-container">
+          <div class="canvas-title">
+            <div id="canvasStageIndicator" class="stage-indicator">{{ currentStageIndicator }}</div>
+            <div class="canvas-subtitle">Shan Shui Ink Wash / Auto-tracking Tooltip</div>
+          </div>
+
+          <canvas id="analyticalCanvas" ref="canvasRef" class="analytical-canvas"></canvas>
+
+          <div id="cursorTooltip" ref="tooltipRef" class="cursor-tooltip" :class="{ visible: isHovering }">
+            <div class="tooltip-title">实时期望张力数值：</div>
+            <div class="tooltip-list">
+              <div v-for="(metric, index) in tooltipMetrics" :key="metric.label" class="tooltip-row">
+                <span :style="{ color: metric.color }">
+                  <i :style="{ background: metric.color }"></i>{{ metric.label }}
+                </span>
+                <strong :id="`val-${index}`" :style="{ color: metric.color }">{{ Math.round(currentState.data[index] || 0) }}%</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="analysis-panel">
+          <h3>剧本节奏与起伏刻画</h3>
+          <div class="scene-readout">
+            <span>时间轴定位 (X轴)</span>
+            <strong id="panel-scene">{{ panelSceneText }}</strong>
+          </div>
+
+          <div class="desc-block">
+            <span>剧作动力学分析：</span>
+            <p id="panel-desc">{{ currentState.desc || '暂无数据' }}</p>
+          </div>
+        </aside>
+      </div>
+
+      <div class="timeline-row">
+        <button id="miniPlayBtn" class="mini-play-btn" type="button" @click="togglePlay">
+          <svg id="playIcon" class="play-icon" :class="{ hidden: isPlaying }" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+          <svg id="pauseIcon" class="pause-icon" :class="{ hidden: !isPlaying }" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+        </button>
+        <div id="progressPercent" class="progress-percent">{{ Math.floor(globalProgress * 100) }}%</div>
+        <input
+          id="timelineSlider"
+          v-model.number="sliderValue"
+          class="timeline-slider"
+          type="range"
+          min="0"
+          max="100"
+          step="0.01"
+          @input="handleSliderChange(sliderValue)"
+        />
+      </div>
+
+      <div v-if="loading || errorMessage" class="load-state" :class="{ error: errorMessage }">
+        {{ errorMessage || '数据加载中...' }}
       </div>
     </div>
-  </div>
+  </section>
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as d3 from 'd3'
 
-const SCENE_URL = '/数据表合集/4/Table1_Scene_Sequence_Analysis (1).csv'
-const STAGE_URL = '/数据表合集/4/Table2_Core_Stages_Analysis (1).csv'
+const CSV_URL = '/数据表合集/4/京剧剧本_1473本_场次剧情动力学_事件增强.csv'
+const REQUIRED_STAGES = ['开端', '发展', '转折', '高潮', '结局']
+const MAX_SCRIPT_OPTIONS = 80
 
-const width = 560
-const height = 246
-const margin = {
-  top: 42,
-  right: 20,
-  bottom: 50,
-  left: 22,
-}
-
-const metricFields = [
-  { key: 'performanceDensity', label: '表演形式密度', aggregate: 'avg' },
-  { key: 'conflictStrength', label: '冲突强度', aggregate: 'avg' },
-  { key: 'emotionStrength', label: '情绪强度', aggregate: 'avg' },
-  { key: 'roleActivity', label: '角色活跃度', aggregate: 'avg' },
-  { key: 'relationChanges', label: '关系变化次数', aggregate: 'sum' },
-  { key: 'plotStrength', label: '综合剧情强度', aggregate: 'avg' },
+const streamColorsStroke = [
+  'rgba(0, 76, 126, 0.85)',
+  'rgba(0, 111, 68, 0.85)',
+  'rgba(160, 82, 45, 0.85)',
+  'rgba(102, 51, 153, 0.85)',
+  'rgba(178, 34, 34, 0.95)',
+  'rgba(28, 28, 28, 0.95)',
+]
+const streamColorsFill = [
+  'rgba(0, 76, 126, 0.15)',
+  'rgba(0, 111, 68, 0.15)',
+  'rgba(160, 82, 45, 0.15)',
+  'rgba(102, 51, 153, 0.15)',
+  'rgba(178, 34, 34, 0.20)',
+  'rgba(28, 28, 28, 0.15)',
 ]
 
-const colorMap = {
-  performanceDensity: '#8f2f2a',
-  conflictStrength: '#b88a36',
-  emotionStrength: '#2f625d',
-  roleActivity: '#3d4655',
-  relationChanges: '#9a5260',
-  plotStrength: '#5c5360',
-}
+const tooltipMetrics = [
+  { label: '表演形式密度', color: '#004C7E' },
+  { label: '角色活跃度', color: '#006F44' },
+  { label: '冲突强度', color: '#A0522D' },
+  { label: '关系变化强度', color: '#663399' },
+  { label: '情绪强度', color: '#B22222' },
+  { label: '综合剧情强度', color: '#1C1C1C' },
+]
 
-const inkColorMap = {
-  performanceDensity: ['#f3ded7', '#8f2f2a'],
-  conflictStrength: ['#f0ddb0', '#a57427'],
-  emotionStrength: ['#d4e5e1', '#2f625d'],
-  roleActivity: ['#d7dce3', '#3d4655'],
-  relationChanges: ['#ecd2d6', '#9a5260'],
-  plotStrength: ['#ded8e0', '#5c5360'],
-}
-
-const stageColorMap = {
-  开端: '#5f7b68',
-  发展: '#bd8841',
-  转折: '#8d657d',
-  高潮: '#b85a63',
-  结局: '#3f6581',
-}
-
-const props = defineProps({
-  selectTarget: {
-    type: String,
-    default: '',
-  },
-})
-
-const chartBodyRef = ref(null)
-const svgRef = ref(null)
+const canvasRef = ref(null)
+const canvasContainerRef = ref(null)
 const tooltipRef = ref(null)
-const sceneRows = ref([])
-const stageRows = ref([])
-const selectedScriptKey = ref('')
-const loading = ref(false)
+const loading = ref(true)
 const errorMessage = ref('')
-let resizeObserver = null
-
-const scriptOptions = computed(() => {
-  const scripts = new Map()
-
-  for (const row of sceneRows.value) {
-    if (row.scriptId && row.scriptName) scripts.set(row.scriptId, row.scriptName)
-  }
-
-  for (const row of stageRows.value) {
-    if (row.scriptId && row.scriptName) scripts.set(row.scriptId, row.scriptName)
-  }
-
-  return Array.from(scripts, ([id, name]) => ({
-    id,
-    name,
-    key: `${id}__${name}`,
-  })).sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
+const allScripts = ref({})
+const scriptOptions = ref([])
+const currentScriptKey = ref('')
+const currentStages = ref(REQUIRED_STAGES)
+const currentState = ref({
+  data: [0, 0, 0, 0, 0, 0],
+  speed: 0.01,
+  turb: 2,
+  stage: '加载中',
+  conflict: '',
+  desc: '暂无数据',
+  leftLabel: '-',
+  rightLabel: '-',
 })
+const globalProgress = ref(0)
+const sliderValue = ref(0)
+const isPlaying = ref(false)
+const isHovering = ref(false)
 
-const selectedScript = computed(() => {
-  const [id = '', name = ''] = selectedScriptKey.value.split('__')
-  return { id, name }
+let ctx = null
+let flowTime = 0
+let trackerXCss = 0
+let currentMouseY = 0
+let animationFrameId = 0
+let resizeHandler = null
+let physics = { visibleRatio: 0.2 }
+const layout = { paddingLeft: 60, paddingRight: 40, paddingTop: 85, paddingBottom: 40 }
+
+const currentScript = computed(() => allScripts.value[currentScriptKey.value] || null)
+const scriptMeta = computed(() => currentScript.value?.meta || '-')
+const currentStageIndicator = computed(() => `${currentState.value.stage || '-'} · ${currentState.value.conflict || '-'}`)
+const panelSceneText = computed(() => {
+  if (!currentScript.value) return '-'
+  return globalProgress.value >= 1
+    ? `气韵定格：${currentState.value.rightLabel}`
+    : `气韵逼近 ${currentState.value.rightLabel}`
 })
-
-const currentSceneRows = computed(() =>
-  sceneRows.value
-    .filter((row) => row.scriptId === selectedScript.value.id)
-    .sort((a, b) => a.sequence - b.sequence),
-)
-
-const currentStageRows = computed(() =>
-  stageRows.value
-    .filter((row) => row.scriptId === selectedScript.value.id)
-    .sort((a, b) => getSceneOrder(a.startScene) - getSceneOrder(b.startScene)),
-)
-
-const stageBands = computed(() => {
-  const scenes = currentSceneRows.value
-  if (!scenes.length) return []
-
-  const sceneOrderMap = new Map(scenes.map((row) => [row.sceneName, row.sequence]))
-  const indexBySequence = new Map(scenes.map((row, index) => [row.sequence, index]))
-  const bands = currentStageRows.value
-    .map((stage, index) => {
-      const startOrder = sceneOrderMap.get(stage.startScene) ?? getSceneOrder(stage.startScene) ?? index + 1
-      const endOrder = sceneOrderMap.get(stage.endScene) ?? getSceneOrder(stage.endScene) ?? startOrder
-      const startIndex = resolveSceneIndex(scenes, indexBySequence, startOrder, 'start')
-      const endIndex = resolveSceneIndex(scenes, indexBySequence, endOrder, 'end')
-
-      if (startIndex < 0 || endIndex < startIndex) return null
-
-      return {
-        name: stage.stageType,
-        startIndex,
-        endIndex,
-        startNumber: scenes[startIndex]?.sequence || startOrder,
-        endNumber: scenes[endIndex]?.sequence || endOrder,
-        range: `${stage.startScene}-${stage.endScene}`,
-        summary: stage.summary,
-        rhythm: stage.rhythm,
-        sceneCount: endIndex - startIndex + 1,
-      }
-    })
-    .filter(Boolean)
-
-  if (bands.length) return bands
-
-  const fallbackBands = []
-  let startIndex = 0
-  let stageName = scenes[0].stageType || '未分段'
-
-  for (let index = 1; index <= scenes.length; index += 1) {
-    const nextStageName = scenes[index]?.stageType || '未分段'
-    if (index < scenes.length && nextStageName === stageName) continue
-
-    const rows = scenes.slice(startIndex, index)
-    fallbackBands.push({
-      name: stageName,
-      startIndex,
-      endIndex: index - 1,
-      startNumber: rows[0]?.sequence || startIndex + 1,
-      endNumber: rows.at(-1)?.sequence || index,
-      range: `${rows[0]?.sceneName || ''}-${rows.at(-1)?.sceneName || ''}`,
-      summary: rows.map((row) => row.summary).filter(Boolean).join('；'),
-      rhythm: '',
-      sceneCount: rows.length,
-    })
-
-    startIndex = index
-    stageName = nextStageName
-  }
-
-  return fallbackBands
-})
-
-const stageBySceneIndex = computed(() => {
-  const map = new Map()
-  for (const band of stageBands.value) {
-    for (let index = band.startIndex; index <= band.endIndex; index += 1) {
-      map.set(index, band)
-    }
-  }
-  return map
-})
-
-const riverRows = computed(() =>
-  currentSceneRows.value.map((scene, index) => {
-    const stage = stageBySceneIndex.value.get(index) || {
-      name: scene.stageType || '未分段',
-      range: scene.sceneName,
-      summary: scene.summary,
-      rhythm: '',
-      sceneCount: 1,
-    }
-
-    return {
-      index,
-      scene,
-      stage,
-      sceneNumber: scene.sequence || index + 1,
-      sceneLabel: numberToChinese(scene.sequence || index + 1),
-      ...Object.fromEntries(metricFields.map((metric) => [metric.key, Number(scene[metric.key].toFixed(2))])),
-    }
-  }),
-)
-
-const hasRiverData = computed(() =>
-  riverRows.value.some((row) => metricFields.some((metric) => row[metric.key] > 0)),
-)
 
 onMounted(async () => {
-  await loadData()
+  await loadCsvScripts()
   await nextTick()
-  drawRiver()
-
-  resizeObserver = new ResizeObserver(drawRiver)
-  if (chartBodyRef.value) resizeObserver.observe(chartBodyRef.value)
+  initCanvas()
+  attachHoverEvents()
+  if (currentScriptKey.value) switchScript(currentScriptKey.value)
+  animate()
 })
 
 onBeforeUnmount(() => {
-  resizeObserver?.disconnect()
-  d3.select(svgRef.value).selectAll('*').remove()
+  if (animationFrameId) cancelAnimationFrame(animationFrameId)
+  if (resizeHandler) window.removeEventListener('resize', resizeHandler)
 })
 
-watch(scriptOptions, (nextOptions) => {
-  if (!nextOptions.length) {
-    selectedScriptKey.value = ''
-    return
-  }
-
-  if (!nextOptions.some((script) => script.key === selectedScriptKey.value)) {
-    selectedScriptKey.value = nextOptions[0].key
-  }
-})
-
-watch([riverRows, selectedScriptKey], async () => {
-  await nextTick()
-  drawRiver()
-})
-
-async function loadData() {
+async function loadCsvScripts() {
   loading.value = true
   errorMessage.value = ''
-
   try {
-    const [sceneData, stageData] = await Promise.all([
-      d3.csv(encodeURI(SCENE_URL), normalizeSceneRow),
-      d3.csv(encodeURI(STAGE_URL), normalizeStageRow),
-    ])
-
-    sceneRows.value = sceneData.filter((row) => row.scriptId && row.scriptName)
-    stageRows.value = stageData.filter((row) => row.scriptId && row.scriptName && row.stageType)
+    const response = await fetch(CSV_URL)
+    if (!response.ok) throw new Error(`CSV 加载失败：${response.status}`)
+    const text = (await response.text()).replace(/^\uFEFF/, '')
+    const rows = d3.csvParse(text).map(normalizeRow).filter((row) => row.scriptId && row.scriptName)
+    const scripts = buildScriptsFromRows(rows)
+    allScripts.value = scripts
+    scriptOptions.value = Object.values(scripts)
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'zh-Hans-CN'))
+      .slice(0, MAX_SCRIPT_OPTIONS)
+      .map((script) => ({ key: script.key, name: `${script.name}（${script.sourceSceneCount}场）` }))
+    currentScriptKey.value = scriptOptions.value[0]?.key || ''
+    if (!currentScriptKey.value) errorMessage.value = 'CSV 中未筛选到包含开端、发展、转折、高潮、结局的剧本。'
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '数据读取失败'
+    errorMessage.value = error instanceof Error ? error.message : 'CSV 加载失败'
   } finally {
     loading.value = false
   }
 }
 
-function drawRiver() {
-  if (!svgRef.value || !chartBodyRef.value) return
-
-  const svg = d3.select(svgRef.value)
-  svg.selectAll('*').remove()
-
-  const bodyRect = chartBodyRef.value.getBoundingClientRect()
-  const chartWidth = Math.max(width, bodyRect.width || width)
-  const chartHeight = Math.max(210, bodyRect.height || height)
-  const innerWidth = chartWidth - margin.left - margin.right
-  const innerHeight = chartHeight - margin.top - margin.bottom
-
-  svg.attr('viewBox', `0 0 ${chartWidth} ${chartHeight}`)
-
-  if (!hasRiverData.value) return
-
-  const rows = riverRows.value
-  const keys = metricFields.map((metric) => metric.key)
-  const waveRows = buildRiverWaveRows(rows, keys)
-  const layers = d3.stack().keys(keys).offset(d3.stackOffsetNone)(waveRows)
-  const yMax = d3.max(waveRows, (row) => d3.sum(keys, (key) => row[key])) || 1
-
-  const xMax = Math.max(1, rows.length - 1)
-  const x = d3.scaleLinear()
-    .domain([0, xMax])
-    .range([0, innerWidth])
-
-  const y = d3.scaleLinear()
-    .domain([0, yMax])
-    .nice(4)
-    .range([innerHeight, 0])
-
-  const area = d3.area()
-    .x(d => x(d.data.x))
-    .y0(d => y(d[0]))
-    .y1(d => y(d[1]))
-    .curve(d3.curveBasis)
-
-  const currentLine = d3.line()
-    .x(d => x(d.data.x))
-    .y(d => y(d[1]))
-    .curve(d3.curveBasis)
-
-  const defs = svg.append('defs')
-  const paperFilterId = 'stage-river-paper-texture'
-  const bleedFilterId = 'stage-river-ink-bleed'
-
-  const paperFilter = defs.append('filter')
-    .attr('id', paperFilterId)
-    .attr('x', '-8%')
-    .attr('y', '-8%')
-    .attr('width', '116%')
-    .attr('height', '116%')
-
-  paperFilter.append('feTurbulence')
-    .attr('type', 'fractalNoise')
-    .attr('baseFrequency', '0.018')
-    .attr('numOctaves', 3)
-    .attr('seed', 12)
-    .attr('result', 'noise')
-
-  paperFilter.append('feDisplacementMap')
-    .attr('in', 'SourceGraphic')
-    .attr('in2', 'noise')
-    .attr('scale', 0.95)
-    .attr('xChannelSelector', 'R')
-    .attr('yChannelSelector', 'G')
-
-  const bleedFilter = defs.append('filter')
-    .attr('id', bleedFilterId)
-    .attr('x', '-10%')
-    .attr('y', '-10%')
-    .attr('width', '120%')
-    .attr('height', '120%')
-
-  bleedFilter.append('feGaussianBlur')
-    .attr('stdDeviation', 1.85)
-    .attr('result', 'softInk')
-
-  metricFields.forEach((metric, index) => {
-    const [lightColor, darkColor] = inkColorMap[metric.key]
-    const gradient = defs.append('linearGradient')
-      .attr('id', `stage-river-ink-${metric.key}`)
-      .attr('gradientUnits', 'userSpaceOnUse')
-      .attr('x1', 0)
-      .attr('x2', innerWidth)
-      .attr('y1', innerHeight * 0.12)
-      .attr('y2', innerHeight)
-
-    gradient.append('stop')
-      .attr('offset', '0%')
-      .attr('stop-color', lightColor)
-      .attr('stop-opacity', 0.38)
-
-    gradient.append('stop')
-      .attr('offset', `${38 + index * 5}%`)
-      .attr('stop-color', darkColor)
-      .attr('stop-opacity', 0.82)
-
-    gradient.append('stop')
-      .attr('offset', '100%')
-      .attr('stop-color', lightColor)
-      .attr('stop-opacity', 0.44)
-  })
-
-  const root = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
-
-  root.append('g')
-    .attr('class', 'grid-lines')
-    .call(d3.axisLeft(y).ticks(4).tickSize(-innerWidth).tickFormat(''))
-    .call((group) => group.select('.domain').remove())
-
-  const yAxis = root.append('g')
-    .attr('class', 'y-axis')
-    .call(d3.axisLeft(y).ticks(4).tickFormat((value) => formatValue(value)))
-
-  yAxis.selectAll('.tick text')
-    .attr('dx', -4)
-
-  root.append('text')
-    .attr('class', 'axis-title')
-    .attr('x', -innerHeight / 2)
-    .attr('y', -42)
-    .attr('transform', 'rotate(-90)')
-    .attr('text-anchor', 'middle')
-    .text('指标强度')
-
-  const xAxis = root.append('g')
-    .attr('class', 'x-axis')
-    .attr('transform', `translate(0,${innerHeight})`)
-    .call(
-      d3.axisBottom(x)
-        .tickValues(rows.map((row) => row.index))
-        .tickFormat((value) => rows.find((row) => row.index === value)?.sceneLabel || value),
-    )
-
-  xAxis.selectAll('.tick text')
-    .attr('dx', 0)
-    .attr('dy', 12)
-    .attr('text-anchor', 'middle')
-
-  drawStageProgressBar(root, x, rows, innerWidth, innerHeight)
-
-  const focusLine = root.append('line')
-    .attr('class', 'focus-line')
-    .attr('y1', 0)
-    .attr('y2', innerHeight)
-    .attr('opacity', 0)
-
-  root.selectAll('.river-layer')
-    .data(layers)
-    .join('path')
-    .attr('class', 'river-bleed')
-    .attr('d', area)
-    .attr('fill', (layer) => colorMap[layer.key])
-    .attr('fill-opacity', 0.14)
-    .attr('filter', `url(#${bleedFilterId})`)
-    .attr('pointer-events', 'none')
-
-  root.selectAll('.river-layer')
-    .data(layers)
-    .join('path')
-    .attr('class', 'river-layer')
-    .attr('d', area)
-    .attr('fill', (layer) => `url(#stage-river-ink-${layer.key})`)
-    .attr('stroke', 'rgba(62, 66, 68, 0.18)')
-    .attr('stroke-width', 0.8)
-    .attr('fill-opacity', 0.88)
-    .attr('filter', `url(#${paperFilterId})`)
-    .on('mouseenter', function () {
-      d3.select(this).attr('fill-opacity', 1).attr('stroke-width', 1.2)
-    })
-    .on('mouseleave', function () {
-      d3.select(this).attr('fill-opacity', 0.88).attr('stroke-width', 0.8)
-      hideTooltip()
-      focusLine.attr('opacity', 0)
-    })
-    .on('mousemove', function (event, layer) {
-      const pointerX = d3.pointer(event, root.node())[0]
-      const currentRow = nearestRow(rows, pointerX, x)
-      focusLine.attr('x1', x(currentRow.index)).attr('x2', x(currentRow.index)).attr('opacity', 1)
-      showTooltip(event, currentRow, layer.key)
-    })
-
-  root.selectAll('.river-current')
-    .data(layers.slice(1, -1))
-    .join('path')
-    .attr('class', 'river-current')
-    .attr('d', currentLine)
-    .attr('fill', 'none')
-    .attr('stroke', 'rgba(255, 255, 255, 0.42)')
-    .attr('stroke-width', 0.72)
-    .attr('stroke-linecap', 'round')
-    .attr('stroke-dasharray', '1 7')
-    .attr('pointer-events', 'none')
-
-  const legend = svg.append('g')
-    .attr('class', 'legend')
-    .attr('transform', `translate(${margin.left},6)`)
-
-  // const legendItems = legend.selectAll('.legend-item')
-  //   .data(metricFields)
-  //   .join('g')
-  //   .attr('class', 'legend-item')
-  //   .attr('transform', (metric, index) => {
-  //     return `translate(${index * 110},0)`
-  //   })
-  const legendColWidth = 266
-const legendRowHeight = 18
-const legendCols = 3
-
-const legendItems = legend.selectAll('.legend-item')
-  .data(metricFields)
-  .join('g')
-  .attr('class', 'legend-item')
-  .attr('transform', (metric, index) => {
-    const col = index % legendCols
-    const row = Math.floor(index / legendCols)
-
-    return `translate(${col * legendColWidth},${row * legendRowHeight})`
-  })
-
-  legendItems.append('rect')
-    .attr('width', 11)
-    .attr('height', 11)
-    .attr('rx', 2)
-    .attr('fill', (metric) => colorMap[metric.key])
-
-  legendItems.append('text')
-    .attr('x', 14)
-    .attr('y', 10)
-    .text((metric) => metric.label)
-}
-
-function drawStageProgressBar(root, x, rows, innerWidth, innerHeight) {
-  const bands = stageBands.value
-  if (!bands.length) return
-
-  const stepWidth = rows.length > 1 ? innerWidth / (rows.length - 1) : innerWidth
-  const barY = innerHeight + 30
-  const barHeight = 16
-  const corner = 4
-
-  const progress = root.append('g')
-    .attr('class', 'stage-progress')
-    .attr('transform', `translate(0,${barY})`)
-
-  progress.append('line')
-    .attr('class', 'stage-progress__ornament')
-    .attr('x1', 0)
-    .attr('x2', innerWidth)
-    .attr('y1', -5)
-    .attr('y2', -5)
-
-  const segments = progress.selectAll('.stage-progress__segment')
-    .data(bands)
-    .join('g')
-    .attr('class', 'stage-progress__segment')
-
-  segments.append('rect')
-    .attr('class', 'stage-progress__rect')
-    .attr('x', (band) => progressSegmentBounds(band, x, stepWidth, innerWidth).x)
-    .attr('y', 0)
-    .attr('width', (band) => progressSegmentBounds(band, x, stepWidth, innerWidth).width)
-    .attr('height', barHeight)
-    .attr('rx', corner)
-    .attr('fill', (band) => stageColorMap[band.name] || '#7a6658')
-    .attr('stroke', (band) => stageColorMap[band.name] || '#7a6658')
-
-  segments.append('text')
-    .attr('class', 'stage-progress__label')
-    .attr('x', (band) => {
-      const bounds = progressSegmentBounds(band, x, stepWidth, innerWidth)
-      return bounds.x + bounds.width / 2
-    })
-    .attr('y', 11)
-    .attr('text-anchor', 'middle')
-    .text((band) => formatProgressLabel(band, x, stepWidth, innerWidth))
-
-  progress.selectAll('.stage-progress__joint')
-    .data(bands.slice(1))
-    .join('rect')
-    .attr('class', 'stage-progress__joint')
-    .attr('x', (band) => x(band.startIndex) - 3)
-    .attr('y', barHeight / 2 - 3)
-    .attr('width', 6)
-    .attr('height', 6)
-    .attr('transform', (band) => `rotate(45 ${x(band.startIndex)} ${barHeight / 2})`)
-}
-
-function showTooltip(event, row, activeKey) {
-  if (!tooltipRef.value || !chartBodyRef.value) return
-
-  const stage = row.stage
-  const scene = row.scene
-  const activeMetric = metricFields.find((metric) => metric.key === activeKey)
-  const values = metricFields
-    .slice()
-    .sort((a, b) => row[b.key] - row[a.key])
-    .map((metric) => {
-      const activeClass = metric.key === activeKey ? ' river-tooltip__active' : ''
-      return `<div class="river-tooltip__row${activeClass}"><span style="background:${colorMap[metric.key]}"></span>${metric.label}<strong>${formatValue(row[metric.key])}</strong></div>`
-    })
-    .join('')
-
-  tooltipRef.value.innerHTML = `
-    <div class="river-tooltip__title">${row.sceneLabel}（${stage.name}）</div>
-    <div class="river-tooltip__meta">场次：${scene.sceneName}</div>
-    <div class="river-tooltip__meta">阶段范围：${stage.range}</div>
-    ${stage.rhythm ? `<div class="river-tooltip__meta">节奏变化：${stage.rhythm}</div>` : ''}
-    ${scene.summary ? `<div class="river-tooltip__meta">关键事件：${scene.summary}</div>` : ''}
-    <div class="river-tooltip__metric">当前指标：${activeMetric?.label || ''}</div>
-    ${values}
-  `
-
-  const bodyRect = chartBodyRef.value.getBoundingClientRect()
-  const x = Math.min(event.clientX - bodyRect.left + 14, bodyRect.width - 210)
-  const y = Math.max(event.clientY - bodyRect.top - 20, 6)
-  tooltipRef.value.style.transform = `translate(${x}px, ${y}px)`
-  tooltipRef.value.style.opacity = '1'
-}
-
-function hideTooltip() {
-  if (tooltipRef.value) tooltipRef.value.style.opacity = '0'
-}
-
-function nearestRow(rows, pointerX, xScale) {
-  return rows.reduce((nearest, row) => {
-    const currentDistance = Math.abs(xScale(row.index) - pointerX)
-    const nearestDistance = Math.abs(xScale(nearest.index) - pointerX)
-    return currentDistance < nearestDistance ? row : nearest
-  }, rows[0])
-}
-
-function progressSegmentBounds(band, x, stepWidth, innerWidth) {
-  const start = Math.max(0, x(band.startIndex) - stepWidth * 0.45)
-  const end = Math.min(innerWidth, x(band.endIndex) + stepWidth * 0.45)
-
+function normalizeRow(row) {
   return {
-    x: start,
-    width: Math.max(14, end - start),
+    scriptId: row['剧本编号']?.trim() || '',
+    scriptName: row['剧本名字']?.trim() || '',
+    sequence: Number(row['场次序号'] || 0),
+    sceneName: row['场次名称']?.trim() || '',
+    stage: row['所属阶段']?.trim() || '',
+    conflict: row['冲突类型']?.trim() || '',
+    performance: Number(row['表演形式密度(%)'] || 0),
+    role: Number(row['角色活跃度(%)'] || 0),
+    conflictStrength: Number(row['冲突强度(%)'] || 0),
+    relation: Number(row['关系变化强度(%)'] || 0),
+    emotion: Number(row['情绪强度(%)'] || 0),
+    overall: Number(row['综合剧情强度(%)'] || 0),
+    speed: Number(row['基准流速'] || 0.01),
+    turb: Number(row['湍流震荡值'] || 2),
+    desc: row['剧作动力学分析']?.trim() || '',
   }
 }
 
-function formatProgressLabel(band, x, stepWidth, innerWidth) {
-  const bounds = progressSegmentBounds(band, x, stepWidth, innerWidth)
-  if (bounds.width < 36) return ''
-  if (bounds.width < 58) return band.name
-  if (bounds.width < 92) return `${band.name} ${formatStageRangeText(band).replace(/^第/, '')}`
+function buildScriptsFromRows(rows) {
+  const grouped = d3.group(rows, (row) => `${row.scriptId}__${row.scriptName}`)
+  const candidates = []
 
-  return `${band.name} ${formatStageRangeText(band)}`
-}
+  for (const [key, groupRows] of grouped.entries()) {
+    const scenes = groupRows.sort((a, b) => a.sequence - b.sequence).map((row) => ({ ...row }))
+    deriveTurnStage(scenes)
+    const stageSet = new Set(scenes.map((scene) => scene.stage))
+    if (!REQUIRED_STAGES.every((stage) => stageSet.has(stage))) continue
+    if (!hasMeaningfulConflictVariation(scenes)) continue
 
-function formatStageRangeText(band) {
-  const start = Number(band.startNumber || band.startIndex + 1)
-  const end = Number(band.endNumber || band.endIndex + 1)
+    const displayScenes = selectDisplayScenes(scenes)
+    if (displayScenes.length < 5 || displayScenes.length > 8) continue
+    if (!REQUIRED_STAGES.every((stage) => new Set(displayScenes.map((scene) => scene.stage)).has(stage))) continue
 
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return band.range || ''
-  return start === end ? `第${numberToChinese(start)}场` : `第${numberToChinese(start)}-${numberToChinese(end)}场`
-}
-
-function buildRiverWaveRows(rows, keys) {
-  const samplesPerStage = 34
-  const waveRows = []
-
-  if (rows.length === 1) {
-    return [0, 1].map((x) => ({
-      x,
-      index: 0,
-      stage: rows[0].stage,
-      ...Object.fromEntries(keys.map((key) => [key, rows[0][key]])),
-    }))
+    const script = {
+      key,
+      name: scenes[0].scriptName,
+      scriptId: scenes[0].scriptId,
+      sourceSceneCount: scenes.length,
+      score: scoreScript(scenes, displayScenes),
+      meta: `京剧剧本 ${scenes[0].scriptId} / 优选五阶段剧情动力学`,
+      stages: REQUIRED_STAGES,
+      axisXLabels: displayScenes.map((scene) => scene.sceneName || `第${scene.sequence + 1}场`),
+      scenes: displayScenes.map((scene, index) => ({
+        xIdx: index,
+        label: scene.sceneName || `第${scene.sequence + 1}场`,
+        stage: scene.stage,
+        conflict: scene.conflict,
+        data: [scene.performance, scene.role, scene.conflictStrength, scene.relation, scene.emotion, scene.overall],
+        speed: Math.max(0.01, Math.min(0.18, scene.speed || 0.01)),
+        turb: Math.max(2, Math.min(150, scene.turb || 2)),
+        desc: scene.desc,
+      })),
+    }
+    candidates.push(script)
   }
 
-  for (let i = 0; i < rows.length - 1; i += 1) {
-    const current = rows[i]
-    const next = rows[i + 1]
-
-    for (let step = 0; step <= samplesPerStage; step += 1) {
-      if (i > 0 && step === 0) continue
-
-      const t = step / samplesPerStage
-      const eased = smoothStep(t)
-      const x = current.index + t
-      const stage = t < 0.5 ? current.stage : next.stage
-
-      waveRows.push({
-        x,
-        index: Math.round(x),
-        stage,
-        ...Object.fromEntries(keys.map((key) => [
-          key,
-          Number((interpolateFlowValue(current[key], next[key], eased, t, keys.indexOf(key))).toFixed(3)),
-        ])),
-      })
+  const bestByName = new Map()
+  for (const script of candidates) {
+    const current = bestByName.get(script.name)
+    if (!current || script.score > current.score) {
+      bestByName.set(script.name, script)
     }
   }
 
-  return waveRows
+  return Object.fromEntries(Array.from(bestByName.values()).map((script) => [script.key, script]))
 }
 
-function interpolateFlowValue(start, end, eased, t, keyIndex) {
-  const baseValue = start + (end - start) * eased
-  const valleyDepth = 0.58 + (keyIndex % 3) * 0.025
-  const distanceFromValley = Math.min(1, Math.abs(t - 0.5) * 2)
-  const roundedCrest = smootherStep(Math.pow(distanceFromValley, 0.82))
-  const roundDip = valleyDepth + (1 - valleyDepth) * roundedCrest
+function deriveTurnStage(scenes) {
+  const firstClimaxIndex = scenes.findIndex((scene) => scene.stage === '高潮')
+  if (firstClimaxIndex <= 0) return
+  const developmentBeforeClimax = scenes
+    .map((scene, index) => ({ scene, index }))
+    .filter((item) => item.scene.stage === '发展' && item.index < firstClimaxIndex)
+  if (developmentBeforeClimax.length < 2) return
 
-  return Math.max(0, baseValue * roundDip)
-}
-
-function smoothStep(value) {
-  return value * value * (3 - 2 * value)
-}
-
-function smootherStep(value) {
-  return value * value * value * (value * (value * 6 - 15) + 10)
-}
-
-function normalizeSceneRow(row) {
-  const sceneWithStage = text(row['事件/场次ID【阶段】'])
-
-  return {
-    scriptId: text(row['剧本id']),
-    scriptName: text(row['剧本名称']),
-    sceneName: sceneWithStage.replace(/【.*?】/g, ''),
-    stageType: sceneWithStage.match(/【(.*?)】/)?.[1] || '',
-    sequence: toNumber(row['顺序编号']),
-    performanceDensity: toNumber(row['表演形式密度']),
-    conflictStrength: toNumber(row['冲突强度']),
-    emotionStrength: toNumber(row['情绪强度']),
-    roleActivity: toNumber(row['角色活跃度']),
-    relationChanges: toNumber(row['关系变化次数']),
-    plotStrength: toNumber(row['综合剧情强度']),
-    summary: text(row['关键事件摘要']),
+  const turnItem = developmentBeforeClimax[developmentBeforeClimax.length - 1]
+  turnItem.scene.stage = '转折'
+  if (!turnItem.scene.conflict || turnItem.scene.conflict === '压抑铺垫') {
+    turnItem.scene.conflict = '转折突变'
   }
+  turnItem.scene.desc = turnItem.scene.desc.replace(/^发展阶段/, '转折阶段')
 }
 
-function normalizeStageRow(row) {
-  return {
-    scriptId: text(row['剧本id']),
-    scriptName: text(row['剧本名']),
-    stageType: text(row['阶段类型']),
-    startScene: text(row['起始事件/场次']),
-    endScene: text(row['结束事件/场次']),
-    summary: text(row['关键事件摘要']),
-    rhythm: text(row['节奏变化']),
+function hasMeaningfulConflictVariation(scenes) {
+  const stageConflict = new Map()
+  for (const stage of REQUIRED_STAGES) {
+    const stageScenes = scenes.filter((scene) => scene.stage === stage)
+    if (!stageScenes.length) return false
+    const topConflict = d3.rollups(
+      stageScenes,
+      (items) => items.length,
+      (scene) => scene.conflict,
+    ).sort((a, b) => b[1] - a[1])[0]?.[0]
+    stageConflict.set(stage, topConflict)
   }
+  return new Set(stageConflict.values()).size >= 3
 }
 
-function aggregateMetric(rows, key, mode) {
-  const values = rows.map((row) => row[key]).filter((value) => Number.isFinite(value))
-  if (!values.length) return 0
-
-  const total = values.reduce((sum, value) => sum + value, 0)
-  return mode === 'sum' ? total : total / values.length
-}
-
-function resolveSceneIndex(scenes, indexBySequence, sceneOrder, edge) {
-  if (indexBySequence.has(sceneOrder)) return indexBySequence.get(sceneOrder)
-
-  const fallbackIndex = edge === 'start'
-    ? scenes.findIndex((row) => row.sequence >= sceneOrder)
-    : findLastIndex(scenes, (row) => row.sequence <= sceneOrder)
-
-  if (fallbackIndex >= 0) return fallbackIndex
-  return edge === 'start' ? 0 : scenes.length - 1
-}
-
-function findLastIndex(items, predicate) {
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    if (predicate(items[index], index)) return index
+function selectDisplayScenes(scenes) {
+  const selected = []
+  const add = (scene) => {
+    if (scene && !selected.includes(scene)) selected.push(scene)
   }
 
-  return -1
-}
+  const byStage = (stage) => scenes.filter((scene) => scene.stage === stage)
+  const strongest = (items) => [...items].sort((a, b) => b.overall - a.overall || b.turb - a.turb)[0]
 
-function getSceneOrder(sceneName) {
-  const match = text(sceneName).match(/[第]?(.*?)[场幕]/)
-  if (!match) return 0
+  add(byStage('开端')[0])
 
-  return chineseNumberToInt(match[1])
-}
-
-function chineseNumberToInt(value) {
-  const textValue = text(value)
-  const directNumber = Number(textValue)
-  if (Number.isFinite(directNumber)) return directNumber
-
-  const digits = {
-    零: 0,
-    一: 1,
-    二: 2,
-    两: 2,
-    三: 3,
-    四: 4,
-    五: 5,
-    六: 6,
-    七: 7,
-    八: 8,
-    九: 9,
+  const development = byStage('发展')
+  if (development.length > 1) {
+    add(development[0])
+    add(strongest(development.slice(1)))
+  } else {
+    add(development[0])
   }
 
-  if (textValue === '十') return 10
-  if (textValue.includes('十')) {
-    const [tensText, onesText] = textValue.split('十')
-    const tens = tensText ? digits[tensText] || 0 : 1
-    const ones = onesText ? digits[onesText] || 0 : 0
-    return tens * 10 + ones
-  }
+  add(strongest(byStage('转折')))
 
-  return digits[textValue] || 0
+  const climaxes = byStage('高潮')
+  add(strongest(climaxes))
+  const extraClimax = climaxes
+    .filter((scene) => !selected.includes(scene))
+    .sort((a, b) => b.turb - a.turb || b.overall - a.overall)[0]
+  if (extraClimax && selected.length < 7) add(extraClimax)
+
+  add(byStage('结局').at(-1))
+
+  return selected
+    .filter(Boolean)
+    .sort((a, b) => a.sequence - b.sequence)
+    .filter((scene, index, arr) => index === 0 || scene.sequence !== arr[index - 1].sequence)
 }
 
-function numberToChinese(value) {
-  const numberValue = Number(value)
-  if (!Number.isFinite(numberValue) || numberValue <= 0) return text(value)
-
-  const digits = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九']
-  const integer = Math.floor(numberValue)
-
-  if (integer < 10) return digits[integer]
-  if (integer === 10) return '十'
-  if (integer < 20) return `十${digits[integer % 10]}`
-  if (integer < 100) {
-    const tens = Math.floor(integer / 10)
-    const ones = integer % 10
-    return `${digits[tens]}十${ones ? digits[ones] : ''}`
-  }
-
-  return String(integer)
+function scoreScript(scenes, displayScenes) {
+  const conflicts = new Set(scenes.map((scene) => scene.conflict)).size
+  const stageConflicts = new Set(displayScenes.map((scene) => `${scene.stage}:${scene.conflict}`)).size
+  const avgOverall = d3.mean(displayScenes, (scene) => scene.overall) || 0
+  const avgTurb = d3.mean(displayScenes, (scene) => scene.turb) || 0
+  const sceneCountFit = Math.max(0, 20 - Math.abs(displayScenes.length - 7) * 5)
+  const sourceCountFit = Math.max(0, 16 - Math.abs(scenes.length - 8))
+  return conflicts * 12 + stageConflicts * 9 + avgOverall * 0.65 + avgTurb * 0.22 + sceneCountFit + sourceCountFit
 }
 
-function text(value) {
-  return String(value ?? '').trim()
+function initCanvas() {
+  const canvas = canvasRef.value
+  if (!canvas) return
+  ctx = canvas.getContext('2d')
+  resizeHandler = resizeCanvas
+  window.addEventListener('resize', resizeHandler)
+  resizeCanvas()
 }
 
-function toNumber(value) {
-  const numberValue = Number(value)
-  return Number.isFinite(numberValue) ? numberValue : 0
-}
+function attachHoverEvents() {
+  const container = canvasContainerRef.value
+  const tooltip = tooltipRef.value
+  if (!container || !tooltip) return
 
-function formatValue(value) {
-  return Number(value).toLocaleString('zh-CN', {
-    maximumFractionDigits: 2,
+  container.addEventListener('mouseenter', () => {
+    isHovering.value = true
   })
+  container.addEventListener('mousemove', (event) => {
+    const rect = container.getBoundingClientRect()
+    currentMouseY = event.clientY - rect.top
+    isHovering.value = true
+  })
+  container.addEventListener('mouseleave', () => {
+    isHovering.value = false
+  })
+}
+
+function resizeCanvas() {
+  const canvas = canvasRef.value
+  const container = canvasContainerRef.value
+  if (!canvas || !container || !ctx) return
+  const rect = container.getBoundingClientRect()
+  if (!rect.width || !rect.height) return
+  const ratio = window.devicePixelRatio || 1
+  canvas.width = Math.round(rect.width * ratio)
+  canvas.height = Math.round(rect.height * ratio)
+  canvas.style.width = `${rect.width}px`
+  canvas.style.height = `${rect.height}px`
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
+}
+
+function getInterpolatedState(progress) {
+  const script = currentScript.value
+  if (!script?.scenes?.length) return currentState.value
+
+  const numScenes = script.scenes.length
+  const floatIndex = progress * (numScenes - 1)
+  const leftIdx = Math.min(Math.floor(floatIndex), numScenes - 1)
+  const rightIdx = Math.min(leftIdx + 1, numScenes - 1)
+  const t = floatIndex - leftIdx
+  const smoothT = t * t * (3 - 2 * t)
+  const leftScene = script.scenes[leftIdx]
+  const rightScene = script.scenes[rightIdx]
+  const state = {
+    data: [],
+    speed: leftScene.speed + (rightScene.speed - leftScene.speed) * smoothT,
+    turb: leftScene.turb + (rightScene.turb - leftScene.turb) * smoothT,
+    stage: t < 0.5 ? leftScene.stage : rightScene.stage,
+    conflict: t < 0.5 ? leftScene.conflict : rightScene.conflict,
+    desc: t < 0.5 ? leftScene.desc : rightScene.desc,
+    leftLabel: leftScene.label,
+    rightLabel: rightScene.label,
+  }
+
+  for (let i = 0; i < 6; i += 1) {
+    state.data.push(leftScene.data[i] + (rightScene.data[i] - leftScene.data[i]) * smoothT)
+  }
+  return state
+}
+
+function animate() {
+  if (isPlaying.value) {
+    globalProgress.value += 0.00055
+    if (globalProgress.value >= 1) {
+      globalProgress.value = 0
+      sliderValue.value = 0
+      physics.visibleRatio = 0.2
+      flowTime = 0
+      isPlaying.value = false
+      syncUIFromProgress(false)
+    } else {
+      syncUIFromProgress(false)
+    }
+  }
+
+  drawCanvas()
+  animationFrameId = requestAnimationFrame(animate)
+}
+
+function drawCanvas() {
+  const canvas = canvasRef.value
+  const container = canvasContainerRef.value
+  if (!canvas || !container || !ctx || !currentScript.value) return
+
+  const state = getInterpolatedState(globalProgress.value)
+  currentState.value = state
+  flowTime += state.speed
+
+  let targetVisibleRatio = Math.max(0.2, globalProgress.value / 0.85)
+  if (targetVisibleRatio > 1) targetVisibleRatio = 1
+  physics.visibleRatio += (targetVisibleRatio - physics.visibleRatio) * 0.15
+
+  const ratio = window.devicePixelRatio || 1
+  const rect = container.getBoundingClientRect()
+  if (canvas.width !== Math.round(rect.width * ratio) || canvas.height !== Math.round(rect.height * ratio)) {
+    resizeCanvas()
+  }
+
+  const w = canvas.width / ratio
+  const h = canvas.height / ratio
+  layout.paddingTop = h < 190 ? 34 : h < 280 ? 42 : h < 360 ? 54 : 78
+  layout.paddingBottom = h < 190 ? 22 : h < 280 ? 26 : h < 360 ? 32 : 40
+  layout.paddingLeft = w < 520 ? 34 : w < 760 ? 42 : 58
+  layout.paddingRight = w < 520 ? 16 : w < 760 ? 24 : 36
+  const graphW = Math.max(1, w - layout.paddingLeft - layout.paddingRight)
+  const graphH = Math.max(1, h - layout.paddingTop - layout.paddingBottom)
+  const baseY = h - layout.paddingBottom
+
+  ctx.fillStyle = '#FDFBF7'
+  ctx.fillRect(0, 0, w, h)
+
+  drawYAxis(w, graphH, baseY)
+  drawXAxis(w, graphW, baseY)
+  drawWaves(graphW, graphH, baseY, state)
+  drawTracker(baseY)
+  syncTooltipPosition()
+}
+
+function drawYAxis(w, graphH, baseY) {
+  ctx.textAlign = 'right'
+  ctx.textBaseline = 'middle'
+  ctx.font = '10px sans-serif'
+  ctx.lineWidth = 1
+  ;[25, 50, 75, 100].forEach((value) => {
+    const y = baseY - (value * graphH) / 100
+    ctx.strokeStyle = 'rgba(160, 82, 45, 0.05)'
+    ctx.beginPath()
+    ctx.moveTo(layout.paddingLeft, y)
+    ctx.lineTo(w - layout.paddingRight, y)
+    ctx.stroke()
+    ctx.fillStyle = '#A69482'
+    ctx.fillText(`${value}%`, layout.paddingLeft - 10, y)
+  })
+}
+
+function drawXAxis(w, graphW, baseY) {
+  const script = currentScript.value
+  const labels = script.axisXLabels
+  const numScenes = labels.length
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+
+  labels.forEach((label, index) => {
+    const ratio = index / Math.max(1, numScenes - 1)
+    if (ratio <= physics.visibleRatio + 0.05) {
+      const x = layout.paddingLeft + (ratio / physics.visibleRatio) * graphW
+      ctx.strokeStyle = 'rgba(28, 28, 28, 0.15)'
+      ctx.beginPath()
+      ctx.moveTo(x, baseY)
+      ctx.lineTo(x, baseY + 6)
+      ctx.stroke()
+
+      const isActive = Math.abs(ratio - globalProgress.value) <= 0.5 / Math.max(1, numScenes - 1)
+      ctx.fillStyle = isActive ? '#B22222' : '#998370'
+      ctx.font = isActive ? 'bold 11px sans-serif' : '10px sans-serif'
+      ctx.fillText(label, x, baseY + 14)
+    }
+  })
+
+  ctx.strokeStyle = '#D9CEBF'
+  ctx.beginPath()
+  ctx.moveTo(layout.paddingLeft, baseY)
+  ctx.lineTo(w - layout.paddingRight, baseY)
+  ctx.stroke()
+}
+
+function drawWaves(graphW, graphH, baseY, state) {
+  const script = currentScript.value
+  const numScenes = script.scenes.length
+  const currentTrackerX = layout.paddingLeft + (globalProgress.value / physics.visibleRatio) * graphW
+  trackerXCss = currentTrackerX
+
+  for (let streamIndex = 0; streamIndex < 6; streamIndex += 1) {
+    const wavePoints = []
+
+    for (let xPixel = layout.paddingLeft; xPixel <= currentTrackerX; xPixel += 1) {
+      const pixelRatio = (xPixel - layout.paddingLeft) / graphW
+      const relativeX = pixelRatio * physics.visibleRatio
+      let interpolatedValue = 0
+
+      for (let sceneIndex = 0; sceneIndex < numScenes - 1; sceneIndex += 1) {
+        const leftRatio = sceneIndex / (numScenes - 1)
+        const rightRatio = (sceneIndex + 1) / (numScenes - 1)
+        if (relativeX >= leftRatio && relativeX <= rightRatio) {
+          const t = (relativeX - leftRatio) / (rightRatio - leftRatio)
+          const smoothT = t * t * (3 - 2 * t)
+          const leftValue = script.scenes[sceneIndex].data[streamIndex]
+          const rightValue = script.scenes[sceneIndex + 1].data[streamIndex]
+          interpolatedValue = leftValue + (rightValue - leftValue) * smoothT
+          break
+        }
+      }
+
+      const waveFreq = 0.04 + state.turb * 0.0004
+      const dynamicRipple = Math.sin(xPixel * waveFreq - flowTime * 2.5 + streamIndex * 7) * (state.turb * 0.18) * (interpolatedValue / 100)
+      const finalY = Math.min(baseY, baseY - (interpolatedValue * graphH) / 100 + dynamicRipple)
+      wavePoints.push({ x: xPixel, y: finalY })
+    }
+
+    if (!wavePoints.length) continue
+    ctx.beginPath()
+    ctx.moveTo(layout.paddingLeft, baseY)
+    wavePoints.forEach((point) => ctx.lineTo(point.x, point.y))
+    ctx.lineTo(currentTrackerX, baseY)
+    ctx.closePath()
+    ctx.fillStyle = streamColorsFill[streamIndex]
+    ctx.fill()
+
+    ctx.beginPath()
+    wavePoints.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y)
+      else ctx.lineTo(point.x, point.y)
+    })
+    ctx.strokeStyle = streamColorsStroke[streamIndex]
+    ctx.lineWidth = 2.2
+    ctx.stroke()
+
+    const lastPoint = wavePoints[wavePoints.length - 1]
+    ctx.beginPath()
+    ctx.arc(lastPoint.x, lastPoint.y, 2.5, 0, Math.PI * 2)
+    ctx.fillStyle = streamColorsStroke[streamIndex]
+    ctx.fill()
+  }
+}
+
+function drawTracker(baseY) {
+  ctx.strokeStyle = isHovering.value ? 'rgba(160, 82, 45, 0.9)' : 'rgba(160, 82, 45, 0.4)'
+  ctx.lineWidth = isHovering.value ? 2.5 : 1.5
+  ctx.setLineDash(isHovering.value ? [] : [4, 4])
+  ctx.beginPath()
+  ctx.moveTo(trackerXCss, layout.paddingTop)
+  ctx.lineTo(trackerXCss, baseY)
+  ctx.stroke()
+  ctx.setLineDash([])
+}
+
+function syncTooltipPosition() {
+  const container = canvasContainerRef.value
+  const tooltip = tooltipRef.value
+  if (!container || !tooltip || !isHovering.value) return
+  const rect = container.getBoundingClientRect()
+  let leftPos = trackerXCss + 15
+  if (leftPos + 220 > rect.width) leftPos = trackerXCss - 225
+  tooltip.style.left = `${leftPos}px`
+  tooltip.style.top = `${Math.max(20, Math.min(currentMouseY - 40, rect.height - 220))}px`
+}
+
+function syncUIFromProgress(isDragging = false) {
+  currentState.value = getInterpolatedState(globalProgress.value)
+  if (!isDragging) sliderValue.value = globalProgress.value * 100
+}
+
+function switchScript(key) {
+  if (isPlaying.value) togglePlay()
+  currentScriptKey.value = key
+  currentStages.value = currentScript.value?.stages || REQUIRED_STAGES
+  globalProgress.value = 0
+  sliderValue.value = 0
+  physics.visibleRatio = 0.2
+  flowTime = 0
+  syncUIFromProgress()
+}
+
+function handleSliderChange(value) {
+  if (isPlaying.value) togglePlay()
+  globalProgress.value = Number(value) / 100
+  syncUIFromProgress(true)
+}
+
+function jumpToStage(stage) {
+  const script = currentScript.value
+  if (!script) return
+  const stageIndex = script.scenes.findIndex((scene) => scene.stage === stage)
+  if (stageIndex < 0) return
+  jumpToProgress(stageIndex / Math.max(1, script.scenes.length - 1))
+}
+
+function jumpToProgress(targetProgress) {
+  if (isPlaying.value) togglePlay()
+  globalProgress.value = targetProgress
+  sliderValue.value = targetProgress * 100
+  syncUIFromProgress()
+}
+
+function togglePlay() {
+  if (!isPlaying.value && globalProgress.value >= 1) {
+    globalProgress.value = 0
+    sliderValue.value = 0
+    physics.visibleRatio = 0.2
+  }
+  isPlaying.value = !isPlaying.value
 }
 </script>
 
 <style scoped>
-.stage-river-panel {
+.chart-one-shell {
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  padding: 0;
+  color: #4a3b32;
+  box-sizing: border-box;
+}
+
+.chart-one-shell * {
+  box-sizing: border-box;
+}
+
+.historical-bg {
+  background-color: #f8f2e9;
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAIklEQVQIW2NkQAKrVq36z8gAFWNhYGFkYMSsB8wEVwMzA5sfsjgAs44RAnE094QAAAAASUVORK5CYII=');
+}
+
+.chart-one-card {
   position: relative;
-  display: flex;
-  flex-direction: column;
   width: 100%;
   height: 100%;
   min-height: 0;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+  border: 1px solid #d9cebf;
+  border-radius: 8px;
+  padding: clamp(4px, 0.55vw, 8px);
+  background: #fdfbf7;
+  box-shadow: 0 6px 18px rgba(70, 51, 35, 0.1);
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 4px;
 }
 
-.chart-toolbar {
+.chart-one-header {
   display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  min-height: 30px;
-  padding: 0 8px 4px;
-}
-
-.chart-toolbar--teleported {
-  min-height: 0;
-  height: 0;
-  padding: 0;
-  overflow: visible;
-}
-
-.script-field {
-  display: inline-flex;
-  align-items: center;
+  justify-content: space-between;
+  align-items: flex-start;
   gap: 6px;
-  color: #6b5a4d;
-  font-size: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin-bottom: 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #d9cebf;
 }
 
-.script-field span {
+.script-select-row,
+.header-tools,
+.legend-box,
+.legend-item,
+.timeline-row {
+  display: flex;
+  align-items: center;
+}
+
+.script-select-row {
+  flex: 0 1 180px;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.script-selector {
+  width: min(118px, 58%);
+  min-width: 96px;
+  border: 1px solid #cfc0b0;
+  border-radius: 5px;
+  padding: 2px 6px;
+  background: transparent;
+  color: #b22222;
+  font-size: 12px;
   font-weight: 700;
-}
-
-.script-select {
-  width: 116px;
-  height: 24px;
-  border: 1px solid rgba(120, 84, 62, 0.28);
-  border-radius: 4px;
-  padding: 0 24px 0 8px;
-  color: #4f4036;
-  font-size: 12px;
-  background: rgba(255, 250, 242, 0.84);
   outline: none;
   cursor: pointer;
 }
 
-.script-select:focus {
-  border-color: rgba(139, 42, 37, 0.58);
-  box-shadow: 0 0 0 2px rgba(139, 42, 37, 0.1);
-}
-
-.chart-content {
-  display: flex;
-  align-items: stretch;
-  gap: 5px;
-  flex: 1;
+.script-meta {
+  border: 1px solid #d9cebf;
+  border-radius: 4px;
+  padding: 1px 5px;
+  background: #fff;
+  color: #998370;
+  font-size: 9px;
   min-width: 0;
-  min-height: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.chart-body {
-  position: relative;
+.header-tools {
   flex: 1 1 auto;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.stage-container {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 1px;
+  border: 1px solid #d9cebf;
+  border-radius: 5px;
+  padding: 1px;
+  background: #fff;
+}
+
+.stage-btn {
+  border: 0;
+  border-radius: 5px;
+  padding: 2px 4px;
+  background: #f5efe6;
+  color: #4a3b32;
+  font-size: 10px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: 0.16s ease;
+}
+
+.stage-btn.active,
+.stage-btn:hover {
+  background: #b22222;
+  color: #fff;
+}
+
+.legend-box {
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 3px 5px;
+  min-width: 0;
+  border: 1px solid #d9cebf;
+  border-radius: 6px;
+  padding: 2px 5px;
+  background: #fff;
+  box-shadow: inset 0 1px 3px rgba(70, 51, 35, 0.06);
+  font-size: 9px;
+  line-height: 1.15;
+}
+
+.legend-title {
+  margin-right: 1px;
+  color: #998370;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.legend-item {
+  white-space: nowrap;
+}
+
+.legend-item span {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+  margin-right: 2px;
+}
+
+.chart-one-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.34fr);
+  gap: 6px;
+  width: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
 
-.river-svg {
+.canvas-container {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #e6dcd3;
+  border-radius: 8px;
+  background: #fdfbf7;
+  box-shadow: inset 0 2px 10px rgba(70, 51, 35, 0.04);
+}
+
+.canvas-title {
+  position: absolute;
+  z-index: 2;
+  top: 5px;
+  left: 12px;
+  right: 8px;
+  pointer-events: none;
+}
+
+.stage-indicator {
+  color: #b22222;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-subtitle {
+  margin-top: 1px;
+  color: #a69482;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 8px;
+}
+
+.analytical-canvas {
   display: block;
   width: 100%;
   height: 100%;
+  cursor: crosshair;
 }
 
-.river-svg :deep(.grid-lines line) {
-  stroke: rgba(88, 68, 51, 0.1);
-  stroke-dasharray: 3 3;
-}
-
-.river-svg :deep(.x-axis path),
-.river-svg :deep(.y-axis path),
-.river-svg :deep(.x-axis line),
-.river-svg :deep(.y-axis line) {
-  stroke: rgba(88, 68, 51, 0.32);
-}
-
-.river-svg :deep(.x-axis text),
-.river-svg :deep(.y-axis text),
-.river-svg :deep(.axis-title),
-.river-svg :deep(.legend text) {
-  fill: #67594e;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 11px;
-}
-
-.river-svg :deep(.axis-title) {
-  font-weight: 700;
-}
-
-.river-svg :deep(.legend text) {
-  font-size: 16px;
-  font-weight: 800;
-}
-
-.river-svg :deep(.river-layer) {
-  cursor: pointer;
-  transition:
-    fill-opacity 0.14s ease,
-    stroke-width 0.14s ease;
-}
-
-.river-svg :deep(.river-current) {
-  opacity: 0.82;
-  mix-blend-mode: screen;
-}
-
-.river-svg :deep(.focus-line) {
-  stroke: rgba(73, 56, 47, 0.36);
-  stroke-width: 1;
-  stroke-dasharray: 4 3;
-}
-
-.river-svg :deep(.stage-progress__ornament) {
-  stroke: rgba(168, 77, 54, 0.28);
-  stroke-width: 1;
-  stroke-dasharray: 7 5;
-}
-
-.river-svg :deep(.stage-progress__rect) {
-  fill-opacity: 0.2;
-  stroke-opacity: 0.56;
-  stroke-width: 1;
-  filter: drop-shadow(0 1px 0 rgba(255, 248, 232, 0.72));
-}
-
-.river-svg :deep(.stage-progress__label) {
-  fill: #4b3328;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 11px;
-  font-weight: 900;
-  paint-order: stroke;
-  stroke: rgba(255, 250, 242, 0.84);
-  stroke-width: 2px;
-  stroke-linejoin: round;
-  pointer-events: none;
-}
-
-.river-svg :deep(.stage-progress__joint) {
-  fill: #c79a47;
-  opacity: 0.72;
-  stroke: rgba(255, 248, 232, 0.82);
-  stroke-width: 1;
-}
-
-.river-tooltip {
+.cursor-tooltip {
   position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 2;
-  width: 200px;
-  padding: 8px 9px;
-  border: 1px solid rgba(139, 42, 37, 0.22);
-  border-radius: 6px;
-  color: #49382f;
-  font-size: 11px;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  line-height: 1.45;
-  background: rgba(255, 250, 242, 0.96);
-  box-shadow: 0 8px 20px rgba(73, 56, 47, 0.14);
+  z-index: 5;
+  width: 190px;
+  border: 1px solid #d9cebf;
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(253, 251, 247, 0.95);
+  box-shadow: 0 10px 24px rgba(70, 51, 35, 0.16);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.12s ease;
+  backdrop-filter: blur(5px);
+  transition: opacity 0.2s ease-out;
 }
 
-.river-tooltip :deep(.river-tooltip__title) {
-  margin-bottom: 3px;
-  color: #2f4f63;
-  font-weight: 800;
+.cursor-tooltip.visible {
+  opacity: 1;
 }
 
-.river-tooltip :deep(.river-tooltip__meta) {
-  margin-bottom: 2px;
-  color: #7a6658;
-}
-
-.river-tooltip :deep(.river-tooltip__metric) {
-  margin: 5px 0 3px;
-  color: #8f2f2a;
+.tooltip-title {
+  margin-bottom: 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #e6dcd3;
+  color: #a0522d;
+  font-size: 11px;
   font-weight: 700;
 }
 
-.river-tooltip :deep(.river-tooltip__row) {
+.tooltip-list {
   display: grid;
-  grid-template-columns: 9px 1fr auto;
-  gap: 5px;
+  gap: 6px;
+}
+
+.tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.tooltip-row span {
+  display: flex;
   align-items: center;
 }
 
-.river-tooltip :deep(.river-tooltip__row span) {
+.tooltip-row i {
   width: 8px;
   height: 8px;
-  border-radius: 2px;
+  border-radius: 50%;
+  margin-right: 8px;
 }
 
-.river-tooltip :deep(.river-tooltip__row strong) {
-  font-weight: 800;
+.tooltip-row strong {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
 }
 
-.river-tooltip :deep(.river-tooltip__active) {
-  color: #8f2f2a;
+.analysis-panel {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  border: 1px solid #d9cebf;
+  border-radius: 8px;
+  padding: 6px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(70, 51, 35, 0.05);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.chart-state {
-  position: absolute;
-  inset: 34px 12px 18px;
+.analysis-panel h3 {
+  margin: 0 0 5px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e6dcd3;
+  color: #b22222;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.18;
+}
+
+.scene-readout {
+  margin-bottom: 5px;
+}
+
+.scene-readout span {
+  display: block;
+  margin-bottom: 2px;
+  color: #998370;
+  font-size: 9px;
+}
+
+.scene-readout strong {
+  display: block;
+  color: #4a3b32;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.desc-block span {
+  display: block;
+  margin-bottom: 2px;
+  color: #a0522d;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.desc-block {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.desc-block p {
+  flex: 1 1 auto;
+  height: auto;
+  margin: 0;
+  min-height: 0;
+  padding-right: 4px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  color: #5c4636;
+  font-size: 9.5px;
+  line-height: 1.34;
+  text-align: justify;
+}
+
+.timeline-row {
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  margin-top: 0;
+  border: 1px solid #d9cebf;
+  border-radius: 7px;
+  padding: 3px 8px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(70, 51, 35, 0.05);
+}
+
+.mini-play-btn {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 999px;
+  background: #a0522d;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(160, 82, 45, 0.22);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #7a6658;
-  font-size: 13px;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  background: rgba(255, 250, 242, 0.72);
+  cursor: pointer;
+  transition: background 0.16s ease;
 }
 
-.chart-state--error {
-  color: #8b2a25;
+.mini-play-btn:hover {
+  background: #8b4513;
+}
+
+.mini-play-btn svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+.play-icon {
+  margin-left: 2px;
+}
+
+.hidden {
+  display: none;
+}
+
+.progress-percent {
+  width: 40px;
+  padding-right: 4px;
+  color: #b22222;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.timeline-slider {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: #e6dcd3;
+  appearance: none;
+  cursor: pointer;
+}
+
+.timeline-slider::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #a0522d;
+  box-shadow: 0 0 6px rgba(160, 82, 45, 0.4);
+  appearance: none;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.timeline-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+}
+
+.load-state {
+  position: absolute;
+  inset: auto 20px 78px 20px;
+  border: 1px solid #d9cebf;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(253, 251, 247, 0.92);
+  color: #a0522d;
+  font-size: 13px;
+  text-align: center;
+}
+
+.load-state.error {
+  color: #b22222;
+}
+
+:global(.single-preview-panel--main-bottom) .chart-one-shell {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+}
+
+:global(.single-preview-panel--main-bottom) .chart-one-card {
+  height: 100%;
+  min-height: 0;
+  padding: clamp(6px, 0.8vw, 12px);
+  gap: clamp(4px, 0.5vw, 8px);
+}
+
+:global(.single-preview-panel--main-bottom) .chart-one-header {
+  gap: 10px;
+  padding-bottom: 6px;
+}
+
+:global(.single-preview-panel--main-bottom) .script-select-row {
+  gap: 6px;
+  min-width: 0;
+}
+
+:global(.single-preview-panel--main-bottom) .script-selector {
+  width: min(220px, 52%);
+  max-width: 220px;
+  padding: 3px 7px;
+  font-size: 14px;
+}
+
+:global(.single-preview-panel--main-bottom) .script-meta {
+  font-size: 10px;
+}
+
+:global(.single-preview-panel--main-bottom) .header-tools {
+  gap: 6px;
+}
+
+:global(.single-preview-panel--main-bottom) .stage-container {
+  padding: 2px;
+}
+
+:global(.single-preview-panel--main-bottom) .stage-btn {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+:global(.single-preview-panel--main-bottom) .legend-box {
+  gap: 4px 8px;
+  padding: 3px 7px;
+  font-size: 10px;
+}
+
+:global(.single-preview-panel--main-bottom) .chart-one-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 0.34fr);
+  gap: 8px;
+  min-height: 0;
+}
+
+:global(.single-preview-panel--main-bottom) .canvas-container {
+  height: 100%;
+  min-height: 0;
+}
+
+:global(.single-preview-panel--main-bottom) .canvas-title {
+  top: 6px;
+  left: 14px;
+}
+
+:global(.single-preview-panel--main-bottom) .stage-indicator {
+  font-size: 15px;
+}
+
+:global(.single-preview-panel--main-bottom) .canvas-subtitle {
+  margin-top: 2px;
+  font-size: 9px;
+}
+
+:global(.single-preview-panel--main-bottom) .analysis-panel {
+  min-height: 0;
+  padding: 8px;
+}
+
+:global(.single-preview-panel--main-bottom) .analysis-panel h3 {
+  margin-bottom: 6px;
+  padding-bottom: 5px;
+  font-size: 13px;
+}
+
+:global(.single-preview-panel--main-bottom) .scene-readout {
+  margin-bottom: 7px;
+}
+
+:global(.single-preview-panel--main-bottom) .scene-readout span {
+  font-size: 10px;
+}
+
+:global(.single-preview-panel--main-bottom) .scene-readout strong {
+  font-size: 13px;
+}
+
+:global(.single-preview-panel--main-bottom) .desc-block span {
+  margin-bottom: 4px;
+  font-size: 10px;
+}
+
+:global(.single-preview-panel--main-bottom) .desc-block p {
+  height: auto;
+  overflow-y: auto;
+  font-size: 11px;
+  line-height: 1.42;
+}
+
+:global(.single-preview-panel--main-bottom) .timeline-row {
+  gap: 8px;
+  padding: 4px 10px;
+}
+
+:global(.single-preview-panel--main-bottom) .mini-play-btn {
+  width: 26px;
+  height: 26px;
+}
+
+:global(.single-preview-panel--main-bottom) .mini-play-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d9cebf;
+  border-radius: 2px;
+}
+
+@media (max-width: 1100px) and (min-width: 641px) {
+  .chart-one-card {
+    padding: 4px;
+  }
+
+  .chart-one-header {
+    gap: 4px;
+    overflow: hidden;
+  }
+
+  .script-select-row {
+    flex: 0 1 118px;
+  }
+
+  .script-selector {
+    width: 100%;
+    min-width: 0;
+    font-size: 11px;
+  }
+
+  .script-meta,
+  .legend-title {
+    display: none;
+  }
+
+  .header-tools {
+    gap: 3px;
+    overflow: hidden;
+  }
+
+  .stage-btn {
+    padding: 2px 3px;
+    font-size: 9px;
+  }
+
+  .legend-box {
+    gap: 2px 4px;
+    padding: 2px 4px;
+    font-size: 8.5px;
+  }
+
+  .legend-item span {
+    width: 7px;
+    height: 7px;
+  }
+
+  .chart-one-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(140px, 0.32fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .chart-one-header,
+  .chart-one-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-one-header {
+    flex-direction: column;
+  }
+
+  .header-tools {
+    justify-content: flex-start;
+  }
+
+  .chart-one-grid {
+    display: block;
+  }
+
+  .analysis-panel {
+    min-height: 0;
+    margin-top: 16px;
+  }
 }
 </style>

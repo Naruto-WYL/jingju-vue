@@ -56,12 +56,12 @@ import * as d3 from 'd3'
 
 const ROLE_URL = '/数据表合集/1/Table1_Role_Inference.csv'
 const HEATMAP_URL = '/数据表合集/1/Table2_Trade_Vector_Patterns.csv'
-const chartWidth = 467
+const minChartWidth = 467
 const chartHeight = 470
 const chartLayout = {
   top: 28,
   right: 70,
-  bottom: 50,
+  bottom: 40,
   left: 80,
   iconRadius: 15,
   pointRadius: 3.2,
@@ -335,7 +335,7 @@ const inferenceNote = computed(() => {
     .slice(0, 3)
     .join('、')
   const modeTags = tradeMeta[trade]?.tags?.join('、') || '该行当典型特征'
-  return `推断解释：${selectedRole.value || '当前角色'}具有${base || '若干人物属性'}等特征，并在${highFeatures || '关键指标'}上接近“${trade}”候选模式，因此识别为${trade}。典型模式：${trade}通常对应${modeTags}。`
+  return `推断解释：${selectedRole.value || '当前角色'}具有${base || '若干人物属性'}等特征，并在${highFeatures || '关键指标'}上接近“${trade}”候选模式，因此识别为${trade}。\n典型模式：${trade}通常对应${modeTags}。`
 })
 
 onMounted(async () => {
@@ -420,7 +420,7 @@ function drawDotplot() {
   const svg = d3.select(svgElement)
   svg.selectAll('*').remove()
 
-  const svgWidth = chartWidth
+  const svgWidth = Math.max(minChartWidth, Math.round(svgElement.clientWidth || minChartWidth))
   const svgHeight = chartHeight
   const isCompact = true
   const margin = chartLayout
@@ -705,50 +705,56 @@ function cosineSimilarity(a, b) {
 <style scoped>
 .trade-pattern-panel {
   display: grid;
-  grid-template-rows: 81px 42px 480px 58px;
+  grid-template-rows: 56px 52px 480px 85px;
   gap: 6px;
-  width: 467px;
+  width: var(--left-top-content-width, 467px);
   height: 100%;
   min-height: 0;
 }
 
 .role-selector {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 38px 38px;
-  gap: 5px 7px;
+  grid-template-columns: minmax(120px, 1.75fr) minmax(74px, 0.75fr) minmax(104px, 0.95fr) minmax(82px, 0.7fr);
+  grid-template-rows: 56px;
+  height: 56px;
+  gap: 5px;
   align-items: end;
-  height: 81px;
 }
 
 .role-feature-summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
+  gap: 4px;
   align-items: center;
   overflow: hidden;
-  height: 42px;
+  height: 52px;
   color: #5f5147;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .summary-label {
   flex: 0 0 100%;
-  height: 17px;
+  height: 18px;
   color: #8b2a25;
+  font-size: 15px;
   font-weight: 900;
+  line-height: 18px;
   white-space: nowrap;
 }
 
 .summary-chip {
-  flex: 0 1 auto;
-  max-width: 58px;
-  padding: 1px 5px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+  height: 24px;
+  padding: 2px 5px;
   overflow: hidden;
   border: 1px solid rgba(139, 42, 37, 0.16);
   border-radius: 999px;
   background: rgba(255, 246, 229, 0.78);
+  line-height: 18px;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -765,7 +771,7 @@ function cosineSimilarity(a, b) {
 .period-field span,
 .trade-badge span {
   color: #6b5b4d;
-  font-size: 9px;
+  font-size: 15px;
   font-weight: 700;
   line-height: 1;
 }
@@ -777,13 +783,13 @@ function cosineSimilarity(a, b) {
   align-items: center;
   width: 100%;
   min-width: 0;
-  height: 24px;
+  height: 30px;
   padding: 0 7px;
   border: 1px solid rgba(111, 20, 24, 0.16);
   border-radius: 5px;
   color: #352d27;
   background: rgba(255, 252, 244, 0.78);
-  font-size: 10px;
+  font-size: 15px;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -823,7 +829,7 @@ function cosineSimilarity(a, b) {
 
 .dotplot-wrap {
   position: relative;
-  width: 467px;
+  width: var(--left-top-content-width, 467px);
   height: 480px;
   overflow: hidden;
   border: none;
@@ -883,7 +889,7 @@ function cosineSimilarity(a, b) {
 
 .trade-dotplot {
   display: block;
-  width: 477px;
+  width: 100%;
   height: 480px;
 }
 
@@ -1078,16 +1084,17 @@ function cosineSimilarity(a, b) {
 .inference-note {
   margin: 0;
   display: -webkit-box;
-  width: 467px;
-  height: 58px;
-  max-height: 58px;
-  padding: 6px 8px;
+  width: var(--left-top-content-width, 467px);
+  height: 85px;
+  max-height: 85px;
+  padding: 8px 10px;
   overflow: hidden;
   color: #5c4e43;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.45;
   overflow-wrap: anywhere;
+  white-space: pre-line;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
