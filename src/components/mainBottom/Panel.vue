@@ -2,8 +2,6 @@
   <PanelCard
     class="main-bottom-card"
     :class="{ 'main-bottom-card--river': view === 'a', 'main-bottom-card--summary': view === 'b' }"
-    :title="panelTitle"
-    eyebrow="剧情节奏分析"
   >
     <template #action>
       <div class="main-bottom-actions">
@@ -17,7 +15,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import ChartToggle from '../ChartToggle.vue'
 import PanelCard from '../PanelCard.vue'
 import ChartOne from './ChartOne.vue'
@@ -31,59 +29,14 @@ defineProps({
 })
 
 const view = ref('a')
-const panelTitle = computed(() => (view.value === 'a' ? '气韵推演' : '模式对比'))
 </script>
 
 <style scoped>
 .main-bottom-card.panel-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  isolation: isolate;
   padding: 10px 15px 11px;
-  overflow: hidden;
-  border: 1px solid rgba(143, 47, 36, 0.58);
-  border-radius: 2px;
-  background:
-    linear-gradient(180deg, rgba(255, 251, 241, 0.88), rgba(246, 235, 213, 0.76)),
-    #f7edd8;
-  box-shadow:
-    inset 0 0 0 1px rgba(198, 121, 73, 0.14),
-    0 0 0 1px rgba(255, 248, 232, 0.5);
-}
-
-.main-bottom-card.panel-card::before,
-.main-bottom-card.panel-card::after {
-  position: absolute;
-  content: "";
-  pointer-events: none;
-}
-
-.main-bottom-card.panel-card::before {
-  inset: 5px;
-  z-index: -1;
-  border: 1px solid rgba(143, 47, 36, 0.2);
-}
-
-.main-bottom-card.panel-card::after {
-  inset: 0;
-  z-index: 2;
-  background:
-    linear-gradient(#a84d36, #a84d36) left 4px top 4px / 26px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) left 4px top 4px / 1px 26px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px top 4px / 26px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px top 4px / 1px 26px no-repeat,
-    linear-gradient(#a84d36, #a84d36) left 4px bottom 4px / 26px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) left 4px bottom 4px / 1px 26px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px bottom 4px / 26px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px bottom 4px / 1px 26px no-repeat;
-  opacity: 0.72;
 }
 
 .main-bottom-card :deep(.panel-card__header) {
-  position: relative;
-  z-index: 1;
-  flex: 0 0 auto;
   align-items: flex-start;
   min-height: 30px;
   margin-bottom: 0;
@@ -98,45 +51,6 @@ const panelTitle = computed(() => (view.value === 'a' ? '气韵推演' : '模式
   padding-right: 0;
 }
 
-.main-bottom-card--river :deep(.panel-card__header > div:first-child),
-.main-bottom-card--summary :deep(.panel-card__header > div:first-child) {
-  display: none;
-}
-
-.main-bottom-card--river :deep(.panel-card__eyebrow),
-.main-bottom-card--summary :deep(.panel-card__eyebrow) {
-  display: none;
-}
-
-.main-bottom-card :deep(.panel-card__eyebrow) {
-  margin: 0 0 4px;
-  color: #7a241d;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 17px;
-  font-weight: 800;
-  line-height: 1.1;
-}
-
-.main-bottom-card :deep(h2) {
-  display: none;
-  color: #5b1e17;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 21px;
-  font-weight: 900;
-  line-height: 1.12;
-  letter-spacing: 0;
-}
-
-.main-bottom-card--river :deep(h2) {
-  grid-column: 2;
-  grid-row: 2;
-  justify-self: end;
-  font-size: 18px;
-  text-align: center;
-  white-space: nowrap;
-  transform: translateY(-4px);
-}
-
 .main-bottom-card--summary :deep(.panel-card__header) {
   display: flex;
   justify-content: flex-end;
@@ -144,20 +58,7 @@ const panelTitle = computed(() => (view.value === 'a' ? '气韵推演' : '模式
   padding-right: 0;
 }
 
-.main-bottom-card--summary :deep(h2) {
-  grid-column: 2;
-  grid-row: 2;
-  justify-self: center;
-  font-size: 18px;
-  text-align: center;
-  white-space: nowrap;
-  transform: translateY(-4px);
-}
-
 .main-bottom-card :deep(.panel-card__body) {
-  position: relative;
-  z-index: 1;
-  flex: 1 1 auto;
   height: calc(100% - 30px);
   min-height: 0;
   gap: 4px;

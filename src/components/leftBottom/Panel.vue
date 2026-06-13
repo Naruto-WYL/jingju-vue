@@ -1,5 +1,5 @@
 <template>
-  <PanelCard class="left-bottom-card" title="脸谱主题词云" eyebrow="行当意象与叙事关键词">
+  <PanelCard class="left-bottom-card">
     <template #action>
       <ChartToggle v-model="view" />
     </template>
@@ -21,76 +21,12 @@ const view = ref('a')
 
 <style scoped>
 .left-bottom-card.panel-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  isolation: isolate;
   padding: 11px 10px 9px;
-  overflow: hidden;
-  border: 1px solid rgba(143, 47, 36, 0.54);
-  border-radius: 2px;
-  background:
-    linear-gradient(180deg, rgba(255, 251, 241, 0.9), rgba(246, 235, 213, 0.78)),
-    #f7edd8;
-  box-shadow:
-    inset 0 0 0 1px rgba(198, 121, 73, 0.13),
-    0 0 0 1px rgba(255, 248, 232, 0.45);
-}
-
-.left-bottom-card.panel-card::before,
-.left-bottom-card.panel-card::after {
-  position: absolute;
-  content: "";
-  pointer-events: none;
-}
-
-.left-bottom-card.panel-card::before {
-  inset: 5px;
-  z-index: -1;
-  border: 1px solid rgba(143, 47, 36, 0.16);
-}
-
-.left-bottom-card.panel-card::after {
-  inset: 0;
-  z-index: 2;
-  background:
-    linear-gradient(#a84d36, #a84d36) left 4px top 4px / 24px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) left 4px top 4px / 1px 24px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px top 4px / 24px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px top 4px / 1px 24px no-repeat,
-    linear-gradient(#a84d36, #a84d36) left 4px bottom 4px / 24px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) left 4px bottom 4px / 1px 24px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px bottom 4px / 24px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px bottom 4px / 1px 24px no-repeat;
-  opacity: 0.7;
 }
 
 .left-bottom-card :deep(.panel-card__header) {
-  position: relative;
-  z-index: 3;
   flex: 0 0 auto;
-  min-height: 40px;
-  margin-bottom: 4px;
-  padding: 0 2px 6px;
-  border-bottom: 1px solid rgba(143, 47, 36, 0.3);
-}
-
-.left-bottom-card :deep(.panel-card__eyebrow) {
-  margin: 0 0 3px;
-  color: #7a241d;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1.1;
-}
-
-.left-bottom-card :deep(h2) {
-  color: #5b1e17;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 18px;
-  font-weight: 900;
-  line-height: 1.12;
-  letter-spacing: 0;
+  min-height: 30px;
 }
 
 .left-bottom-card :deep(.panel-card__body) {

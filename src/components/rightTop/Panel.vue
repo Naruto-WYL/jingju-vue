@@ -41,59 +41,15 @@ const panelTitle = computed(() => (view.value === 'a' ? '角色关系弧线图' 
 
 <style scoped>
 .right-top-card.panel-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  isolation: isolate;
   padding: 14px 15px 14px;
-  overflow: hidden;
-  border: 1px solid rgba(143, 47, 36, 0.58);
-  border-radius: 2px;
-  background:
-    linear-gradient(180deg, rgba(255, 251, 241, 0.88), rgba(246, 235, 213, 0.76)),
-    #f7edd8;
-  box-shadow:
-    inset 0 0 0 1px rgba(198, 121, 73, 0.14),
-    0 0 0 1px rgba(255, 248, 232, 0.5);
-}
-
-.right-top-card.panel-card::before,
-.right-top-card.panel-card::after {
-  position: absolute;
-  content: "";
-  pointer-events: none;
-}
-
-.right-top-card.panel-card::before {
-  inset: 5px;
-  z-index: -1;
-  border: 1px solid rgba(143, 47, 36, 0.2);
-}
-
-.right-top-card.panel-card::after {
-  inset: 0;
-  z-index: 2;
-  background:
-    linear-gradient(#a84d36, #a84d36) left 4px top 4px / 26px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) left 4px top 4px / 1px 26px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px top 4px / 26px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px top 4px / 1px 26px no-repeat,
-    linear-gradient(#a84d36, #a84d36) left 4px bottom 4px / 26px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) left 4px bottom 4px / 1px 26px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px bottom 4px / 26px 1px no-repeat,
-    linear-gradient(#a84d36, #a84d36) right 4px bottom 4px / 1px 26px no-repeat;
-  opacity: 0.72;
 }
 
 .right-top-card :deep(.panel-card__header) {
-  position: relative;
-  z-index: 1;
-  flex: 0 0 auto;
   align-items: flex-start;
-  min-height: 53px;
+  min-height: 48px;
   margin-bottom: 2px;
   padding: 0 2px 0px;
-  border-bottom: 1px solid rgba(143, 47, 36, 0.32);
+  border-bottom-color: rgba(143, 47, 36, 0.3);
 }
 
 .right-top-card--network :deep(.panel-card__header) {
@@ -117,20 +73,11 @@ const panelTitle = computed(() => (view.value === 'a' ? '角色关系弧线图' 
 
 .right-top-card :deep(.panel-card__eyebrow) {
   margin: 0 0 4px;
-  color: #7a241d;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 17px;
-  font-weight: 800;
-  line-height: 1.1;
+  font-size: 13px;
 }
 
 .right-top-card :deep(h2) {
-  color: #5b1e17;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 21px;
-  font-weight: 900;
-  line-height: 1.12;
-  letter-spacing: 0;
+  font-size: 18px;
 }
 
 .right-top-card--network :deep(h2) {

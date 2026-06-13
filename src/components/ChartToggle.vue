@@ -28,10 +28,11 @@ function toggle() {
   width: 74px;
   height: 26px;
   padding: 2px;
-  border: 1px solid rgba(39, 59, 88, 0.18);
+  border: 1px solid rgba(143, 47, 36, 0.48);
   border-radius: 999px;
-  color: #5d718f;
-  background: rgba(255, 255, 255, 0.58);
+  color: #7a241d;
+  background: rgba(255, 249, 237, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(255, 248, 232, 0.74);
   cursor: pointer;
 }
 
@@ -40,13 +41,15 @@ function toggle() {
   place-items: center;
   height: 20px;
   border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
+  color: #7a241d;
+  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+  font-size: 12px;
+  font-weight: 800;
   line-height: 1;
 }
 
 .chart-toggle .active {
-  color: #ffffff;
-  background: #273b58;
+  color: #fff8ed;
+  background: #8f2f24;
 }
 </style>
