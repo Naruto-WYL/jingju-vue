@@ -3,14 +3,13 @@
     class="main-bottom-card"
     :class="{ 'main-bottom-card--river': view === 'a', 'main-bottom-card--summary': view === 'b' }"
   >
-    <template #action>
-      <div class="main-bottom-actions">
-        <ChartToggle v-model="view" label-a="气韵推演" label-b="模式对比" />
-      </div>
-    </template>
+    <ChartToggle v-model="view" label-a="气韵推演" label-b="模式对比" />
 
-    <ChartOne v-if="view === 'a'" />
-    <ChartTwo v-else />
+    <div class="main-bottom-content">
+      <div class="river-rhythm-heading">多维度叙事结构演进图</div>
+      <ChartOne v-if="view === 'a'" />
+      <ChartTwo v-else />
+    </div>
   </PanelCard>
 </template>
 
@@ -59,7 +58,9 @@ const view = ref('a')
 }
 
 .main-bottom-card :deep(.panel-card__body) {
-  height: calc(100% - 30px);
+  position: relative;
+  display: block;
+  height: 100%;
   min-height: 0;
   gap: 4px;
 }
@@ -90,11 +91,31 @@ const view = ref('a')
   background: #8f2f24;
 }
 
-.main-bottom-actions {
-  position: static;
+.main-bottom-content {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding-top: 32px;
+  box-sizing: border-box;
 }
 
-.main-bottom-card--river .main-bottom-actions {
-  display: block;
+.river-rhythm-heading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 178px;
+  z-index: 3;
+  overflow: hidden;
+  color: #7a241d;
+  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
 }
 </style>

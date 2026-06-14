@@ -2,23 +2,20 @@
   <PanelCard
     class="right-top-card"
     :class="{ 'right-top-card--network': view === 'a', 'right-top-card--structure': view === 'b' }"
-    :title="panelTitle"
-    eyebrow="角色关系网络"
   >
-    <template #action>
-      <div class="right-top-actions">
-        <ChartToggle v-model="view" />
-        <div v-show="view === 'a'" id="right-top-script-select-anchor" class="right-top-script-select-anchor" />
-      </div>
-    </template>
+    <ChartToggle v-model="view" />
 
-    <ChartOne v-if="view === 'a'" :arc-relations="arcRelations" select-target="#right-top-script-select-anchor" />
-    <ChartTwo v-else :plays="plays" />
+    <div class="right-top-content">
+      <div class="right-top-heading">角色关系网络与结构特征分析</div>
+      <div v-show="view === 'a'" id="right-top-script-select-anchor" class="right-top-script-select-anchor" />
+      <ChartOne v-if="view === 'a'" :arc-relations="arcRelations" select-target="#right-top-script-select-anchor" />
+      <ChartTwo v-else :plays="plays" />
+    </div>
   </PanelCard>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import ChartToggle from '../ChartToggle.vue'
 import PanelCard from '../PanelCard.vue'
 import ChartOne from './ChartOne.vue'
@@ -36,7 +33,6 @@ defineProps({
 })
 
 const view = ref('a')
-const panelTitle = computed(() => (view.value === 'a' ? '角色关系弧线图' : '关系网络结构特征'))
 </script>
 
 <style scoped>
@@ -44,83 +40,12 @@ const panelTitle = computed(() => (view.value === 'a' ? '角色关系弧线图' 
   padding: 14px 15px 14px;
 }
 
-.right-top-card :deep(.panel-card__header) {
-  align-items: flex-start;
-  min-height: 48px;
-  margin-bottom: 2px;
-  padding: 0 2px 0px;
-  border-bottom-color: rgba(143, 47, 36, 0.3);
-}
-
-.right-top-card--network :deep(.panel-card__header) {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 1fr);
-  grid-template-rows: 20px 24px;
-  column-gap: 4px;
-  align-items: center;
-  padding-right: 0;
-}
-
-.right-top-card--network :deep(.panel-card__header > div:first-child) {
-  display: contents;
-}
-
-.right-top-card--network :deep(.panel-card__eyebrow) {
-  grid-column: 1 / 3;
-  grid-row: 1;
-  justify-self: start;
-}
-
-.right-top-card :deep(.panel-card__eyebrow) {
-  margin: 0 0 4px;
-  font-size: 13px;
-}
-
-.right-top-card :deep(h2) {
-  font-size: 18px;
-}
-
-.right-top-card--network :deep(h2) {
-  grid-column: 2;
-  grid-row: 2;
-  justify-self: end;
-  font-size: 18px;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.right-top-card--structure :deep(.panel-card__header) {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  grid-template-rows: 20px 24px;
-  align-items: center;
-  padding-right: 0;
-}
-
-.right-top-card--structure :deep(.panel-card__header > div:first-child) {
-  display: contents;
-}
-
-.right-top-card--structure :deep(.panel-card__eyebrow) {
-  grid-column: 1 / 3;
-  grid-row: 1;
-  justify-self: start;
-}
-
-.right-top-card--structure :deep(h2) {
-  grid-column: 2;
-  grid-row: 2;
-  justify-self: center;
-  font-size: 18px;
-  text-align: center;
-  white-space: nowrap;
-}
-
 .right-top-card :deep(.panel-card__body) {
   position: relative;
   z-index: 1;
+  display: block;
   flex: 1 1 auto;
-  height: auto;
+  height: 100%;
   min-height: 0;
   gap: 4px;
 }
@@ -151,24 +76,46 @@ const panelTitle = computed(() => (view.value === 'a' ? '角色关系弧线图' 
   background: #8f2f24;
 }
 
-.right-top-actions {
-  position: static;
+.right-top-content {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding-top: 32px;
+  box-sizing: border-box;
 }
 
-.right-top-card--network .right-top-actions {
-  display: contents;
+.right-top-card--network .right-top-content {
+  padding-top: 58px;
+}
+
+.right-top-heading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 84px;
+  z-index: 3;
+  overflow: hidden;
+  color: #7a241d;
+  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .right-top-script-select-anchor {
+  position: absolute;
+  top: 30px;
+  left: 50%;
   z-index: 3;
   width: clamp(140px, 42%, 190px);
   height: 22px;
-}
-
-.right-top-card--network .right-top-script-select-anchor {
-  grid-column: 3;
-  grid-row: 2;
-  justify-self: start;
+  transform: translateX(-50%);
 }
 
 .right-top-card--network :deep(.script-select) {

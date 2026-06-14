@@ -1,11 +1,12 @@
 <template>
-  <PanelCard class="right-bottom-card" title="核心主题分析" eyebrow="核心主题、剧本组合与共现强度">
-    <template #action>
-      <ChartToggle v-model="view" />
-    </template>
+  <PanelCard class="right-bottom-card">
+    <ChartToggle v-model="view" />
 
-    <ThemeRingChartOne v-if="view === 'a'" />
-    <ThemeRingChartTwo v-else />
+    <div class="right-bottom-content">
+      <div class="right-bottom-heading">核心主题、剧本组合与共现强度</div>
+      <ThemeRingChartOne v-if="view === 'a'" />
+      <ThemeRingChartTwo v-else />
+    </div>
   </PanelCard>
 </template>
 
@@ -31,30 +32,19 @@ const view = ref('a')
   padding: 14px 10px 10px;
 }
 
-.right-bottom-card :deep(.panel-card__header) {
-  align-items: flex-start;
-  min-height: 42px;
-  margin-bottom: 6px;
-  padding: 0 2px 7px;
-  border-bottom-color: rgba(143, 47, 36, 0.3);
-}
-
-.right-bottom-card :deep(.panel-card__eyebrow) {
-  margin: 0 0 4px;
-  font-size: 13px;
-}
-
-.right-bottom-card :deep(h2) {
-  font-size: 18px;
-}
-
 .right-bottom-card :deep(.panel-card__body) {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
   gap: 4px;
 }
 
 .right-bottom-card :deep(.chart-toggle) {
-  position: relative;
+  position: absolute;
+  top: 0;
+  right: 0;
   z-index: 4;
   width: 78px;
   height: 28px;
@@ -75,5 +65,33 @@ const view = ref('a')
 .right-bottom-card :deep(.chart-toggle .active) {
   color: #fff8ed;
   background: #8f2f24;
+}
+
+.right-bottom-content {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding-top: 32px;
+  box-sizing: border-box;
+}
+
+.right-bottom-heading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 84px;
+  z-index: 3;
+  overflow: hidden;
+  color: #7a241d;
+  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
 }
 </style>
