@@ -53,6 +53,17 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as d3 from 'd3'
+import {
+  findCharacterById,
+  findPlayById,
+  findPlayByTitle,
+  linkageState,
+  loadLinkageData,
+  selectCharacter,
+  selectTrade,
+  STANDARD_TRADES,
+  standardizeTrade,
+} from '../../services/linkageStore'
 
 const ROLE_URL = '/数据表合集/1/Table1_Role_Inference.csv'
 const HEATMAP_URL = '/数据表合集/1/Table2_Trade_Vector_Patterns.csv'
@@ -229,6 +240,7 @@ defineProps({
 })
 
 let resizeObserver = null
+let syncingFromLinkage = false
 
 const scripts = computed(() => unique(roleRows.value.map((row) => row.script_name)).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN')))
 
@@ -248,7 +260,11 @@ const currentTradeName = computed(() => cleanTradeName(currentTrade.value))
 const isInferredTrade = computed(() => currentTrade.value.includes('推断'))
 const isKnownTrade = computed(() => currentTrade.value.includes('已知'))
 
-const tradeNames = computed(() => heatmapRows.value.map((row) => row.clean_trade).filter(Boolean))
+const tradeNames = computed(() => {
+  const available = new Set(heatmapRows.value.map((row) => row.clean_trade).filter(Boolean))
+  const ordered = STANDARD_TRADES.filter((trade) => available.has(trade))
+  return ordered.length ? ordered : heatmapRows.value.map((row) => row.clean_trade).filter(Boolean)
+})
 
 const metrics = computed(() => {
   const firstRow = heatmapRows.value[0]
@@ -353,7 +369,10 @@ onBeforeUnmount(() => {
 })
 
 watch(scripts, (nextScripts) => {
-  if (!selectedScript.value && nextScripts.length) selectedScript.value = nextScripts[0]
+  if (!selectedScript.value && nextScripts.length) {
+    const play = findPlayById(linkageState.selectedPlayId)
+    selectedScript.value = play?.title && nextScripts.includes(play.title) ? play.title : nextScripts[0]
+  }
 })
 
 watch(roles, (nextRoles) => {
@@ -367,11 +386,27 @@ watch([dotplotPoints, currentTradeName, tradeScores], async () => {
   drawDotplot()
 })
 
+watch(
+  () => [linkageState.selectedPlayId, linkageState.selectedCharacterId, linkageState.selectedTrade],
+  () => {
+    syncFromLinkage()
+  },
+)
+
 async function loadData() {
   loading.value = true
   errorMessage.value = ''
 
   try {
+    const linkageData = await loadLinkageData()
+    if (linkageData.roleRows?.length) {
+      roleRows.value = linkageData.roleRows.map(normalizeLinkageRoleRow)
+      const standardHeatmapRows = await d3.csv(encodeURI(HEATMAP_URL), normalizeHeatmapRow).catch(() => [])
+      heatmapRows.value = standardHeatmapRows.length ? standardHeatmapRows : buildHeatmapRowsFromRoles(roleRows.value)
+      syncFromLinkage()
+      return
+    }
+
     const [roleData, heatmapData] = await Promise.all([
       d3.csv(encodeURI(ROLE_URL), normalizeRoleRow),
       d3.csv(encodeURI(HEATMAP_URL), normalizeHeatmapRow),
@@ -387,6 +422,8 @@ async function loadData() {
 
 function normalizeRoleRow(row) {
   return {
+    play_id: text(csvValue(row, 'play_id')),
+    character_id: text(csvValue(row, 'character_id')),
     script_id: text(csvValue(row, 'script_id')),
     script_name: text(csvValue(row, 'script_name')),
     historical_period: text(csvValue(row, 'historical_period')),
@@ -406,11 +443,160 @@ function normalizeRoleRow(row) {
     fight_ratio: Number(csvValue(row, 'fight_ratio')) || 0,
     cry_ratio: Number(csvValue(row, 'cry_ratio')) || 0,
     laugh_ratio: Number(csvValue(row, 'laugh_ratio')) || 0,
+    primary_scene_id: text(csvValue(row, 'primary_scene_id')),
+    linked_theme_ids: text(csvValue(row, 'linked_theme_ids')),
   }
 }
 
 function normalizeHeatmapRow(row) {
   return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, key === 'clean_trade' ? text(value) : Number(value) || 0]))
+}
+
+function normalizeLinkageRoleRow(row) {
+  const rawTrade = text(row.trade)
+  const trade = text(row.standard_trade) || standardizeTrade(rawTrade)
+  const majorTrade = majorTradeFromStandard(trade)
+  const themeIds = parseThemeIds(row.linked_theme_ids)
+
+  return {
+    play_id: text(row.play_id),
+    character_id: text(row.character_id),
+    script_id: text(row.play_id),
+    script_name: text(row.script_name),
+    historical_period: '传统京剧',
+    role_name: text(row.role_name),
+    trade,
+    source_trade: rawTrade,
+    sex: inferSex(majorTrade || trade),
+    age: inferAge(trade),
+    identity: inferIdentity(trade),
+    character_label: text(row.character_type),
+    ...profileMetrics(trade, majorTrade),
+    score_zhongyi: hasAny(themeIds, ['theme_loyalty', 'theme_chivalry']) ? 1 : 0.25,
+    score_zhimou: hasAny(themeIds, ['theme_power', 'theme_trial']) ? 1 : 0.18,
+    score_yongwu: hasAny(themeIds, ['theme_war', 'theme_chivalry']) ? 1 : 0.2,
+    score_jiaozha: hasAny(themeIds, ['theme_power', 'theme_trial']) && majorTrade !== '生' ? 0.72 : 0.12,
+    score_baozao: hasAny(themeIds, ['theme_war', 'theme_chivalry']) && majorTrade === '净' ? 0.78 : 0.18,
+    appear_ratio: Number(row.appearance_ratio) || 0,
+    sing_ratio: Number(row.lyric_density) || 0,
+    fight_ratio: Number(row.action_intensity) || 0,
+    cry_ratio: Number(row.emotion_intensity) || 0,
+    laugh_ratio: majorTrade === '丑' ? Math.max(0.65, Number(row.relation_strength) || 0) : Number(row.relation_strength) || 0,
+    centrality: Number(row.centrality) || 0,
+    role_level: text(row.role_level),
+    network_rank: Number(row.network_rank) || 999,
+    primary_scene_id: text(row.primary_scene_id),
+    linked_theme_ids: themeIds.join('|'),
+  }
+}
+
+function buildHeatmapRowsFromRoles(rows) {
+  const numericMetrics = [
+    'male_ratio',
+    'female_ratio',
+    'youth_ratio',
+    'middle_age_ratio',
+    'old_age_ratio',
+    'scholar_ratio',
+    'general_ratio',
+    'official_ratio',
+    'servant_ratio',
+    'commoner_ratio',
+    'maid_ratio',
+    'score_zhongyi',
+    'score_zhimou',
+    'score_yongwu',
+    'score_jiaozha',
+    'score_baozao',
+    'appear_ratio',
+    'sing_ratio',
+    'fight_ratio',
+    'cry_ratio',
+    'laugh_ratio',
+  ]
+  const grouped = d3.group(rows, (row) => standardizeTrade(row.trade))
+
+  return STANDARD_TRADES.map((trade) => {
+    const items = grouped.get(trade) || []
+    const aggregate = { clean_trade: trade, ...profileMetrics(trade, majorTradeFromStandard(trade)) }
+    numericMetrics.forEach((metric) => {
+      aggregate[metric] = items.length ? d3.mean(items, (item) => getRoleMetricValue(item, metric)) || 0 : aggregate[metric] || 0
+    })
+    return aggregate
+  })
+}
+
+function syncFromLinkage() {
+  if (!roleRows.value.length) return
+  const play = findPlayById(linkageState.selectedPlayId)
+  const character = linkageState.selectedCharacterId ? findCharacterById(linkageState.selectedCharacterId) : null
+  const scriptName = play?.title
+
+  syncingFromLinkage = true
+
+  if (scriptName && scripts.value.includes(scriptName)) {
+    selectedScript.value = scriptName
+  }
+
+  const rows = scriptName ? roleRows.value.filter((row) => row.script_name === scriptName) : currentScriptRows.value
+  const roleByCharacter = character ? rows.find((row) => row.character_id === character.character_id) : null
+  const roleByTrade = linkageState.selectedTrade ? representativeRoleForTrade(rows, linkageState.selectedTrade, play) : null
+  const nextRole = roleByCharacter?.role_name || roleByTrade?.role_name || selectedRole.value || rows[0]?.role_name || ''
+
+  if (nextRole) selectedRole.value = nextRole
+
+  nextTick(() => {
+    syncingFromLinkage = false
+  })
+}
+
+function handleTradePick(trade) {
+  const play = findPlayByTitle(selectedScript.value)
+  if (!play || !trade) return
+
+  const pickedTrade = standardizeTrade(trade)
+  const currentRole = selectedRoleRow.value
+  const roleInPickedTrade =
+    currentRole && currentRole.character_id && standardizeTrade(currentRole.trade) === pickedTrade
+      ? currentRole
+      : representativeRoleForTrade(currentScriptRows.value, pickedTrade, play)
+
+  if (roleInPickedTrade?.character_id) {
+    selectedRole.value = roleInPickedTrade.role_name
+    selectCharacter(roleInPickedTrade.character_id, 'leftTopIcon')
+    return
+  }
+
+  selectTrade(play.play_id, pickedTrade, 'leftTopIcon')
+}
+
+function representativeRoleForTrade(rows, trade, play) {
+  const pickedTrade = standardizeTrade(trade)
+  const roleByCharacterId = new Map(rows.filter((row) => row.character_id).map((row) => [row.character_id, row]))
+  const rankedCharacter = (play?.characters || [])
+    .filter((character) => standardizeTrade(character.standard_trade || character.trade) === pickedTrade)
+    .slice()
+    .sort((a, b) => {
+      return (
+        Number(b.importance || 0) - Number(a.importance || 0) ||
+        Number(a.network_rank || 999) - Number(b.network_rank || 999) ||
+        Number(a.role_order || 999) - Number(b.role_order || 999)
+      )
+    })
+    .find((character) => roleByCharacterId.has(character.character_id))
+
+  if (rankedCharacter) return roleByCharacterId.get(rankedCharacter.character_id)
+
+  return rows
+    .filter((row) => row.character_id && standardizeTrade(row.trade) === pickedTrade)
+    .slice()
+    .sort((a, b) => {
+      return (
+        Number(b.centrality || 0) - Number(a.centrality || 0) ||
+        Number(a.network_rank || 999) - Number(b.network_rank || 999) ||
+        a.role_name.localeCompare(b.role_name, 'zh-Hans-CN')
+      )
+    })[0]
 }
 
 function drawDotplot() {
@@ -444,6 +630,7 @@ function drawDotplot() {
   const scoreBarWidth = 30
   const headerY = margin.top - 2
   const groupY = margin.top - 22
+  const rowHeight = Math.max(24, Math.min(36, plotHeight / Math.max(tradeNames.value.length, 1) * 0.82))
   
   const axisGroupY = margin.top + plotHeight + 16
 
@@ -487,6 +674,29 @@ function drawDotplot() {
 
   svg
     .append('g')
+    .attr('class', 'trade-row-hit-areas')
+    .selectAll('rect')
+    .data(tradeNames.value)
+    .join('rect')
+    .attr('class', (trade) => (trade === currentTradeName.value ? 'is-active' : 'is-muted'))
+    .attr('x', margin.left - 70)
+    .attr('y', (trade) => y(trade) - rowHeight / 2)
+    .attr('width', plotWidth + 128)
+    .attr('height', rowHeight)
+    .attr('rx', rowHeight / 2)
+    .on('mouseenter', (event, trade) => {
+      hoveredTrade.value = trade
+    })
+    .on('mouseleave', () => {
+      hoveredTrade.value = ''
+    })
+    .on('click', (event, trade) => {
+      event.stopPropagation()
+      handleTradePick(trade)
+    })
+
+  svg
+    .append('g')
     .attr('class', 'active-row-bg')
     .selectAll('rect')
     .data(tradeNames.value.filter((trade) => trade === currentTradeName.value))
@@ -523,6 +733,10 @@ function drawDotplot() {
     .on('mouseleave', () => {
       hoveredTrade.value = ''
     })
+    .on('click', (event, trade) => {
+      event.stopPropagation()
+      handleTradePick(trade)
+    })
 
   icon.append('circle').attr('r', iconRadius)
   icon
@@ -554,6 +768,17 @@ function drawDotplot() {
     .attr('fill-opacity', (d) => (d.isActive ? 0.96 : 0.36))
     .attr('stroke', (d) => (d.isActive ? '#4a1f1a' : 'rgba(72, 49, 37, 0.25)'))
     .attr('stroke-width', (d) => (d.isActive ? 1.15 : 0.5))
+    .style('cursor', 'pointer')
+    .on('mouseenter', (event, d) => {
+      hoveredTrade.value = d.trade
+    })
+    .on('mouseleave', () => {
+      hoveredTrade.value = ''
+    })
+    .on('click', (event, d) => {
+      event.stopPropagation()
+      handleTradePick(d.trade)
+    })
     .append('title')
     .text((d) => `${d.trade} - ${d.metricLabel}: ${d.valueLabel}`)
 
@@ -565,6 +790,17 @@ function drawDotplot() {
     .join('g')
     .attr('class', (d) => (d.trade === currentTradeName.value ? 'is-active' : 'is-muted'))
     .attr('transform', (d) => `translate(${scoreX},${y(d.trade)})`)
+    .style('cursor', 'pointer')
+    .on('mouseenter', (event, d) => {
+      hoveredTrade.value = d.trade
+    })
+    .on('mouseleave', () => {
+      hoveredTrade.value = ''
+    })
+    .on('click', (event, d) => {
+      event.stopPropagation()
+      handleTradePick(d.trade)
+    })
 
   scoreRows.append('line').attr('x1', 0).attr('x2', scoreBarWidth).attr('y1', 0).attr('y2', 0)
   scoreRows
@@ -618,7 +854,7 @@ function drawDotplot() {
 }
 
 function getTradeIconUrl(trade) {
-  return `/HD-svg/${encodeURIComponent(trade)}.png`
+  return `/HD-svg/${encodeURIComponent(standardizeTrade(trade))}.png`
 }
 
 function unique(values) {
@@ -641,6 +877,107 @@ function cleanListLike(value) {
     .replace(/\s*,\s*/g, '｜')
 }
 
+function parseThemeIds(value) {
+  if (Array.isArray(value)) return value.map(text).filter(Boolean)
+  return text(value)
+    .split(/[|,，、\s]+/)
+    .map(text)
+    .filter(Boolean)
+}
+
+function hasAny(values, candidates) {
+  const valueSet = new Set(values)
+  return candidates.some((candidate) => valueSet.has(candidate))
+}
+
+function majorTradeFromStandard(trade) {
+  const standard = standardizeTrade(trade)
+  if (['旦', '正旦', '青衣', '花旦', '老旦'].includes(standard)) return '旦'
+  if (['老生', '小生', '武生', '末', '外', '武将'].includes(standard)) return '生'
+  if (standard === '净') return '净'
+  if (standard === '丑') return '丑'
+  return standard
+}
+
+function inferSex(trade) {
+  const standard = standardizeTrade(trade)
+  return ['旦', '正旦', '青衣', '花旦', '老旦'].includes(standard) ? '女性' : '男性'
+  return text(trade).includes('旦') ? '女性' : '男性'
+}
+
+function inferAge(trade) {
+  const standard = standardizeTrade(trade)
+  if (['小生', '花旦'].includes(standard)) return '青年'
+  if (['老生', '老旦', '外'].includes(standard)) return '老年'
+  return '中年'
+  const value = text(trade)
+  if (value.includes('娃娃')) return '少年'
+  if (value.includes('小生') || value.includes('花旦')) return '青年'
+  if (value.includes('老')) return '老年'
+  return '中年'
+}
+
+function inferIdentity(trade) {
+  const standard = standardizeTrade(trade)
+  const map = {
+    老生: '君臣',
+    丑: '市井',
+    武生: '武职',
+    小生: '书生',
+    净: '权臣',
+    旦: '女性',
+    外: '长辈',
+    正旦: '女性',
+    末: '辅助',
+    武将: '武职',
+    老旦: '长辈',
+    花旦: '女性',
+    青衣: '女性',
+  }
+  return map[standard] || '人物'
+  const value = text(trade)
+  if (value.includes('小生')) return '书生'
+  if (value.includes('净')) return '权臣'
+  if (value.includes('丑')) return '市井'
+  if (value.includes('老旦')) return '长辈'
+  if (value.includes('旦')) return '女性'
+  if (value.includes('老生')) return '君臣'
+  return '人物'
+}
+
+function profileMetrics(trade, majorTrade) {
+  const standard = standardizeTrade(trade)
+  const standardMajor = majorTradeFromStandard(standard)
+  return {
+    male_ratio: standardMajor === '旦' ? 0 : 1,
+    female_ratio: standardMajor === '旦' ? 1 : 0,
+    youth_ratio: ['小生', '花旦'].includes(standard) ? 1 : 0,
+    middle_age_ratio: ['老生', '老旦', '外'].includes(standard) ? 0 : 0.7,
+    old_age_ratio: ['老生', '老旦', '外'].includes(standard) ? 1 : 0,
+    scholar_ratio: standard === '小生' ? 1 : 0.12,
+    general_ratio: ['武生', '武将', '净'].includes(standard) ? 0.9 : 0.12,
+    official_ratio: ['老生', '净', '外'].includes(standard) ? 0.82 : 0.18,
+    servant_ratio: standard === '丑' || standard === '末' ? 0.55 : 0.08,
+    commoner_ratio: standard === '丑' ? 0.78 : 0.22,
+    maid_ratio: ['旦', '正旦', '青衣', '花旦'].includes(standard) ? 0.32 : 0,
+  }
+  const value = text(trade)
+  const major = text(majorTrade)
+  return {
+    male_ratio: major === '旦' ? 0 : 1,
+    female_ratio: major === '旦' ? 1 : 0,
+    youth_ratio: value.includes('小生') || value.includes('花旦') || value.includes('娃娃') ? 1 : 0,
+    middle_age_ratio: value.includes('老') || value.includes('娃娃') ? 0 : 0.7,
+    old_age_ratio: value.includes('老') ? 1 : 0,
+    scholar_ratio: value.includes('小生') ? 1 : 0.15,
+    general_ratio: major === '净' || value.includes('生') ? 0.55 : 0.1,
+    official_ratio: major === '净' || value.includes('老生') ? 0.82 : 0.18,
+    servant_ratio: major === '丑' ? 0.5 : 0.1,
+    commoner_ratio: major === '丑' ? 0.75 : 0.22,
+    maid_ratio: value.includes('旦') ? 0.28 : 0,
+  }
+}
+
 function csvValue(row, key) {
   if (key in row) return row[key]
   const matchedKey = Object.keys(row).find((rowKey) => rowKey.replace(/^\uFEFF/, '') === key)
@@ -648,11 +985,17 @@ function csvValue(row, key) {
 }
 
 function cleanTradeName(value) {
+  return standardizeTrade(text(value).replace(/[（(].*?[）)]/g, ''))
   return text(value).replace(/[（(].*?[）)]/g, '')
 }
 
 function getRoleMetricValue(role, metric) {
   if (!role) return 0
+
+  if (role[metric] !== undefined && role[metric] !== '') {
+    const directValue = Number(role[metric])
+    if (Number.isFinite(directValue)) return directValue
+  }
 
   const sex = text(role.sex)
   const age = text(role.age)
@@ -710,6 +1053,7 @@ function cosineSimilarity(a, b) {
   width: var(--left-top-content-width, 467px);
   height: 100%;
   min-height: 0;
+  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
 }
 
 .role-selector {
@@ -893,10 +1237,25 @@ function cosineSimilarity(a, b) {
   height: 480px;
 }
 
+.trade-dotplot :deep(text) {
+  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+}
+
 .trade-dotplot :deep(.active-row-bg rect) {
   fill: rgba(145, 45, 38, 0.11);
   stroke: rgba(145, 45, 38, 0.42);
   stroke-width: 1;
+  pointer-events: none;
+}
+
+.trade-dotplot :deep(.trade-row-hit-areas rect) {
+  fill: transparent;
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.trade-dotplot :deep(.trade-row-hit-areas rect:hover) {
+  fill: rgba(145, 45, 38, 0.06);
 }
 
 .trade-dotplot :deep(.feature-groups rect) {
@@ -918,12 +1277,14 @@ function cosineSimilarity(a, b) {
   stroke: rgba(42, 40, 36, 0.34);
   stroke-width: 1.2;
   stroke-linecap: round;
+  pointer-events: none;
 }
 
 .trade-dotplot :deep(.track-lines line.is-active) {
   stroke: #8b2a25;
   stroke-width: 3;
   stroke-linecap: round;
+  pointer-events: none;
 }
 
 .trade-dotplot :deep(.trade-icons g) {

@@ -12,7 +12,14 @@
       </button>
     </div>
 
-    <svg ref="svgRef" class="vertical-pattern-svg" role="img" aria-label="角色行当时期对应模式竖向图" />
+    <div class="vertical-pattern-canvas">
+      <svg ref="svgRef" class="vertical-pattern-svg" role="img" aria-label="角色行当时期对应模式竖向图" />
+      <div class="zoom-controls" aria-label="图形缩放">
+        <button type="button" title="放大" @click="zoomBy(1.18)">+</button>
+        <button type="button" title="缩小" @click="zoomBy(1 / 1.18)">-</button>
+        <button type="button" title="重置" @click="resetZoom">1:1</button>
+      </div>
+    </div>
 
     <section class="context-panel">
       <strong>{{ currentContext.title }}</strong>
@@ -1131,13 +1138,13 @@ const roleProfiles = {
 }
 
 const W = 467
-const H = 600
-const NODE_H = 8
+const H = 575
+const NODE_H = 9
 const PERIOD_Y = 28
 const IDENTITY_Y = 200
 const ROLE_Y = 352
 const MATRIX_TOP = 404
-const MATRIX_BOTTOM = 590
+const MATRIX_BOTTOM = 565
 const allPeriods = ['神话传说', '春秋战国', '秦汉', '三国', '晋朝', '隋唐五代', '宋朝', '元朝', '明朝', '清朝']
 const periodTabs = [
   { value: 'all', label: '全局纵览' },
@@ -1212,7 +1219,9 @@ const wrapRef = ref(null)
 const activePeriod = ref('all')
 const currentContext = computed(() => contextData[activePeriod.value] || contextData.all)
 const tooltip = reactive({ visible: false, x: 0, y: 0, title: '', value: '' })
+const zoomTransform = ref(d3.zoomIdentity)
 let resizeObserver = null
+let zoomBehavior = null
 
 onMounted(async () => {
   await nextTick()
@@ -1223,6 +1232,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
+  if (svgRef.value) d3.select(svgRef.value).on('.zoom', null)
 })
 
 function draw() {
@@ -1231,19 +1241,62 @@ function draw() {
   const svg = d3.select(svgRef.value)
   svg.selectAll('*').remove()
   svg.attr('viewBox', `0 0 ${W} ${H}`).attr('preserveAspectRatio', 'xMidYMid meet')
+  const zoomLayer = svg.append('g').attr('class', 'zoom-layer')
 
   const nodes = buildNodes()
   const links = rawLinks.map((link, index) => ({ ...link, id: `link-${index}` }))
-  const valueScale = d3.scaleSqrt().domain([1, d3.max(links, (d) => d.value) || 1]).range([0.45, 12])
+  const valueScale = d3.scaleSqrt().domain([1, d3.max(links, (d) => d.value) || 1]).range([0.6, 13])
 
-  drawLinks(svg, links, nodes, valueScale)
-  drawNodes(svg, nodes)
-  drawMatrix(svg)
+  drawLinks(zoomLayer, links, nodes, valueScale)
+  drawNodes(zoomLayer, nodes)
+  drawMatrix(zoomLayer)
+  setupZoom(svg, zoomLayer)
 }
 
 function setPeriod(period) {
   activePeriod.value = period
   nextTick(draw)
+}
+
+function setupZoom(svg, zoomLayer) {
+  zoomBehavior = d3
+    .zoom()
+    .scaleExtent([0.65, 4])
+    .translateExtent([
+      [-90, -80],
+      [W + 90, H + 80],
+    ])
+    .extent([
+      [0, 0],
+      [W, H],
+    ])
+    .filter((event) => {
+      if (event.type === 'dblclick') return false
+      return !event.button
+    })
+    .on('zoom', (event) => {
+      zoomTransform.value = event.transform
+      zoomLayer.attr('transform', event.transform)
+    })
+
+  svg.call(zoomBehavior)
+  svg.call(zoomBehavior.transform, zoomTransform.value)
+}
+
+function zoomBy(factor) {
+  if (!svgRef.value || !zoomBehavior) return
+  d3.select(svgRef.value)
+    .transition()
+    .duration(160)
+    .call(zoomBehavior.scaleBy, factor)
+}
+
+function resetZoom() {
+  if (!svgRef.value || !zoomBehavior) return
+  d3.select(svgRef.value)
+    .transition()
+    .duration(180)
+    .call(zoomBehavior.transform, d3.zoomIdentity)
 }
 
 function buildNodes() {
@@ -1258,9 +1311,9 @@ function buildNodes() {
   })
 
   return new Map([
-    ...layoutRow(periods, PERIOD_Y, 8, W - 8, sums),
-    ...layoutRow(identities, IDENTITY_Y, 6, W - 6, sums),
-    ...layoutRow(roles, ROLE_Y, 7, W - 7, sums),
+    ...layoutRow(periods, PERIOD_Y, 3, W - 3, sums),
+    ...layoutRow(identities, IDENTITY_Y, 3, W - 3, sums),
+    ...layoutRow(roles, ROLE_Y, 3, W - 3, sums),
   ].map((node) => [node.name, node]))
 }
 
@@ -1287,14 +1340,14 @@ function drawLinks(svg, links, nodes, valueScale) {
     .attr('d', (link) => linkPath(nodes.get(link.source), nodes.get(link.target)))
     .attr('stroke', (link) => linkColor(link))
     .attr('stroke-width', (link) => valueScale(link.value))
-    .attr('stroke-opacity', (link) => isLinkVisible(link) ? 0.34 : 0.035)
+    .attr('stroke-opacity', (link) => isLinkVisible(link) ? 0.46 : 0.055)
     .on('mouseenter', function (event, link) {
       d3.select(this).raise().attr('stroke-opacity', 0.86).attr('stroke-width', Math.max(2.4, valueScale(link.value) + 1.2))
       showTooltip(event, `${link.source} → ${link.target}`, `样本数：${link.value}`)
     })
     .on('mousemove', moveTooltip)
     .on('mouseleave', function (event, link) {
-      d3.select(this).attr('stroke-opacity', isLinkVisible(link) ? 0.34 : 0.035).attr('stroke-width', valueScale(link.value))
+      d3.select(this).attr('stroke-opacity', isLinkVisible(link) ? 0.46 : 0.055).attr('stroke-width', valueScale(link.value))
       hideTooltip()
     })
 }
@@ -1322,7 +1375,7 @@ function linkPath(source, target) {
 
 function linkColor(link) {
   const baseName = allPeriods.includes(link.source) ? link.target : link.source
-  return d3.interpolateRgb(colors[baseName] || '#8f8a7c', '#fff')(0.36)
+  return d3.interpolateRgb(colors[baseName] || '#8f8a7c', '#fff')(0.18)
 }
 
 function drawNodes(svg, nodes) {
@@ -1337,28 +1390,53 @@ function drawNodes(svg, nodes) {
     .attr('height', NODE_H)
     .attr('rx', 2)
     .attr('fill', (d) => d.color)
-    .attr('fill-opacity', (d) => d.type === 'period' ? 0.68 : d.type === 'identity' ? 0.82 : 0.66)
+    .attr('fill-opacity', (d) => d.type === 'period' ? 0.86 : d.type === 'identity' ? 0.94 : 0.82)
 
   item.append('text')
     .attr('class', (d) => `node-label node-label--${d.type}`)
-    .attr('y', (d) => d.type === 'period' ? -9 : d.type === 'identity' ? 17 : 16)
+    .attr('y', (d) => labelY(d.type))
     .attr('text-anchor', 'middle')
     .selectAll('tspan')
     .data((d) => splitLabel(d.name, d.type))
     .join('tspan')
     .attr('x', 0)
-    .attr('dy', (d, i) => i === 0 ? 0 : '1.02em')
+    .attr('dy', (d, i) => i === 0 ? 0 : '1.08em')
     .text((d) => d)
 }
 
+function labelY(type) {
+  if (type === 'period') return 17
+  if (type === 'identity') return -43
+  return 17
+}
+
 function splitLabel(label, type) {
-  if (type === 'period') return label.length > 4 ? [label.slice(0, 2), label.slice(2)] : [label]
-  if (type === 'identity') return label.length > 4 ? [label.slice(0, 2), label.slice(2)] : [label]
+  if (['period', 'identity', 'role'].includes(type)) return Array.from(label)
   return [label]
 }
 
+function matrixTitleAnchor(id) {
+  if (id === 1) return 'start'
+  if (id === 7) return 'end'
+  return 'middle'
+}
+
+function matrixTitleX(x, id) {
+  if (id === 1) return x + 2
+  if (id === 7) return x - 2
+  return x
+}
+
+function matrixCategoryAnchor(id) {
+  return id === 7 ? 'end' : 'start'
+}
+
+function matrixCategoryX(x, id) {
+  return id === 7 ? x - 5 : x + 5
+}
+
 function drawMatrix(svg) {
-  const xScale = d3.scaleLinear().domain([1, 7]).range([18, W - 44])
+  const xScale = d3.scaleLinear().domain([1, 7]).range([4, W - 4])
   const profileLine = d3.line().x((d) => d.x).y((d) => d.y).curve(d3.curveMonotoneX)
   const categoryCoords = new Map()
   const matrix = svg.append('g').attr('class', 'trait-matrix')
@@ -1366,13 +1444,25 @@ function drawMatrix(svg) {
   traitsMeta.forEach((trait) => {
     const x = xScale(trait.id)
     matrix.append('line').attr('x1', x).attr('x2', x).attr('y1', MATRIX_TOP).attr('y2', MATRIX_BOTTOM).attr('class', 'matrix-axis')
-    matrix.append('text').attr('class', 'matrix-title').attr('x', x).attr('y', MATRIX_TOP - 5).attr('text-anchor', 'middle').text(`${trait.id} ${trait.name}`)
+    matrix
+      .append('text')
+      .attr('class', 'matrix-title')
+      .attr('x', matrixTitleX(x, trait.id))
+      .attr('y', MATRIX_TOP - 5)
+      .attr('text-anchor', matrixTitleAnchor(trait.id))
+      .text(`${trait.id} ${trait.name}`)
 
     trait.categories.forEach((category, index) => {
       const y = MATRIX_TOP + 16 + index * ((MATRIX_BOTTOM - MATRIX_TOP - 26) / Math.max(1, trait.categories.length - 1))
       categoryCoords.set(`${trait.id}:${category}`, { x, y, category, traitId: trait.id })
-      matrix.append('circle').attr('cx', x).attr('cy', y).attr('r', 2.2).attr('class', 'matrix-dot')
-      matrix.append('text').attr('x', x + 4).attr('y', y + 2.5).attr('class', 'matrix-category').text(category)
+      matrix.append('circle').attr('cx', x).attr('cy', y).attr('r', 2.6).attr('class', 'matrix-dot')
+      matrix
+        .append('text')
+        .attr('x', matrixCategoryX(x, trait.id))
+        .attr('y', y + 3)
+        .attr('text-anchor', matrixCategoryAnchor(trait.id))
+        .attr('class', 'matrix-category')
+        .text(category)
     })
   })
 
@@ -1394,7 +1484,7 @@ function drawMatrix(svg) {
     })
     .on('mousemove', moveTooltip)
     .on('mouseleave', function () {
-      d3.select(this).attr('stroke-opacity', 0.16).attr('stroke-width', 0.8)
+      d3.select(this).attr('stroke-opacity', 0.34).attr('stroke-width', 1.15)
       hideTooltip()
     })
 }
@@ -1431,23 +1521,26 @@ function hideTooltip() {
   border-radius: 6px;
   color: #3f332b;
   background: transparent;
+  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
   animation: chart-two-enter 260ms ease-out both;
 }
 
 .period-tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   align-items: center;
+  justify-content: space-between;
   min-width: 0;
   min-height: 0;
-  padding: 3px 4px;
-  overflow-x: auto;
+  padding: 3px;
+  overflow-x: hidden;
   overflow-y: hidden;
   border-radius: 999px;
   border: 1px solid rgba(143, 47, 36, 0.12);
   background: rgba(255, 249, 237, 0.74);
   box-shadow: inset 0 0 0 1px rgba(255, 248, 232, 0.64);
   scrollbar-width: none;
+  transform: translateY(3px);
 }
 
 .period-tabs::-webkit-scrollbar {
@@ -1455,16 +1548,20 @@ function hideTooltip() {
 }
 
 .period-tabs button {
-  flex: 0 0 auto;
+  flex: 1 1 0;
+  min-width: 0;
   height: 21px;
-  padding: 0 8px;
+  padding: 0 2px;
   border: 0;
   border-radius: 999px;
   color: #6b5b4d;
   background: transparent;
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 900;
   line-height: 21px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: clip;
   white-space: nowrap;
   cursor: pointer;
   transition:
@@ -1486,6 +1583,14 @@ function hideTooltip() {
     0 2px 7px rgba(143, 47, 36, 0.18);
 }
 
+.vertical-pattern-canvas {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
 .vertical-pattern-svg {
   display: block;
   width: 100%;
@@ -1495,63 +1600,113 @@ function hideTooltip() {
   background:
     linear-gradient(180deg, rgba(255, 252, 244, 0.22), rgba(246, 235, 213, 0.18)),
     transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.vertical-pattern-svg:active {
+  cursor: grabbing;
+}
+
+.zoom-controls {
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  z-index: 4;
+  display: flex;
+  gap: 3px;
+  padding: 2px;
+  border: 1px solid rgba(143, 47, 36, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 249, 237, 0.84);
+  box-shadow: 0 4px 10px rgba(82, 54, 32, 0.12);
+}
+
+.zoom-controls button {
+  display: grid;
+  place-items: center;
+  min-width: 21px;
+  height: 21px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 999px;
+  color: #7a241d;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.zoom-controls button:hover {
+  color: #fff8ed;
+  background: #8f2f24;
+}
+
+.vertical-pattern-svg :deep(text) {
+  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
 }
 
 .vertical-pattern-svg :deep(.vertical-links path) {
   fill: none;
   cursor: pointer;
   stroke-linecap: round;
-  mix-blend-mode: multiply;
+  mix-blend-mode: normal;
   transition:
     stroke-opacity 0.18s ease,
     stroke-width 0.18s ease;
 }
 
 .vertical-pattern-svg :deep(.node-label) {
-  fill: #3f332b;
-  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
-  font-size: 7px;
-  font-weight: 800;
+  fill: #261b16;
+  font-size: 10.5px;
+  font-weight: 900;
   paint-order: stroke;
-  stroke: #f7edd8;
-  stroke-width: 2px;
+  stroke: rgba(252, 243, 224, 0.92);
+  stroke-width: 2.4px;
   stroke-linejoin: round;
 }
 
 .vertical-pattern-svg :deep(.node-label--identity) {
-  font-size: 6.3px;
+  fill: #2c2019;
+  font-size: 9.5px;
 }
 
 .vertical-pattern-svg :deep(.node-label--role) {
-  font-size: 7px;
+  fill: #261b16;
+  font-size: 10.2px;
 }
 
 .vertical-pattern-svg :deep(.matrix-axis) {
-  stroke: rgba(118, 102, 85, 0.26);
+  stroke: rgba(87, 65, 48, 0.42);
   stroke-dasharray: 3 4;
 }
 
 .vertical-pattern-svg :deep(.matrix-title) {
-  fill: #394452;
-  font-size: 7px;
+  fill: #3d2a21;
+  font-size: 9.8px;
   font-weight: 900;
 }
 
 .vertical-pattern-svg :deep(.matrix-category) {
-  fill: rgba(64, 58, 50, 0.76);
-  font-size: 5.6px;
-  font-weight: 700;
+  fill: rgba(35, 25, 19, 0.96);
+  font-size: 8.7px;
+  font-weight: 900;
+  paint-order: stroke;
+  stroke: rgba(252, 243, 224, 0.78);
+  stroke-width: 1.2px;
+  stroke-linejoin: round;
 }
 
 .vertical-pattern-svg :deep(.matrix-dot) {
-  fill: rgba(78, 91, 94, 0.22);
+  fill: rgba(78, 65, 52, 0.56);
 }
 
 .vertical-pattern-svg :deep(.matrix-profiles path) {
   fill: none;
-  stroke: rgba(86, 91, 93, 0.55);
-  stroke-width: 0.8;
-  stroke-opacity: 0.16;
+  stroke: rgba(54, 47, 42, 0.76);
+  stroke-width: 1.15;
+  stroke-opacity: 0.34;
   cursor: pointer;
   transition:
     stroke-opacity 0.16s ease,
@@ -1586,23 +1741,21 @@ function hideTooltip() {
 
 .context-panel {
   min-height: 0;
-  padding: 8px 10px 7px;
+  padding: 5px 10px;
   overflow: hidden;
-  border-left: 3px solid #8f2f24;
-  border-radius: 6px;
+  border-left: 3px solid rgba(139, 42, 37, 0.62);
+  border-radius: 0;
   color: #4b4945;
-  background:
-    linear-gradient(180deg, rgba(245, 226, 190, 0.88), rgba(236, 209, 158, 0.74)),
-    rgb(241 222 186);
-  box-shadow: inset 0 0 0 1px rgba(255, 248, 232, 0.36);
+  background: rgb(236 209 158 / 52%);
+  box-shadow: none;
 }
 
 .context-panel strong {
   display: block;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   overflow: hidden;
   color: #7a241d;
-  font-size: 12px;
+  font-size: 14.5px;
   font-weight: 900;
   line-height: 1.15;
   text-overflow: ellipsis;
@@ -1613,9 +1766,9 @@ function hideTooltip() {
   display: -webkit-box;
   margin: 0;
   overflow: hidden;
-  font-size: 10px;
+  font-size: 12.6px;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.2;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }

@@ -3,16 +3,25 @@
     <div v-if="loading" class="theme-state">主题数据加载中...</div>
     <div v-else-if="error" class="theme-state theme-state--error">{{ error }}</div>
 
-    <div v-else class="play-chord-panel">
+    <div v-else class="play-chord-panel" :class="{ 'is-focused': focusedPlayId }">
       <article
         v-for="(item, index) in displaySlots"
         :key="item.playId || index"
         class="play-chord-card"
       >
         <div :ref="(el) => setChartRef(el, index)" class="g2-play-chord" />
+        <button
+          v-if="focusedPlayId && index === 0"
+          class="play-focus-close"
+          type="button"
+          aria-label="关闭联动主题图"
+          @click="clearFocusedPlay"
+        >
+          ×
+        </button>
 
         <label class="play-picker">
-          <select v-model="selectedPlayIds[index]">
+          <select :value="item.playId" :disabled="Boolean(focusedPlayId)" @change="handlePlayPickerChange(index, $event)">
             <option
               v-for="play in playOptions"
               :key="play.playId"
@@ -30,6 +39,7 @@
 <script setup>
 import { Chart } from '@antv/g2'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { clearLinkageFocus, linkageState, loadLinkageData } from '../../services/linkageStore'
 
 const THEME_CSV_URL = `${import.meta.env.BASE_URL}数据表合集/3/theme_analysis.csv`
 const KAI_FONT = '"STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif'
@@ -118,12 +128,26 @@ const playOptions = computed(() =>
     .sort((a, b) => b.themes.length - a.themes.length || dominantShare(b) - dominantShare(a)),
 )
 
-const displaySlots = computed(() =>
-  selectedPlayIds.value.slice(0, PLAY_COUNT).map((playId) => ({
+const focusedPlayId = computed(() => {
+  if (!isLinkageTriggerSource()) return ''
+  return playMap.value.has(linkageState.selectedPlayId) ? linkageState.selectedPlayId : ''
+})
+
+const displaySlots = computed(() => {
+  if (focusedPlayId.value) {
+    return [
+      {
+        playId: focusedPlayId.value,
+        play: playMap.value.get(focusedPlayId.value),
+      },
+    ]
+  }
+
+  return selectedPlayIds.value.slice(0, PLAY_COUNT).map((playId) => ({
     playId,
     play: playMap.value.get(playId),
-  })),
-)
+  }))
+})
 
 onMounted(async () => {
   await loadThemeCsv()
@@ -145,6 +169,14 @@ watch(
   { deep: true, flush: 'post' },
 )
 
+watch(
+  () => linkageState.selectedThemeIds.slice(),
+  async () => {
+    await renderCharts()
+  },
+  { deep: true, flush: 'post' },
+)
+
 onBeforeUnmount(() => {
   destroyCharts()
 })
@@ -154,6 +186,12 @@ async function loadThemeCsv() {
   error.value = ''
 
   try {
+    const linkageData = await loadLinkageData()
+    if (linkageData.plays?.length) {
+      rows.value = linkageData.plays.flatMap((play) => (play.themes || []).map((theme) => normalizeLinkageTheme(play, theme)))
+      return
+    }
+
     const response = await fetch(`${THEME_CSV_URL}?t=${Date.now()}`, {
       cache: 'no-store',
     })
@@ -172,10 +210,35 @@ async function loadThemeCsv() {
   }
 }
 
+function normalizeLinkageTheme(play, theme) {
+  return {
+    play_id: play.play_id,
+    title: play.title,
+    genre: play.themes?.[0]?.theme || '传统',
+    collection: '五剧本联动',
+    theme_id: theme.theme_id,
+    theme: theme.theme,
+    score: Number(theme.score) || 0,
+    share: Number(theme.share) || 0,
+    rank: Number(theme.rank) || 0,
+  }
+}
+
 function setChartRef(el, index) {
   if (el) {
     chartRefs.value[index] = el
   }
+}
+
+function handlePlayPickerChange(index, event) {
+  const playId = event.target?.value || ''
+  if (!playId) return
+
+  selectedPlayIds.value[index] = playId
+}
+
+function clearFocusedPlay() {
+  clearLinkageFocus('rightBottomClear')
 }
 
 function reconcileSelectedPlays() {
@@ -222,6 +285,7 @@ async function renderCharts() {
     const container = chartRefs.value[index]
     const play = item.play
     const links = play ? buildPlayLinks(play) : []
+    const hasThemeFocus = isLinkageTriggerSource() && linkageState.selectedThemeIds.length > 0
 
     if (!container || !play || !links.length) return
 
@@ -257,16 +321,17 @@ async function renderCharts() {
       style: {
         labelFontFamily: KAI_FONT,
         labelFontSize: chartSizing.labelFontSize,
-        labelFill: '#4f3a2b',
-        labelFontWeight: 800,
+        labelFill: (datum) => (hasThemeFocus && isFocusedChordDatum(datum, play) ? '#8b1f1b' : '#4f3a2b'),
+        labelFontWeight: (datum) => (hasThemeFocus && isFocusedChordDatum(datum, play) ? 1000 : 800),
 
-        nodeStroke: 'rgba(255, 248, 235, 0.88)',
-        nodeLineWidth: 0.8,
+        nodeStroke: (datum) => (hasThemeFocus && isFocusedChordDatum(datum, play) ? '#8b1f1b' : 'rgba(255, 248, 235, 0.88)'),
+        nodeLineWidth: (datum) => (hasThemeFocus && isFocusedChordDatum(datum, play) ? 2.4 : 0.8),
+        nodeFillOpacity: (datum) => (hasThemeFocus ? (isFocusedChordDatum(datum, play) ? 1 : 0.32) : 0.95),
 
-        linkFill: genreColor(play.genre),
-        linkFillOpacity: 0.48,
-        linkStroke: genreColor(play.genre),
-        linkStrokeOpacity: 0.18,
+        linkFill: (datum) => (hasThemeFocus && datum.isFocus ? '#b23b32' : genreColor(play.genre)),
+        linkFillOpacity: (datum) => (hasThemeFocus ? (datum.isFocus ? 0.82 : 0.1) : 0.48),
+        linkStroke: (datum) => (hasThemeFocus && datum.isFocus ? '#7a1f1b' : genreColor(play.genre)),
+        linkStrokeOpacity: (datum) => (hasThemeFocus ? (datum.isFocus ? 0.68 : 0.05) : 0.18),
       },
       tooltip: {
         items: [
@@ -386,6 +451,9 @@ function buildPlayLinks(play) {
       links.push({
         source: themes[left].name,
         target: themes[right].name,
+        sourceThemeId: themes[left].themeId,
+        targetThemeId: themes[right].themeId,
+        isFocus: isFocusedTheme(themes[left].themeId) || isFocusedTheme(themes[right].themeId),
         value,
         genre: play.genre,
         playTitle: play.title,
@@ -394,6 +462,9 @@ function buildPlayLinks(play) {
       links.push({
         source: themes[right].name,
         target: themes[left].name,
+        sourceThemeId: themes[right].themeId,
+        targetThemeId: themes[left].themeId,
+        isFocus: isFocusedTheme(themes[right].themeId) || isFocusedTheme(themes[left].themeId),
         value: Number((value * 0.72).toFixed(2)),
         genre: play.genre,
         playTitle: play.title,
@@ -405,6 +476,9 @@ function buildPlayLinks(play) {
     links.push({
       source: themes[0].name,
       target: themes[0].name,
+      sourceThemeId: themes[0].themeId,
+      targetThemeId: themes[0].themeId,
+      isFocus: isFocusedTheme(themes[0].themeId),
       value: Number((themes[0].share * 100).toFixed(2)),
       genre: play.genre,
       playTitle: play.title,
@@ -414,12 +488,58 @@ function buildPlayLinks(play) {
   return links
 }
 
+function isFocusedTheme(themeId) {
+  return isLinkageTriggerSource() && linkageState.selectedThemeIds.includes(themeId)
+}
+
+function isFocusedChordDatum(datum, play) {
+  if (!isLinkageTriggerSource() || !linkageState.selectedThemeIds.length) return false
+  if (datum?.isFocus) return true
+
+  const focusIds = new Set(linkageState.selectedThemeIds)
+  const focusNames = new Set(
+    normalizedThemes(play)
+      .filter((theme) => focusIds.has(theme.themeId))
+      .map((theme) => theme.name),
+  )
+  const values = new Set()
+  collectThemeDatumValues(datum, values)
+
+  return Array.from(values).some((value) => focusIds.has(value) || focusNames.has(value))
+}
+
+function collectThemeDatumValues(value, values) {
+  if (value === null || value === undefined) return
+
+  if (typeof value !== 'object') {
+    values.add(text(value))
+    return
+  }
+
+  ;['themeId', 'sourceThemeId', 'targetThemeId', 'id', 'key', 'name', 'theme', 'source', 'target'].forEach((key) => {
+    if (value[key] !== undefined) values.add(text(value[key]))
+  })
+
+  if (value.data && value.data !== value) {
+    collectThemeDatumValues(value.data, values)
+  }
+}
+
+function text(value) {
+  return String(value ?? '').trim()
+}
+
+function isLinkageTriggerSource() {
+  return linkageState.source === 'leftTopIcon' || linkageState.source === 'rightTopNode'
+}
+
 function normalizedThemes(play) {
   const validThemes = play.themes.filter((theme) => theme.name)
   const total = validThemes.reduce((sum, theme) => sum + Number(theme.share || 0), 0) || 1
 
   return validThemes.map((theme) => ({
     ...theme,
+    themeId: theme.themeId,
     share: Number(theme.share || 0) / total,
   }))
 }
@@ -463,6 +583,7 @@ function parseThemeCsv(text) {
         title: String(row.title || '').trim(),
         genre: String(row.genre || '').trim(),
         collection: String(row.collection || '').trim(),
+        theme_id: String(row.theme_id || '').trim(),
         theme: String(row.theme || '').trim(),
         score: toNumber(row.score),
         share: toShare(row.share),
@@ -514,6 +635,7 @@ function groupRowsByPlay(sourceRows) {
     }
 
     map.get(row.play_id).themes.push({
+      themeId: row.theme_id,
       name: row.theme,
       score: row.score,
       share: row.share,
@@ -576,6 +698,7 @@ function toShare(value) {
 }
 
 .play-chord-card {
+  position: relative;
   display: grid;
   grid-template-rows: minmax(0, 1fr) 24px;
   gap: 2px;
@@ -586,6 +709,28 @@ function toShare(value) {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.play-focus-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(139, 42, 37, 0.3);
+  border-radius: 50%;
+  background: rgba(255, 252, 244, 0.9);
+  color: #8b2a25;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.play-chord-panel.is-focused {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .g2-play-chord {

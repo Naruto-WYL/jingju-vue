@@ -5,66 +5,66 @@
 </template>
 
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as d3 from 'd3'
 
 import chouImage from '../../assets/词云2/chou3.png'
 import danImage from '../../assets/词云2/dan3.png'
 import jingImage from '../../assets/词云2/jing3.png'
+import shengImage from '../../assets/词云2/sheng3.png'
+import { findCharacterById, findPlayById, linkageState, loadLinkageData } from '../../services/linkageStore'
 
 const svgRef = ref(null)
 
 const W = 600
 const H = 288
 const fontFamily = '"SimHei", "Microsoft YaHei", sans-serif'
-const MIN_WORD_SIZE = 8
-const MAX_WORD_SIZE = 26
-const WORD_DENSITY = 2.1
+const V_GAP = 12
+const CENTER_GAP = 132
+const CELL_W = (W - CENTER_GAP) / 2
+const CELL_H = (H - V_GAP) / 2
+const RIGHT_X = CELL_W + CENTER_GAP
+const MIN_WORD_SIZE = 7
+const MAX_WORD_SIZE = 22
+const WORD_DENSITY = 1.45
 const WORD_GAP = 0
-const CENTER_STEP = 1
-const roles = [
+const CENTER_STEP = 2
+const MAX_WORD_LAYOUT_CACHE = 80
+const ROLE_ORDER = [
   {
-    key: 'chou',
-    name: '丑',
-    src: chouImage,
-    imageScale: 1.04,
-    bgColor: '#D9C39A',
-    box: { x: 0, y: 0, w: 196, h: 286 },
-    words: [
-      ['机敏', 10],
-      ['诙谐', 9],
-      ['市井', 8],
-      ['差役', 8],
-      ['滑稽', 8],
-      ['念白', 7],
-      ['插科', 7],
-      ['打诨', 7],
-      ['幽默', 6],
-      ['灵动', 6],
-      ['小花脸', 6],
-      ['圆场', 5],
-      ['节奏', 5],
-      ['俏皮', 5],
-      ['身段', 5],
-      ['节外生枝', 4],
-      ['市井烟火', 4],
-      ['调笑', 4],
-      ['机锋', 4],
-      ['点破', 4],
-      ['变通', 3],
-      ['轻快', 3],
-      ['逗趣', 3],
-      ['俐落', 3],
+    key: 'sheng',
+    major: '生',
+    src: shengImage,
+    imageScale: 1.08,
+    bgColor: '#D1B25B',
+    box: { x: 0, y: 0, w: CELL_W, h: CELL_H },
+    baseWords: [
+      ['忠义', 10],
+      ['家国', 9],
+      ['正气', 8],
+      ['唱念', 8],
+      ['儒雅', 7],
+      ['担纲', 7],
+      ['稳健', 7],
+      ['叙事', 6],
+      ['气度', 6],
+      ['护国', 5],
+      ['将帅', 5],
+      ['道白', 5],
+      ['父子', 4],
+      ['关目', 4],
+      ['沉着', 4],
+      ['抒怀', 4],
     ],
   },
   {
     key: 'dan',
-    name: '旦',
+    major: '旦',
     src: danImage,
-    imageScale: 1.16,
-    bgColor: '#D8A6A0',
-    box: { x: 202, y: 0, w: 196, h: 286 },
-    words: [
+    imageScale: 1.08,
+    bgColor: '#D98AA8',
+    box: { x: 0, y: CELL_H + V_GAP, w: CELL_W, h: CELL_H },
+    baseWords: [
       ['婉转', 10],
       ['水袖', 9],
       ['青衣', 8],
@@ -93,12 +93,12 @@ const roles = [
   },
   {
     key: 'jing',
-    name: '净',
+    major: '净',
     src: jingImage,
-    imageScale: 1.22,
-    bgColor: '#AEB8A6',
-    box: { x: 404, y: 0, w: 196, h: 286 },
-    words: [
+    imageScale: 1.12,
+    bgColor: '#71AFC3',
+    box: { x: RIGHT_X, y: 0, w: CELL_W, h: CELL_H },
+    baseWords: [
       ['威武', 10],
       ['脸谱', 9],
       ['忠勇', 8],
@@ -125,19 +125,73 @@ const roles = [
       ['厚重', 3],
     ],
   },
+  {
+    key: 'chou',
+    major: '丑',
+    src: chouImage,
+    imageScale: 1.0,
+    bgColor: '#96B86D',
+    box: { x: RIGHT_X, y: CELL_H + V_GAP, w: CELL_W, h: CELL_H },
+    baseWords: [
+      ['机敏', 10],
+      ['诙谐', 9],
+      ['市井', 8],
+      ['差役', 8],
+      ['滑稽', 8],
+      ['念白', 7],
+      ['插科', 7],
+      ['打诨', 7],
+      ['幽默', 6],
+      ['灵动', 6],
+      ['小花脸', 6],
+      ['圆场', 5],
+      ['节奏', 5],
+      ['俏皮', 5],
+      ['身段', 5],
+      ['节外生枝', 4],
+      ['市井烟火', 4],
+      ['调笑', 4],
+      ['机锋', 4],
+      ['点破', 4],
+      ['变通', 3],
+      ['轻快', 3],
+      ['逗趣', 3],
+      ['俐落', 3],
+    ],
+  },
 ]
 
 const textMeasureCanvas = document.createElement('canvas')
 const textMeasureContext = textMeasureCanvas.getContext('2d')
+const imageCache = new Map()
+const maskCache = new Map()
+const wordLayoutCache = new Map()
 let destroyed = false
+let renderToken = 0
 
 onMounted(async () => {
+  await loadLinkageData().catch(() => null)
   await nextTick()
   await render()
 })
 
+watch(
+  () => [
+    linkageState.ready,
+    linkageState.selectedPlayId,
+    linkageState.selectedCharacterId,
+    linkageState.selectedTrade,
+    linkageState.selectedSceneId,
+    linkageState.selectedThemeIds.join('|'),
+  ],
+  () => {
+    void render()
+  },
+)
+
 onBeforeUnmount(() => {
   destroyed = true
+  renderToken += 1
   d3.select(svgRef.value).selectAll('*').remove()
 })
 
@@ -145,10 +199,12 @@ async function render() {
   const svgElement = svgRef.value
   if (!svgElement) return
 
+  const token = ++renderToken
   await document.fonts?.ready
 
+  const roles = buildRoleDefinitions()
   const roleLayouts = await Promise.all(roles.map(prepareRoleLayout))
-  if (destroyed) return
+  if (destroyed || token !== renderToken) return
 
   const svg = d3.select(svgElement)
   svg.selectAll('*').remove()
@@ -182,18 +238,20 @@ async function render() {
       .attr('width', layout.role.box.w)
       .attr('height', layout.role.box.h)
 
-    const group = svg.append('g').attr('class', 'role-cloud')
+    const group = svg
+      .append('g')
+      .attr('class', `role-cloud${layout.role.active ? ' is-active' : ''}${layout.role.dimmed ? ' is-dimmed' : ''}`)
 
     group
-  .append('rect')
-  .attr('class', 'role-shape-bg')
-  .attr('x', layout.role.box.x)
-  .attr('y', layout.role.box.y)
-  .attr('width', layout.role.box.w)
-  .attr('height', layout.role.box.h)
-  .attr('fill', layout.role.bgColor || '#E8D8B6')
-  .attr('fill-opacity', layout.role.bgOpacity ?? 0.5)
-  .attr('mask', `url(#${maskId})`)
+      .append('rect')
+      .attr('class', 'role-shape-bg')
+      .attr('x', layout.role.box.x)
+      .attr('y', layout.role.box.y)
+      .attr('width', layout.role.box.w)
+      .attr('height', layout.role.box.h)
+      .attr('fill', layout.role.bgColor || '#E8D8B6')
+      .attr('fill-opacity', layout.role.active ? 0.86 : 0.58)
+      .attr('mask', `url(#${maskId})`)
     group
       .append('image')
       .attr('class', 'role-figure')
@@ -223,18 +281,196 @@ async function render() {
       .attr('font-family', fontFamily)
       .attr('font-size', (word) => word.size)
       .attr('font-weight', 700)
-      .attr('fill', '#111')
+      .attr('fill', layout.role.active ? '#101010' : '#2b241d')
       .attr('opacity', (word) => word.opacity)
       .text((word) => word.text)
 
   })
 }
 
+function buildRoleDefinitions() {
+  const selectedCharacter = findCharacterById(linkageState.selectedCharacterId)
+  const selectedPlay = selectedCharacter?.play || findPlayById(linkageState.selectedPlayId)
+  const activeMajor = getMajorTrade(
+    selectedCharacter?.major_trade ||
+      selectedCharacter?.standard_trade ||
+      selectedCharacter?.trade ||
+      linkageState.selectedTrade,
+  )
+
+  return ROLE_ORDER.map((role) => {
+    const activeCharacter =
+      selectedCharacter && activeMajor === role.major ? selectedCharacter : null
+    const representative = activeCharacter || pickRepresentativeCharacter(selectedPlay, role.major)
+    const words = representative
+      ? buildCharacterWords(representative, selectedPlay || representative.play, role.baseWords)
+      : role.baseWords
+
+    return {
+      ...role,
+      active: activeMajor === role.major,
+      dimmed: Boolean(activeMajor && activeMajor !== role.major),
+      words,
+    }
+  })
+}
+
+function pickRepresentativeCharacter(play, major) {
+  const characters = play?.characters || []
+  return characters
+    .filter((character) =>
+      getMajorTrade(character.major_trade || character.standard_trade || character.trade) === major
+    )
+    .sort((a, b) => characterScore(b) - characterScore(a))[0]
+}
+
+function characterScore(character) {
+  return (
+    Number(character.importance || 0) * 100 +
+    Number(character.network_rank ? 10 / character.network_rank : 0) +
+    Number(character.scene_count || 0) * 3 +
+    Number(character.speech_count || 0) * 0.08
+  )
+}
+
+function buildCharacterWords(character, play, baseWords) {
+  const pairs = [
+    [character.name, 13],
+    [character.role_level_label, levelWeight(character.role_level)],
+    ...buildMetricWords(character),
+    ...buildThemeWords(character, play),
+    ...buildRelationWords(character, play),
+    ...buildSceneWords(character, play),
+    ...baseWords.slice(0, 10).map(([text, weight]) => [text, Math.max(3, weight - 3)]),
+  ]
+
+  return mergeWordPairs(pairs).slice(0, 24)
+}
+
+function levelWeight(level) {
+  if (level === 'core') return 10
+  if (level === 'major') return 8
+  return 6
+}
+
+function buildMetricWords(character) {
+  const words = []
+  const importance = Number(character.importance || 0)
+  const sceneCount = Number(character.scene_count || 0)
+  const speechCount = Number(character.speech_count || 0)
+  const mentionCount = Number(character.mention_count || 0)
+
+  if (importance >= 0.62) words.push(['核心枢纽', 10])
+  else if (importance >= 0.38) words.push(['主要推动', 8])
+  else words.push(['情节补足', 6])
+
+  if (sceneCount >= 6) words.push(['贯穿多场', 8])
+  else if (sceneCount >= 3) words.push(['多场照应', 6])
+
+  if (speechCount >= 28) words.push(['唱念密集', 8])
+  else if (speechCount >= 12) words.push(['对白推进', 6])
+
+  if (mentionCount >= 30) words.push(['反复被提', 6])
+
+  return words
+}
+
+function buildThemeWords(character, play) {
+  const themeNames = new Map((play?.themes || []).map((theme) => [theme.theme_id, theme.theme]))
+  const linkedThemes = [
+    ...(character.linked_themes || []),
+    ...(character.linked_theme_ids || []).map((id) => themeNames.get(id)),
+  ]
+
+  return uniqueText(linkedThemes)
+    .filter(Boolean)
+    .slice(0, 4)
+    .map((theme, index) => [theme, 9 - index])
+}
+
+function buildRelationWords(character, play) {
+  const relations = (play?.relations || [])
+    .filter(
+      (relation) =>
+        relation.source_character_id === character.character_id ||
+        relation.target_character_id === character.character_id,
+    )
+    .sort((a, b) => Number(b.weight || 0) - Number(a.weight || 0))
+    .slice(0, 4)
+
+  const words = []
+  relations.forEach((relation, index) => {
+    const otherName =
+      relation.source_character_id === character.character_id ? relation.target : relation.source
+    words.push([otherName, 8 - Math.min(index, 3)])
+    words.push([relation.relation_label || relation.relation_type, 7 - Math.min(index, 3)])
+  })
+
+  return words
+}
+
+function buildSceneWords(character, play) {
+  const sceneIds = new Set(character.scene_ids || [])
+  const scenes = (play?.scenes || [])
+    .filter((scene) => sceneIds.has(scene.scene_id))
+    .sort((a, b) => Number(b.metrics?.plot_strength || 0) - Number(a.metrics?.plot_strength || 0))
+    .slice(0, 3)
+
+  const words = []
+  scenes.forEach((scene, index) => {
+    words.push([scene.stage_type, 6 - index])
+    words.push([scene.conflict_type, 6 - index])
+    const summary = String(scene.summary || '').replace(/[，。、；：“”\s]/g, '')
+    if (summary.length >= 2) words.push([summary.slice(0, 6), 5 - index])
+  })
+
+  return words
+}
+
+function mergeWordPairs(pairs) {
+  const merged = new Map()
+
+  pairs.forEach(([rawText, rawWeight]) => {
+    const text = cleanWord(rawText)
+    const weight = Number(rawWeight)
+    if (!text || !Number.isFinite(weight)) return
+    merged.set(text, Math.max(merged.get(text) || 0, weight))
+  })
+
+  return Array.from(merged, ([text, weight]) => [text, weight]).sort((a, b) => {
+    return b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hans-CN')
+  })
+}
+
+function cleanWord(value) {
+  const text = String(value || '').trim()
+  if (!text || text === 'undefined' || text === 'null') return ''
+  return text.length > 8 ? text.slice(0, 8) : text
+}
+
+function uniqueText(values) {
+  return Array.from(new Set(values.filter(Boolean)))
+}
+
+function getMajorTrade(trade) {
+  const text = String(trade || '').trim()
+  if (!text) return ''
+  if (text.includes('旦') || text.includes('青衣')) return '旦'
+  if (text.includes('净')) return '净'
+  if (text.includes('丑') || text.includes('付')) return '丑'
+  if (text.includes('生') || ['末', '外', '武将'].includes(text)) return '生'
+  return ''
+}
+
 async function prepareRoleLayout(role) {
-  const image = await loadImage(role.src)
-  const imageBox = fitImage(image, role.box, 0, role.imageScale || 1)
-  const { mask, maskUrl } = createAlphaMask(image, role.box, imageBox)
-  const words = layoutWords(role.words, mask, role.box.w, role.box.h)
+  const { imageBox, mask, maskUrl, centers } = await prepareRoleMask(role)
+  const layoutKey = getWordLayoutKey(role)
+  let words = wordLayoutCache.get(layoutKey)
+
+  if (!words) {
+    words = layoutWords(role.words, mask, role.box.w, role.box.h, centers)
+    rememberWordLayout(layoutKey, words)
+  }
 
   return {
     role,
@@ -244,13 +480,58 @@ async function prepareRoleLayout(role) {
   }
 }
 
+async function prepareRoleMask(role) {
+  const maskKey = getRoleMaskKey(role)
+  if (maskCache.has(maskKey)) return maskCache.get(maskKey)
+
+  const image = await loadImage(role.src)
+  const imageBox = fitImage(image, role.box, 0, role.imageScale || 1)
+  const { mask, maskUrl } = createAlphaMask(image, role.box, imageBox)
+  const centers = buildCenters(mask, role.box.w, role.box.h, CENTER_STEP)
+  const value = { imageBox, mask, maskUrl, centers }
+  maskCache.set(maskKey, value)
+
+  return value
+}
+
+function getRoleMaskKey(role) {
+  const { x, y, w, h } = role.box
+  return [role.key, role.src, x, y, w, h, role.imageScale || 1].join('|')
+}
+
+function getWordLayoutKey(role) {
+  return [
+    role.key,
+    role.box.w,
+    role.box.h,
+    role.words.map(([text, weight]) => `${text}:${weight}`).join(','),
+  ].join('|')
+}
+
+function rememberWordLayout(key, words) {
+  if (wordLayoutCache.size >= MAX_WORD_LAYOUT_CACHE) {
+    const firstKey = wordLayoutCache.keys().next().value
+    wordLayoutCache.delete(firstKey)
+  }
+
+  wordLayoutCache.set(key, words)
+}
+
 function loadImage(src) {
-  return new Promise((resolve, reject) => {
+  if (imageCache.has(src)) return imageCache.get(src)
+
+  const promise = new Promise((resolve, reject) => {
     const image = new Image()
     image.onload = () => resolve(image)
-    image.onerror = reject
+    image.onerror = (error) => {
+      imageCache.delete(src)
+      reject(error)
+    }
     image.src = src
   })
+
+  imageCache.set(src, promise)
+  return promise
 }
 
 function fitImage(image, box, padding = 0, multiplier = 1) {
@@ -375,9 +656,9 @@ function getNeighbors(index, width, height) {
   return neighbors
 }
 
-function layoutWords(sourceWords, mask, width, height) {
+function layoutWords(sourceWords, mask, width, height, cachedCenters = null) {
   const placedRects = []
-  const centers = buildCenters(mask, width, height, CENTER_STEP)
+  const centers = cachedCenters || buildCenters(mask, width, height, CENTER_STEP)
 
   const maxWeight = d3.max(sourceWords, (word) => word[1]) || 10
   const minWeight = d3.min(sourceWords, (word) => word[1]) || 3
@@ -668,5 +949,25 @@ function isInside(mask, width, height, x, y) {
 
 .poster-svg :deep(.role-figure) {
   opacity: 0;
+}
+
+.poster-svg :deep(.role-cloud) {
+  opacity: 1;
+  transition: opacity 0.22s ease, filter 0.22s ease;
+}
+
+.poster-svg :deep(.role-cloud.is-active) {
+  filter: drop-shadow(0 0 9px rgba(98, 38, 24, 0.22));
+}
+
+.poster-svg :deep(.role-cloud.is-dimmed) {
+  opacity: 0.18;
+}
+
+.poster-svg :deep(.word-layer text) {
+  paint-order: stroke;
+  stroke: rgba(255, 250, 238, 0.24);
+  stroke-linejoin: round;
+  stroke-width: 0.8px;
 }
 </style>

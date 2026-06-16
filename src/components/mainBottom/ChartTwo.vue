@@ -1,69 +1,57 @@
 <template>
-  <section class="mode-compare-shell">
-    <div class="mode-compare-card">
-      <div class="mode-legend" aria-label="综合剧情张力对比图例">
-        <span class="legend-title">综合剧情张力 对比：</span>
-        <div v-for="mode in modeProfiles" :key="mode.id" class="legend-item">
-          <i :style="{ background: mode.color }"></i>{{ mode.shortName }}
-        </div>
+  <section class="compare-view">
+    <div class="compare-card">
+      <div class="compare-legend">
+        <span class="legend-title">五类叙事结构曲线对比：</span>
+        <button
+          v-for="key in activeCompareKeys"
+          :key="key"
+          type="button"
+          class="legend-item"
+          :class="{ muted: focusKey && focusKey !== key, active: selectedCompareKey === key || hoveredCompareKey === key }"
+          :style="{ color: colorForKey(key) }"
+          @mouseenter="hoveredCompareKey = key"
+          @mouseleave="hoveredCompareKey = ''"
+          @click="toggleCompareKey(key)"
+        >
+          <i :style="{ background: colorForKey(key) }"></i>{{ compareScripts[key]?.name }}
+        </button>
       </div>
 
-      <div class="mode-grid">
-        <div ref="canvasContainerRef" class="compare-canvas-panel">
-          <div class="canvas-title">
-            <strong>八大宏观叙事结构拓扑叠加</strong>
-            <span>Integrated Narrative Tension / Mode Compare</span>
+      <div class="compare-main">
+        <div ref="canvasPanelRef" class="compare-canvas-panel">
+          <div class="canvas-heading">
+            <span>五类宏观叙事结构曲线叠加</span>
           </div>
           <canvas ref="canvasRef" class="compare-canvas"></canvas>
-
-          <div ref="tooltipRef" class="compare-tooltip" :class="{ visible: isHovering }">
-            <div class="tooltip-title">同期《综合张力》对比：</div>
-            <div class="tooltip-grid">
-              <div v-for="mode in modeProfiles" :key="mode.id" class="tooltip-row">
-                <span :style="{ color: mode.color }">{{ mode.fullName }}</span>
-                <strong :style="{ color: mode.color }">{{ Math.round(getModeValue(mode, globalProgress)) }}%</strong>
-              </div>
-            </div>
-          </div>
         </div>
 
-        <aside class="compare-analysis">
-          <h3>典型叙事结构特征归纳</h3>
-          <div class="scene-readout">
-            <span>时间轴定位 (X轴)</span>
-            <strong>叙事轴推演进度：{{ Math.floor(globalProgress * 100) }}%</strong>
+        <aside class="compare-panel">
+          <div class="panel-title-row">
+            <strong>五类叙事结构特征归纳</strong>
           </div>
-
           <div class="desc-block">
-            <span>宏观结构提炼：</span>
-            <div class="mode-desc-list">
-              <article v-for="(mode, index) in modeProfiles" :key="mode.id" class="mode-desc-item">
-                <b :style="{ color: mode.color }">
-                  {{ index + 1 }}. {{ mode.fullName }}（例：《{{ mode.typicalScript }}》）
-                </b>
-                <span>宏观：{{ mode.shape }}</span>
-                <span>波纹：{{ mode.wave }}</span>
+            <span class="desc-title">{{ focusKey ? `${compareScripts[focusKey]?.mode || '结构类型'}：` : '宏观结构提炼：' }}</span>
+            <div class="compare-desc-list">
+              <article
+                v-for="key in panelKeys"
+                :key="key"
+                class="compare-desc-card"
+                :class="{ focused: focusKey === key }"
+                :style="{ borderColor: focusKey === key ? colorForKey(key) : '#E6DCD3' }"
+              >
+                <h4 :style="{ color: colorForKey(key) }">
+                  ■ {{ compareScripts[key]?.mode }}
+                  <small>（{{ compareScripts[key]?.sampleCount || 0 }}本）</small>
+                </h4>
+                <p><b>【高阶学术定义】</b>{{ compareScripts[key]?.definition }}</p>
+                <p><b>【量化划分规则】</b>{{ compareScripts[key]?.rule }}</p>
+                <p><b>【原型线数据】</b>{{ curveText(compareScripts[key]) }}</p>
+                <em>代表剧本：{{ representativeText(compareScripts[key]) }}</em>
               </article>
             </div>
           </div>
         </aside>
-      </div>
-
-      <div class="timeline-row">
-        <button class="mini-play-btn" type="button" @click="togglePlay" aria-label="播放模式对比">
-          <svg class="play-icon" :class="{ hidden: isPlaying }" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-          <svg class="pause-icon" :class="{ hidden: !isPlaying }" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
-        </button>
-        <div class="progress-percent">{{ Math.floor(globalProgress * 100) }}%</div>
-        <input
-          v-model.number="sliderValue"
-          class="timeline-slider"
-          type="range"
-          min="0"
-          max="100"
-          step="0.01"
-          @input="handleSliderChange(sliderValue)"
-        />
       </div>
 
       <div v-if="loading || errorMessage" class="load-state" :class="{ error: errorMessage }">
@@ -74,37 +62,40 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { narrativeModeProfiles } from './narrativeModeProfiles'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  classifyFiveStageCurve,
+  compareColorsStroke,
+  compareKeys,
+  findScriptKeyByPlay,
+  getFiveStageValues,
+  loadQiyunDataset,
+} from './qiyunData'
+import { linkageState, loadLinkageData } from '../../services/linkageStore'
 
-const STAGES = ['开端', '发展', '转折', '高潮', '结局']
-const AXIS_LABELS = ['开端', '发展', '转折', '高潮', '结局']
-
+const canvasPanelRef = ref(null)
 const canvasRef = ref(null)
-const canvasContainerRef = ref(null)
-const tooltipRef = ref(null)
-const loading = ref(false)
+const loading = ref(true)
 const errorMessage = ref('')
-const modeProfiles = ref(narrativeModeProfiles)
-const globalProgress = ref(0)
-const sliderValue = ref(0)
-const isPlaying = ref(false)
-const isHovering = ref(false)
+const scripts = ref({})
+const compareScripts = ref({})
+const hoveredCompareKey = ref('')
+const selectedCompareKey = ref('')
 
 let ctx = null
 let animationFrameId = 0
 let resizeHandler = null
-let flowTime = 0
-let trackerXCss = 0
-let currentMouseY = 0
-const layout = { paddingLeft: 60, paddingRight: 40, paddingTop: 64, paddingBottom: 42 }
+const layout = { paddingLeft: 42, paddingRight: 24, paddingTop: 34, paddingBottom: 27 }
 
-const currentStageIndex = computed(() => Math.min(STAGES.length - 1, Math.floor(globalProgress.value * STAGES.length)))
+const activeCompareKeys = computed(() => compareKeys.filter((key) => compareScripts.value[key]))
+const focusKey = computed(() => hoveredCompareKey.value || selectedCompareKey.value)
+const panelKeys = computed(() => (focusKey.value && activeCompareKeys.value.includes(focusKey.value) ? [focusKey.value] : activeCompareKeys.value))
 
 onMounted(async () => {
+  await loadData()
   await nextTick()
   initCanvas()
-  attachHoverEvents()
+  if (isLinkageTriggerSource()) syncFromLinkage()
   animate()
 })
 
@@ -112,6 +103,31 @@ onBeforeUnmount(() => {
   if (animationFrameId) cancelAnimationFrame(animationFrameId)
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
 })
+
+watch(
+  () => [linkageState.source, linkageState.selectedPlayId],
+  () => {
+    if (isLinkageTriggerSource()) syncFromLinkage()
+  },
+)
+
+watch([hoveredCompareKey, selectedCompareKey], () => {
+  drawCompare()
+})
+
+async function loadData() {
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    const [dataset] = await Promise.all([loadQiyunDataset(), loadLinkageData().catch(() => null)])
+    scripts.value = dataset.scripts
+    compareScripts.value = dataset.compareScripts
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '叙事模式数据加载失败'
+  } finally {
+    loading.value = false
+  }
+}
 
 function initCanvas() {
   const canvas = canvasRef.value
@@ -124,10 +140,10 @@ function initCanvas() {
 
 function resizeCanvas() {
   const canvas = canvasRef.value
-  const container = canvasContainerRef.value
-  if (!canvas || !container || !ctx) return
+  const panel = canvasPanelRef.value
+  if (!canvas || !panel || !ctx) return
 
-  const rect = container.getBoundingClientRect()
+  const rect = panel.getBoundingClientRect()
   if (!rect.width || !rect.height) return
 
   const ratio = window.devicePixelRatio || 1
@@ -138,141 +154,95 @@ function resizeCanvas() {
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
 }
 
-function attachHoverEvents() {
-  const container = canvasContainerRef.value
-  if (!container) return
-
-  container.addEventListener('mousemove', (event) => {
-    const rect = container.getBoundingClientRect()
-    currentMouseY = event.clientY - rect.top
-    const mouseX = event.clientX - rect.left
-    isHovering.value = Math.abs(mouseX - trackerXCss) < 30
-
-    if (isHovering.value) {
-      const leftPos = trackerXCss + 228 > rect.width ? trackerXCss - 232 : trackerXCss + 16
-      if (tooltipRef.value) {
-        tooltipRef.value.style.left = `${Math.max(8, leftPos)}px`
-        tooltipRef.value.style.top = `${Math.max(10, Math.min(currentMouseY - 30, rect.height - 168))}px`
-      }
-    }
-  })
-
-  container.addEventListener('mouseleave', () => {
-    isHovering.value = false
-  })
-}
-
 function animate() {
-  if (isPlaying.value) {
-    globalProgress.value += 0.0006
-    if (globalProgress.value >= 1) {
-      globalProgress.value = 0
-      sliderValue.value = 0
-      isPlaying.value = false
-    } else {
-      sliderValue.value = globalProgress.value * 100
-    }
-  }
-
   drawCompare()
   animationFrameId = requestAnimationFrame(animate)
 }
 
 function drawCompare() {
   const canvas = canvasRef.value
-  const container = canvasContainerRef.value
-  if (!canvas || !container || !ctx) return
+  const panel = canvasPanelRef.value
+  if (!canvas || !panel || !ctx || !activeCompareKeys.value.length) return
 
   const ratio = window.devicePixelRatio || 1
-  const rect = container.getBoundingClientRect()
+  const rect = panel.getBoundingClientRect()
+  if (!rect.width || !rect.height) return
   if (canvas.width !== rect.width * ratio || canvas.height !== rect.height * ratio) resizeCanvas()
 
   const w = canvas.width / ratio
   const h = canvas.height / ratio
-  if (!w || !h) return
-
-  const graphW = w - layout.paddingLeft - layout.paddingRight
-  const graphH = h - layout.paddingTop - layout.paddingBottom
+  const graphW = Math.max(10, w - layout.paddingLeft - layout.paddingRight)
+  const graphH = Math.max(10, h - layout.paddingTop - layout.paddingBottom)
   const baseY = h - layout.paddingBottom
-  const currentTrackerX = layout.paddingLeft + globalProgress.value * graphW
-  trackerXCss = currentTrackerX
-  flowTime += 0.018
 
   ctx.clearRect(0, 0, w, h)
   drawAxes(w, graphW, graphH, baseY)
 
-  modeProfiles.value.forEach((mode) => {
-    const points = []
-    const segmentEndX = Math.max(layout.paddingLeft + 2, currentTrackerX)
-    for (let xPixel = layout.paddingLeft; xPixel <= segmentEndX; xPixel += 2) {
-      const relativeX = (xPixel - layout.paddingLeft) / graphW
-      const val = getModeValue(mode, relativeX)
-      const ripple = getModeRipple(mode.key, xPixel, relativeX, val)
-      points.push({
-        x: xPixel,
-        y: Math.min(baseY, baseY - (val * graphH / 100) + ripple),
-      })
+  const drawKeys = focusKey.value
+    ? activeCompareKeys.value.filter((key) => key !== focusKey.value).concat(focusKey.value)
+    : activeCompareKeys.value
+
+  drawKeys.forEach((key) => {
+    const script = compareScripts.value[key]
+    if (!script?.scenes?.length) return
+    const color = colorForKey(key)
+    const isFaded = focusKey.value && focusKey.value !== key
+    const smoothPoints = []
+    const steps = 80
+
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps
+      const x = layout.paddingLeft + t * graphW
+      const value = getCompareValue(script, t)
+      smoothPoints.push({ x, y: baseY - (value * graphH) / 100 })
     }
 
-    if (!points.length) return
-
     ctx.beginPath()
-    points.forEach((point, index) => {
-      if (index === 0) ctx.moveTo(point.x, point.y)
-      else ctx.lineTo(point.x, point.y)
-    })
-    ctx.strokeStyle = mode.color
-    ctx.lineWidth = 2.6
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-    ctx.shadowColor = mode.color
-    ctx.shadowBlur = 3
+    ctx.moveTo(smoothPoints[0].x, smoothPoints[0].y)
+    drawSmoothLine(smoothPoints)
+    ctx.strokeStyle = isFaded ? 'rgba(150, 150, 150, 0.15)' : color
+    ctx.lineWidth = isFaded ? 1.5 : 3.4
+    ctx.shadowColor = color
+    ctx.shadowBlur = focusKey.value === key ? 12 : 3
     ctx.stroke()
     ctx.shadowBlur = 0
-  })
 
-  ctx.strokeStyle = isHovering.value ? 'rgba(160, 82, 45, 0.9)' : 'rgba(160, 82, 45, 0.4)'
-  ctx.lineWidth = isHovering.value ? 2.4 : 1.5
-  ctx.setLineDash(isHovering.value ? [] : [5, 5])
-  ctx.beginPath()
-  ctx.moveTo(currentTrackerX, layout.paddingTop - 14)
-  ctx.lineTo(currentTrackerX, baseY)
-  ctx.stroke()
-  ctx.setLineDash([])
+    if (focusKey.value === key) drawPeakAnchor(script, smoothPoints, color, w, h)
+  })
 }
 
 function drawAxes(w, graphW, graphH, baseY) {
   ctx.textAlign = 'right'
-  ctx.textBaseline = 'middle'
-  ctx.font = '11px sans-serif'
-  ctx.lineWidth = 1
+  ctx.textBaseline = 'bottom'
+  ctx.fillStyle = '#A0522D'
+  ctx.font = 'bold 10px sans-serif'
+  ctx.fillText('[ 张力强度 ]', layout.paddingLeft + 24, layout.paddingTop - 13)
 
-  ;[25, 50, 75, 100].forEach((val) => {
-    const y = baseY - (val * graphH / 100)
+  ctx.textBaseline = 'middle'
+  ctx.font = '9px sans-serif'
+  ;[25, 50, 75, 100].forEach((value) => {
+    const y = baseY - (value * graphH) / 100
     ctx.strokeStyle = 'rgba(160, 82, 45, 0.06)'
     ctx.beginPath()
     ctx.moveTo(layout.paddingLeft, y)
     ctx.lineTo(w - layout.paddingRight, y)
     ctx.stroke()
     ctx.fillStyle = '#A69482'
-    ctx.fillText(`${val}%`, layout.paddingLeft - 8, y)
+    ctx.fillText(`${value}%`, layout.paddingLeft - 5, y)
   })
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
-  const activeIndex = Math.min(AXIS_LABELS.length - 1, Math.floor(globalProgress.value * AXIS_LABELS.length))
-  AXIS_LABELS.forEach((label, index) => {
-    const ratio = index / (AXIS_LABELS.length - 1)
-    const x = layout.paddingLeft + ratio * graphW
-    const isActive = index === activeIndex
-    ctx.strokeStyle = isActive ? 'rgba(178, 34, 34, 0.36)' : 'rgba(28, 28, 28, 0.15)'
+  ;['开端', '发展', '转折', '高潮', '结局'].forEach((label, index) => {
+    const x = layout.paddingLeft + (index / 4) * graphW
+    ctx.strokeStyle = 'rgba(28, 28, 28, 0.15)'
     ctx.beginPath()
-    ctx.moveTo(x, layout.paddingTop - 8)
-    ctx.lineTo(x, baseY + 6)
+    ctx.moveTo(x, baseY)
+    ctx.lineTo(x, baseY + 4)
     ctx.stroke()
-    ctx.fillStyle = isActive ? '#b22222' : '#998370'
-    ctx.font = isActive ? 'bold 13px sans-serif' : '12px sans-serif'
-    ctx.fillText(label, x, baseY + 8)
+    ctx.fillStyle = '#998370'
+    ctx.font = '10px sans-serif'
+    ctx.fillText(label, x, baseY + 6)
   })
 
   ctx.strokeStyle = '#D9CEBF'
@@ -282,56 +252,124 @@ function drawAxes(w, graphW, graphH, baseY) {
   ctx.stroke()
 }
 
-function getModeValue(mode, progress) {
-  const curve = mode?.displayCurve || mode?.curve || []
-  if (!curve.length) return 0
-  const safeProgress = Math.max(0, Math.min(1, progress))
-  const floatIndex = safeProgress * (curve.length - 1)
-  const leftIndex = Math.floor(floatIndex)
-  const rightIndex = Math.min(leftIndex + 1, curve.length - 1)
-  const t = floatIndex - leftIndex
-  const smoothT = t * t * (3 - 2 * t)
-  return curve[leftIndex] + (curve[rightIndex] - curve[leftIndex]) * smoothT
-}
+function drawPeakAnchor(script, points, color, w, h) {
+  let peakIndex = 0
+  let minY = h
+  let maxY = 0
+  points.forEach((point, index) => {
+    if (point.y < minY) {
+      minY = point.y
+      peakIndex = index
+    }
+    if (point.y > maxY) maxY = point.y
+  })
+  if (maxY - minY < 5) peakIndex = Math.floor(points.length / 2)
+  else if (peakIndex < 5) peakIndex = 5
+  else if (peakIndex > points.length - 5) peakIndex = points.length - 5
 
-function getModeRipple(key, xPixel, relativeX, val) {
-  if (key === 'singlePeak') return Math.sin(xPixel * 0.02 - flowTime * 1.5) * (val > 75 ? 60 : 10) * 0.15 * (val / 100)
-  if (key === 'multiPeak') return Math.sin(xPixel * 0.08 - flowTime * 3.5) * 12 * (val / 100) + Math.cos(xPixel * 0.18 + flowTime) * 4
-  if (key === 'crescendo') return Math.sin(xPixel * 0.04 - flowTime) * 8 * (val / 100)
-  if (key === 'lateClimax') return relativeX > 0.75 ? Math.sin(xPixel * 0.25 - flowTime * 6) * 25 * (val / 100) + Math.cos(xPixel * 0.4) * 8 : Math.sin(xPixel * 0.01 - flowTime * 0.2)
-  if (key === 'initialBurst') return relativeX < 0.25 ? Math.sin(xPixel * 0.1 - flowTime * 4) * 20 * (val / 100) : Math.sin(xPixel * 0.02 - flowTime) * 3
-  if (key === 'endingBurst') return relativeX > 0.85 ? Math.sin(xPixel * 0.3 - flowTime * 8) * 30 * (val / 100) : Math.sin(xPixel * 0.01) * 0.5
-  if (key === 'flatSmooth') return Math.sin(xPixel * 0.03 - flowTime * 0.8) * 3
-  if (key === 'condensed') return relativeX > 0.4 && relativeX < 0.6 ? Math.sin(xPixel * 0.2 - flowTime * 5) * 20 : Math.sin(xPixel * 0.05 - flowTime) * 5
-  return 0
-}
+  const point = points[peakIndex]
+  ctx.fillStyle = color
+  ctx.beginPath()
+  ctx.arc(point.x, point.y, 4, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#fff'
+  ctx.beginPath()
+  ctx.arc(point.x, point.y, 2, 0, Math.PI * 2)
+  ctx.fill()
 
-function getModeStageText(mode) {
-  const stageIndex = currentStageIndex.value
-  const stage = STAGES[stageIndex]
-  const conflict = mode.stageConflicts[stageIndex]
-  const value = Math.round(getModeValue(mode, globalProgress.value))
-  const examples = mode.examples.length ? `代表剧目：${mode.examples.join('、')}。` : ''
-  return `${stage}阶段以“${conflict}”为高频主冲突，当前平均综合强度${value}%。${mode.feature}${examples}`
-}
-
-function handleSliderChange(value) {
-  globalProgress.value = Math.max(0, Math.min(1, Number(value) / 100))
-  sliderValue.value = globalProgress.value * 100
-}
-
-function togglePlay() {
-  if (!isPlaying.value && globalProgress.value >= 1) {
-    globalProgress.value = 0
-    sliderValue.value = 0
+  let align = 'center'
+  let textX = point.x
+  if (point.x < layout.paddingLeft + 30) {
+    align = 'left'
+    textX = point.x + 8
+  } else if (point.x > w - layout.paddingRight - 30) {
+    align = 'right'
+    textX = point.x - 8
   }
-  isPlaying.value = !isPlaying.value
+
+  let textY = point.y - 12
+  if (point.y < layout.paddingTop + 15) textY = point.y + 20
+  ctx.fillStyle = color
+  ctx.font = 'bold 12px sans-serif'
+  ctx.textAlign = align
+  ctx.fillText(`【${script.name.replace(/[《》]/g, '')}】`, textX, textY)
 }
 
+function getCompareValue(script, progress) {
+  const scenes = script.scenes.slice(1)
+  if (!scenes.length) return 0
+  const floatIndex = progress * (scenes.length - 1)
+  const leftIndex = Math.floor(floatIndex)
+  const rightIndex = Math.min(leftIndex + 1, scenes.length - 1)
+  const localT = floatIndex - leftIndex
+  const smoothT = localT * localT * (3 - 2 * localT)
+  return scenes[leftIndex].data[5] + (scenes[rightIndex].data[5] - scenes[leftIndex].data[5]) * smoothT
+}
+
+function drawSmoothLine(points) {
+  for (let index = 0; index < points.length - 1; index++) {
+    const cp = getBezierControlPoints(points, index, 0.2, 0.2)
+    if (index === 0) ctx.quadraticCurveTo(cp.cp2x, cp.cp2y, points[index + 1].x, points[index + 1].y)
+    else if (index === points.length - 2) ctx.quadraticCurveTo(cp.cp1x, cp.cp1y, points[index + 1].x, points[index + 1].y)
+    else ctx.bezierCurveTo(cp.cp1x, cp.cp1y, cp.cp2x, cp.cp2y, points[index + 1].x, points[index + 1].y)
+  }
+}
+
+function getBezierControlPoints(points, index, a, b) {
+  const p0 = points[index - 1] || points[index]
+  const p1 = points[index]
+  const p2 = points[index + 1] || points[index]
+  const p3 = points[index + 2] || points[index + 1] || points[index]
+  const d1 = Math.hypot(p1.x - p0.x, p1.y - p0.y)
+  const d2 = Math.hypot(p2.x - p1.x, p2.y - p1.y)
+  const d3 = Math.hypot(p3.x - p2.x, p3.y - p2.y)
+  const fa = (a * d2) / (d1 + d2) || 0
+  const fb = (b * d2) / (d2 + d3) || 0
+  return {
+    cp1x: p1.x + fa * (p2.x - p0.x),
+    cp1y: p1.y + fa * (p2.y - p0.y),
+    cp2x: p2.x - fb * (p3.x - p1.x),
+    cp2y: p2.y - fb * (p3.y - p1.y),
+  }
+}
+
+function colorForKey(key) {
+  const index = Math.max(0, compareKeys.indexOf(key))
+  return compareColorsStroke[index]
+}
+
+function toggleCompareKey(key) {
+  selectedCompareKey.value = selectedCompareKey.value === key ? '' : key
+}
+
+function curveText(script) {
+  if (!script) return ''
+  return script.scenes
+    .slice(1)
+    .map((scene, index) => `${script.stages[index]}${scene.data[5]}%`)
+    .join(' / ')
+}
+
+function representativeText(script) {
+  return script?.reps?.length ? script.reps.join('、') : '当前样本不足，暂无代表剧本'
+}
+
+function syncFromLinkage() {
+  if (!Object.keys(scripts.value).length || !linkageState.selectedPlayId) return
+  const play = linkageState.plays.find((item) => item.play_id === linkageState.selectedPlayId)
+  const key = findScriptKeyByPlay(scripts.value, linkageState.selectedPlayId, play?.title)
+  const values = getFiveStageValues(scripts.value[key])
+  const typeKey = classifyFiveStageCurve(values)
+  if (typeKey && compareScripts.value[typeKey]) selectedCompareKey.value = typeKey
+}
+
+function isLinkageTriggerSource() {
+  return linkageState.source === 'leftTopIcon' || linkageState.source === 'rightTopNode'
+}
 </script>
 
 <style scoped>
-.mode-compare-shell {
+.compare-view {
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -339,372 +377,231 @@ function togglePlay() {
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
 }
 
-.mode-compare-card {
+.compare-card {
   position: relative;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
   min-height: 0;
-  box-sizing: border-box;
+  padding: 6px;
+  overflow: hidden;
+  background: #fdfbf7;
+  border: 1px solid #d9cebf;
+  border-radius: 8px;
+  box-shadow: 0 5px 14px rgba(94, 63, 42, 0.08);
 }
 
-.mode-legend {
+.compare-legend {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 7px;
-  min-height: 28px;
-  padding-right: 178px;
-  color: #4a3b32;
-  font-size: 11px;
-  font-weight: 800;
+  gap: 10px;
+  flex: 0 0 auto;
+  min-height: 33px;
+  margin-bottom: 6px;
+  padding: 6px 9px;
+  overflow: hidden;
+  font: 12px/1.2 "Microsoft YaHei", sans-serif;
+  background: #fdfbf7;
+  border: 1px solid #e6dcd3;
+  border-radius: 5px;
+  box-shadow: 0 1px 3px rgba(90, 60, 35, 0.06);
 }
 
 .legend-title {
-  color: #7a241d;
+  flex: 0 0 auto;
+  color: #998370;
+  font-weight: 800;
 }
 
 .legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 800;
   white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .legend-item i {
-  width: 9px;
-  height: 9px;
+  width: 12px;
+  height: 6px;
   border-radius: 2px;
 }
 
-.mode-grid {
+.legend-item.muted {
+  opacity: 0.3;
+}
+
+.legend-item.active {
+  transform: translateY(-1px);
+}
+
+.compare-main {
   display: grid;
-  grid-template-columns: minmax(0, 2.35fr) minmax(300px, 1fr);
+  grid-template-columns: minmax(0, 2.8fr) minmax(170px, 1fr);
   gap: 8px;
+  flex: 1 1 auto;
   min-height: 0;
 }
 
-.compare-canvas-panel {
+.compare-canvas-panel,
+.compare-panel {
   position: relative;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid #e6dcd3;
-  border-radius: 8px;
   background: #fdfbf7;
-  box-shadow: inset 0 2px 12px rgba(93, 72, 53, 0.05);
+  border: 1px solid #e6dcd3;
+  border-radius: 7px;
 }
 
-.canvas-title {
+.compare-canvas-panel {
+  box-shadow: inset 0 0 12px rgba(92, 63, 36, 0.05);
+}
+
+.canvas-heading {
   position: absolute;
-  top: 10px;
-  left: 16px;
-  right: 16px;
+  top: 8px;
+  left: 12px;
+  right: 12px;
   z-index: 2;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
   pointer-events: none;
 }
 
-.canvas-title strong {
+.canvas-heading span {
+  display: block;
+  overflow: hidden;
   color: #b22222;
-  font-size: 18px;
+  font-size: 15px;
+  font-weight: 900;
   line-height: 1.2;
-  letter-spacing: 0;
-}
-
-.canvas-title span {
-  color: #a69482;
-  font-family: Consolas, "Microsoft YaHei", sans-serif;
-  font-size: 10px;
-  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .compare-canvas {
-  display: block;
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  cursor: crosshair;
 }
 
-.compare-tooltip {
-  position: absolute;
-  z-index: 5;
-  width: 210px;
-  padding: 10px;
-  border: 1px solid #d9cebf;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 10px 28px rgba(93, 72, 53, 0.14);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s ease;
-}
-
-.compare-tooltip.visible {
-  opacity: 1;
-}
-
-.tooltip-title {
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #e6dcd3;
-  color: #a0522d;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.tooltip-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 4px;
-  font-family: "Microsoft YaHei", sans-serif;
-  font-size: 10px;
-}
-
-.tooltip-row {
+.compare-panel {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.compare-analysis {
-  display: flex;
-  min-height: 0;
-  height: 100%;
   flex-direction: column;
-  padding: 10px;
-  border: 1px solid #d9cebf;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.88);
-  box-sizing: border-box;
+  padding: 9px;
+  box-shadow: 0 1px 5px rgba(90, 60, 35, 0.06);
 }
 
-.compare-analysis h3 {
-  margin: 0 0 6px;
-  padding-bottom: 5px;
+.panel-title-row {
+  padding-bottom: 6px;
+  margin-bottom: 6px;
   border-bottom: 1px solid #d9cebf;
+}
+
+.panel-title-row strong {
+  display: block;
+  overflow: hidden;
   color: #b22222;
   font-size: 14px;
-  font-weight: 900;
-  line-height: 1.2;
-}
-
-.scene-readout {
-  margin-bottom: 6px;
-  padding: 6px 8px;
-  border: 1px solid #f5efe6;
-  border-radius: 6px;
-  background: #fdfbf7;
-}
-
-.scene-readout span,
-.desc-block > span {
-  display: block;
-  margin-bottom: 3px;
-  color: #998370;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.scene-readout strong {
-  display: block;
-  color: #4a3b32;
-  font-size: 11px;
-  line-height: 1.25;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .desc-block {
   display: flex;
   flex: 1 1 auto;
-  min-height: 0;
   flex-direction: column;
+  min-height: 0;
 }
 
-.desc-block > span {
-  color: #a0522d;
-  font-size: 11px;
+.desc-title {
+  display: block;
+  flex: 0 0 auto;
+  margin-bottom: 5px;
+  color: #b35c37;
+  font-size: 13px;
+  font-weight: 900;
 }
 
-.mode-desc-list {
+.compare-desc-list {
   flex: 1 1 auto;
   min-height: 0;
+  padding-right: 3px;
   overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 6px;
+}
+
+.compare-desc-card {
+  padding: 8px;
+  margin-bottom: 7px;
   color: #5c4636;
-  font-family: "Microsoft YaHei", sans-serif;
-  font-size: 9.2px;
-  line-height: 1.25;
-  text-align: justify;
+  font: 11px/1.5 "Microsoft YaHei", sans-serif;
+  background: #fff;
+  border: 1px solid #e6dcd3;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(90, 60, 35, 0.06);
 }
 
-.mode-desc-list::-webkit-scrollbar {
-  width: 5px;
+.compare-desc-card.focused {
+  padding: 10px;
+  font-size: 12px;
 }
 
-.mode-desc-list::-webkit-scrollbar-track {
-  background: rgba(245, 239, 230, 0.75);
-  border-radius: 999px;
-}
-
-.mode-desc-list::-webkit-scrollbar-thumb {
-  background: rgba(160, 82, 45, 0.42);
-  border-radius: 999px;
-}
-
-.mode-desc-item {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1px;
-  margin: 0 0 4px;
-  padding-bottom: 3px;
-  border-bottom: 1px dotted rgba(160, 82, 45, 0.15);
-}
-
-.mode-desc-item b {
-  font-size: 10px;
+.compare-desc-card h4 {
+  margin: 0 0 5px;
+  font-size: 13px;
   line-height: 1.2;
 }
 
-.mode-desc-item span {
+.compare-desc-card h4 small {
+  color: #998370;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.compare-desc-card p {
+  margin: 0 0 4px;
+  text-align: justify;
+}
+
+.compare-desc-card em {
   display: block;
-}
-
-.timeline-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  height: 36px;
-  padding: 0 2px;
-}
-
-.mini-play-btn {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  border: 0;
-  border-radius: 999px;
-  color: #ffffff;
-  background: #a0522d;
-  cursor: pointer;
-  box-shadow: 0 5px 12px rgba(80, 45, 25, 0.18);
-}
-
-.play-icon,
-.pause-icon {
-  width: 15px;
-  height: 15px;
-  fill: currentColor;
-}
-
-.play-icon {
-  margin-left: 2px;
-}
-
-.hidden {
-  display: none;
-}
-
-.progress-percent {
-  width: 42px;
-  color: #b22222;
-  font-family: Consolas, "Microsoft YaHei", sans-serif;
-  font-size: 12px;
-  font-weight: 900;
-  text-align: right;
-}
-
-.timeline-slider {
-  flex: 1;
-  height: 6px;
-  border-radius: 999px;
-  background: #e6dcd3;
-  accent-color: #a0522d;
-  cursor: pointer;
-}
-
-.timeline-slider::-webkit-slider-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #a0522d;
-  box-shadow: 0 0 0 3px rgba(160, 82, 45, 0.14);
+  margin-top: 4px;
+  color: #998370;
+  font-style: italic;
 }
 
 .load-state {
   position: absolute;
-  inset: 0;
+  inset: 40px 12px 12px;
   z-index: 10;
   display: grid;
   place-items: center;
-  color: #7a6658;
-  background: rgba(255, 250, 242, 0.78);
+  color: #8b4513;
   font-size: 13px;
   font-weight: 800;
+  text-align: center;
+  background: rgba(253, 251, 247, 0.86);
 }
 
 .load-state.error {
-  color: #8b2a25;
-}
-
-:global(.single-preview-panel--main-bottom) .mode-compare-card {
-  gap: 12px;
-}
-
-:global(.single-preview-panel--main-bottom) .mode-grid {
-  grid-template-columns: minmax(0, 2.35fr) minmax(360px, 1fr);
-  gap: 20px;
-}
-
-:global(.single-preview-panel--main-bottom) .mode-legend {
-  min-height: 34px;
-  padding-right: 184px;
-  font-size: 13px;
-}
-
-:global(.single-preview-panel--main-bottom) .compare-analysis {
-  padding: 14px;
-}
-
-:global(.single-preview-panel--main-bottom) .compare-analysis h3 {
-  font-size: 16px;
-  margin-bottom: 8px;
-}
-
-:global(.single-preview-panel--main-bottom) .mode-desc-list {
-  overflow-y: auto;
-  font-size: 10.5px;
-  line-height: 1.32;
-}
-
-:global(.single-preview-panel--main-bottom) .mode-desc-item {
-  margin-bottom: 5px;
-}
-
-:global(.single-preview-panel--main-bottom) .mode-desc-item b {
-  font-size: 11px;
-}
-
-:global(.single-preview-panel--main-bottom) .timeline-row {
-  height: 44px;
+  color: #b22222;
 }
 
 @media (max-width: 900px) {
-  .mode-legend {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-    padding-right: 0;
+  .compare-main {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .mode-grid {
-    grid-template-columns: 1fr;
+  .compare-panel {
+    display: none;
   }
 }
 </style>

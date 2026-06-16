@@ -83,6 +83,14 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import * as d3 from 'd3'
 import * as XLSX from 'xlsx'
+import {
+  findPlayById,
+  findPlayByTitle,
+  linkageState,
+  loadLinkageData,
+  selectCharacter,
+  standardizeTrade,
+} from '../../services/linkageStore'
 import coreAvatar from '../../assets/人物图象/核心.png'
 import majorAvatar from '../../assets/人物图象/主要.png'
 import minorAvatar from '../../assets/人物图象/次要.png'
@@ -183,10 +191,24 @@ function setRelationFilter(type) {
   activeRelationType.value = type
   scheduleDraw()
 }
+
+function syncSelectedScriptFromLinkage() {
+  const play = findPlayById(linkageState.selectedPlayId)
+  const nextScript = play?.title && scriptOptions.value.includes(play.title) ? play.title : scriptOptions.value[0] || ''
+
+  if (!nextScript || selectedScript.value === nextScript) return
+
+  syncingFromLinkage = true
+  selectedScript.value = nextScript
+  nextTick(() => {
+    syncingFromLinkage = false
+  })
+}
 let resizeObserver = null
 let drawFrame = 0
 let lastStageWidth = 0
 let lastStageHeight = 0
+let syncingFromLinkage = false
 
 const scriptOptions = computed(() => {
   return Array.from(new Set(rows.value.map((row) => row.script).filter(Boolean)))
@@ -233,11 +255,27 @@ watch([currentGraph, selectedScript], async () => {
   drawChart()
 })
 
+watch(
+  () => [linkageState.selectedPlayId, linkageState.selectedCharacterId, linkageState.selectedTrade, linkageState.selectedSceneId],
+  async () => {
+    if (isLinkageTriggerSource()) syncSelectedScriptFromLinkage()
+    await nextTick()
+    drawChart()
+  },
+)
+
 async function loadRows() {
   loading.value = true
   errorMessage.value = ''
 
   try {
+    const linkageData = await loadLinkageData()
+    if (linkageData.plays?.length) {
+      rows.value = linkageData.plays.flatMap((play) => (play.relations || []).map((relation) => normalizeLinkageRelation(play, relation)))
+      syncSelectedScriptFromLinkage()
+      return
+    }
+
     const response = await fetch(encodeURI(DATA_URL))
     if (!response.ok) throw new Error(`读取失败：${response.status}`)
 
@@ -270,6 +308,43 @@ function normalizeRow(row) {
   }
 }
 
+function normalizeLinkageRelation(play, relation) {
+  return {
+    playId: play.play_id,
+    script: play.title,
+    source: relation.source_character_id,
+    sourceName: relation.source,
+    sourceLevel: relation.source_level || inferNodeLevel(play, relation.source_character_id),
+    sourceTrade: relation.source_standard_trade || relation.source_trade,
+    target: relation.target_character_id,
+    targetName: relation.target,
+    targetLevel: relation.target_level || inferNodeLevel(play, relation.target_character_id),
+    targetTrade: relation.target_standard_trade || relation.target_trade,
+    relation: relation.relation_label || relation.relation_type || '同场关系',
+    relationType: mapRelationType(relation.relation_type),
+    description: relation.relation_desc || relation.evidence || '',
+    weight: Math.max(1, Number(relation.weight) || 1),
+    sceneIds: relation.scene_ids || [],
+  }
+}
+
+function inferNodeLevel(play, characterId) {
+  const character = play.characters?.find((item) => item.character_id === characterId)
+  if (!character) return 'minor'
+  const explicitLevel = text(character.role_level || character.roleLevel || character.role_level_label || character.level)
+  if (explicitLevel) return normalizeLevel(explicitLevel)
+  if (character.importance >= 0.78 || character.role_order <= 2) return 'core'
+  if (character.importance >= 0.45 || character.role_order <= 6) return 'major'
+  return 'minor'
+}
+
+function mapRelationType(type) {
+  const value = text(type)
+  if (value === 'power') return 'command'
+  if (value === 'romance') return 'kinship'
+  return value || 'alliance'
+}
+
 function text(value) {
   return String(value ?? '').trim()
 }
@@ -277,19 +352,39 @@ function text(value) {
 function buildGraph(edgeRows) {
   const nodeMap = new Map()
   const links = []
+  const playCharacters = getGraphCharacters(edgeRows)
+
+  playCharacters.forEach((character) => {
+    upsertNode(
+      nodeMap,
+      character.character_id,
+      character.name,
+      character.role_level || inferNodeLevel({ characters: playCharacters }, character.character_id),
+      0,
+      character.standard_trade || character.trade,
+      character.play_id,
+      character.importance,
+      false,
+    )
+  })
 
   edgeRows.forEach((row, index) => {
-    upsertNode(nodeMap, row.source, row.sourceLevel, row.weight)
-    upsertNode(nodeMap, row.target, row.targetLevel, row.weight)
+    upsertNode(nodeMap, row.source, row.sourceName || row.source, row.sourceLevel, row.weight, row.sourceTrade, row.playId)
+    upsertNode(nodeMap, row.target, row.targetName || row.target, row.targetLevel, row.weight, row.targetTrade, row.playId)
 
     links.push({
   id: `edge-${index}`,
   source: row.source,
   target: row.target,
+  sourceName: row.sourceName || row.source,
+  targetName: row.targetName || row.target,
+  sourceTrade: row.sourceTrade || '',
+  targetTrade: row.targetTrade || '',
   relation: row.relation,
   relationType: getRelationType(row),
   description: row.description,
   weight: row.weight,
+  sceneIds: row.sceneIds || [],
 })
   })
 
@@ -324,28 +419,59 @@ function buildGraph(edgeRows) {
   return { nodes, links }
 }
 
-function upsertNode(nodeMap, name, level, weight) {
-  if (!nodeMap.has(name)) {
-    nodeMap.set(name, {
-      id: name,
+function getGraphCharacters(edgeRows) {
+  const play = findPlayByTitle(selectedScript.value) || findPlayById(edgeRows[0]?.playId)
+  if (!play?.characters?.length) return []
+
+  return play.characters
+    .slice()
+    .sort((a, b) => {
+      return (
+        nodeLevelRank(b.role_level) - nodeLevelRank(a.role_level) ||
+        Number(b.importance || 0) - Number(a.importance || 0) ||
+        Number(a.role_order || 999) - Number(b.role_order || 999)
+      )
+    })
+}
+
+function upsertNode(nodeMap, id, name, level, weight, trade = '', playId = '', importance = 0, countDegree = true) {
+  if (!nodeMap.has(id)) {
+    nodeMap.set(id, {
+      id,
       name,
+      trade,
+      playId,
       level,
       degree: 0,
-      score: 0,
+      score: Math.max(0, Number(importance) || 0),
+      importance: Math.max(0, Number(importance) || 0),
     })
   }
 
-  const node = nodeMap.get(name)
-  node.degree += 1
-  node.score += weight
+  const node = nodeMap.get(id)
+  if (countDegree) node.degree += 1
+  node.score += Number(weight) || 0
   node.level = strongerLevel(node.level, level)
+  node.importance = Math.max(node.importance || 0, Number(importance) || 0)
+  if (trade && !node.trade) node.trade = trade
 }
 
 function normalizeLevel(level) {
   const value = text(level)
+  if (value === 'core') return 'core'
+  if (value === 'major') return 'major'
+  if (value === 'minor') return 'minor'
   if (value.includes('核心')) return 'core'
   if (value.includes('主要')) return 'major'
   return 'minor'
+}
+
+function nodeLevelRank(level) {
+  return {
+    core: 3,
+    major: 2,
+    minor: 1,
+  }[normalizeLevel(level)] || 1
 }
 
 function strongerLevel(left, right) {
@@ -355,7 +481,9 @@ function strongerLevel(left, right) {
     minor: 1,
   }
 
-  return rank[normalizeLevel(right)] > rank[normalizeLevel(left)] ? right : left
+  const leftLevel = normalizeLevel(left)
+  const rightLevel = normalizeLevel(right)
+  return rank[rightLevel] > rank[leftLevel] ? rightLevel : leftLevel
 }
 
 function getPlateWidth(name, isCore, level = 'minor') {
@@ -425,6 +553,7 @@ function drawChart() {
 
   drawEdges(edgeLayer, links, nodeById)
 drawNodes(nodeLayer, nodes, links, nodeById, edgeLayer)
+applyExternalFocus()
 }
 function getRelationType(edge) {
   const type = String(edge.relationType || edge.relation || '').trim().toLowerCase()
@@ -1177,6 +1306,10 @@ function drawNodes(nodeLayer, nodes, links, nodeById, edgeLayer) {
     setNodeActive(node.id)
     showNodeTooltip(event, node, links, nodeById)
   })
+  .on('click', (event, node) => {
+    event.stopPropagation()
+    selectCharacter(node.id, 'rightTopNode')
+  })
   .on('mouseleave', () => {
     clearActive()
     hideTooltip()
@@ -1381,6 +1514,58 @@ function setEdgeActive(activeEdge) {
 function clearActive() {
   const svg = d3.select(svgRef.value)
   svg.selectAll('.node,.edge').classed('is-muted', false).classed('is-active', false)
+  applyExternalFocus()
+}
+
+function applyExternalFocus() {
+  const svg = d3.select(svgRef.value)
+  if (!svgRef.value || !currentGraph.value.nodes.length) return
+  if (!isLinkageTriggerSource()) return
+
+  const focusCharacterId = linkageState.selectedCharacterId
+  const focusTrade = text(linkageState.selectedTrade)
+  const focusSceneId = linkageState.selectedSceneId
+  const shouldUseSceneFocus = linkageState.source !== 'leftTopIcon' && linkageState.source !== 'rightTopNode'
+  const activeNodeIds = new Set()
+  const activeEdgeIds = new Set()
+
+  currentGraph.value.nodes.forEach((node) => {
+    if (focusCharacterId && node.id === focusCharacterId) activeNodeIds.add(node.id)
+    if (!focusCharacterId && focusTrade && standardizeTrade(node.trade) === standardizeTrade(focusTrade)) {
+      activeNodeIds.add(node.id)
+    }
+  })
+
+  currentGraph.value.links.forEach((edge) => {
+    if (shouldUseSceneFocus && focusSceneId && edge.sceneIds?.includes(focusSceneId)) {
+      activeEdgeIds.add(edge.id)
+      activeNodeIds.add(edge.source)
+      activeNodeIds.add(edge.target)
+    }
+    if (focusCharacterId && (edge.source === focusCharacterId || edge.target === focusCharacterId)) {
+      activeEdgeIds.add(edge.id)
+      activeNodeIds.add(edge.source)
+      activeNodeIds.add(edge.target)
+    } else if (!focusCharacterId && (activeNodeIds.has(edge.source) || activeNodeIds.has(edge.target))) {
+      activeEdgeIds.add(edge.id)
+    }
+  })
+
+  if (!activeNodeIds.size && !activeEdgeIds.size) return
+
+  svg
+    .selectAll('.node')
+    .classed('is-muted', (node) => !activeNodeIds.has(node.id))
+    .classed('is-active', (node) => activeNodeIds.has(node.id))
+
+  svg
+    .selectAll('.edge')
+    .classed('is-muted', (edge) => !activeEdgeIds.has(edge.id))
+    .classed('is-active', (edge) => activeEdgeIds.has(edge.id))
+}
+
+function isLinkageTriggerSource() {
+  return linkageState.source === 'leftTopIcon' || linkageState.source === 'rightTopNode'
 }
 
 function showNodeTooltip(event, node, links, nodeById) {
