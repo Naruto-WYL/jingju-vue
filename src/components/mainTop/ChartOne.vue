@@ -90,6 +90,7 @@ import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch, w
 import './theme.css';
 import { loadDemoDataset } from '../services/tableImport';
 import { narrativeColors, outcomeColors, relationColors } from '../services/colorScales';
+import { clearLoopFilter, setLoopFilter } from '../../services/loopFilterStore';
 import type { LoopFilters, LoopFlow, ScriptRecord } from '../types/loop';
 
 const LOOP_ASSET_BASE = '/%E6%95%B0%E6%8D%AE%E8%A1%A8%E5%90%88%E9%9B%86/5';
@@ -131,6 +132,7 @@ watchEffect(() => {
 watch(visibleFlows, (next) => {
   if (!next.some((flow) => flow.id === selectedFlow.value?.id)) {
     selectedFlow.value = null;
+    clearLoopFilter();
   }
 });
 
@@ -143,6 +145,7 @@ async function loadDefaultData() {
   flows.value = dataset.flows;
   scripts.value = dataset.scripts;
   selectedFlow.value = null;
+  clearLoopFilter();
 }
 
 function emit(event: 'select', flow: LoopFlow) {
@@ -209,7 +212,7 @@ const chartSubtitle = computed(() => {
   if (viewMode.value === 'detail') return selectedEdgeDetail.value ? `当前路径：${selectedEdgeDetail.value.subtitle}` : '全局协同网络：点击连线查看对应剧本。';
   const flow = props.selectedFlow;
   if (!flow) return '中心向外阅读：角色关系承载主题，主题组织叙事，叙事推进后反向塑造关系。';
-  return `${flow.relationType} -> ${flow.themeCombo} -> ${flow.narrativeType} -> ${relationOutcome(flow)}`;
+  return `${flow.relationType} -> ${flow.themeCombo} -> ${flowNarrativeText(flow)} -> ${relationOutcome(flow)}`;
 });
 
 const badgeText = computed(() => {
@@ -221,7 +224,7 @@ const patternDescription = computed(() => {
   const flow = props.selectedFlow;
   if (viewMode.value === 'detail') return selectedEdgeDetail.value ? selectedEdgeDetail.value.subtitle : '点击线条查看该协同路径对应的剧本名单。';
   if (!flow) return '点击圆环扇区查看代表剧本与闭环路径。';
-  return `${flow.relationType} 承载 ${flow.themeCombo}，以 ${flow.narrativeType} 推进，最终形成“${relationOutcome(flow)}”的关系演化结局。`;
+  return `${flow.relationType} 承载 ${flow.themeCombo}，以 ${flowNarrativeText(flow)} 推进，最终形成“${relationOutcome(flow)}”的关系演化结局。`;
 });
 
 async function draw() {
@@ -288,14 +291,13 @@ function drawMainRings(svg: SVGSVGElement, root: NodeDatum, cx: number, cy: numb
     if (span < minSpan) return;
     const inner = node.depth === 1 ? ring * 1.12 : ring * 2.05;
     const outer = node.depth === 1 ? ring * 1.9 : ring * 3.34;
-    const label = tangentialLabel(
-      node.depth === 1 ? truncate(node.name, 5) : compactThemeCombo(node.name),
-      cx,
-      cy,
-      (inner + outer) / 2,
-      ((node.start || 0) + (node.end || 0)) / 2,
-      `arc-label ${node.depth === 1 ? 'arc-label--inner' : 'arc-label--theme'}`,
-    );
+    const labelText = node.depth === 1 ? truncate(node.name, 5) : compactThemeCombo(node.name);
+    const labelAngle = ((node.start || 0) + (node.end || 0)) / 2;
+    const labelRadius = (inner + outer) / 2;
+    const label =
+      node.depth === 1
+        ? tangentialLabel(labelText, cx, cy, labelRadius, labelAngle, 'arc-label arc-label--inner')
+        : verticalLabel(labelText, cx, cy, labelRadius, labelAngle, 'arc-label arc-label--theme');
     svg.appendChild(label);
   });
 }
@@ -679,13 +681,13 @@ function drawNarrativeGlyphTrack(svg: SVGSVGElement, cx: number, cy: number, inn
   let angle = -Math.PI / 2;
   props.flows.forEach((flow) => {
     const profile = narrativeProfile(flow);
-    const color = narrativeColors[flow.narrativeType] || '#c7b894';
+    const color = narrativeVariantColor(flow, narrativeColors[flow.narrativeType] || '#c7b894');
     const gap = Math.min(0.018, span * 0.18);
     const usableStart = angle + gap;
     const usableEnd = angle + span - gap;
     const range = outerR - innerR;
     const baseR = innerR + range * 0.2;
-    const samples = Math.max(8, Math.min(20, Math.round(span * 14)));
+    const samples = Math.max(5, Math.min(10, Math.round(span * 10)));
     const outerPoints = Array.from({ length: samples }, (_, index) => {
       const t = samples === 1 ? 0.5 : index / (samples - 1);
       const a = usableStart + (usableEnd - usableStart) * t;
@@ -699,7 +701,7 @@ function drawNarrativeGlyphTrack(svg: SVGSVGElement, cx: number, cy: number, inn
     });
     const ribbon = element('path');
     const active = isFlowRelated(flow);
-    ribbon.setAttribute('class', `narrative-ribbon ${active ? 'active zoomed' : ''}`);
+    ribbon.setAttribute('class', `narrative-ribbon ${active ? 'active' : ''}`);
     ribbon.setAttribute('d', [...outerPoints, ...innerPoints].map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ') + ' Z');
     ribbon.setAttribute('fill', color);
     if (props.selectedFlow) ribbon.setAttribute('opacity', active ? '0.82' : '0.12');
@@ -708,15 +710,15 @@ function drawNarrativeGlyphTrack(svg: SVGSVGElement, cx: number, cy: number, inn
     ribbon.addEventListener('click', () => selectAndPopup(flow));
     svg.appendChild(ribbon);
 
-    profile.forEach((value, index) => {
-      const t = profile.length === 1 ? 0.5 : index / (profile.length - 1);
+    narrativeDotPoints(profile).forEach(({ value, sourceIndex, t }) => {
+      const index = sourceIndex;
       const a = usableStart + (usableEnd - usableStart) * t;
       const point = polar(cx, cy, baseR + range * (0.14 + value * 0.62), a);
       const dot = element('circle');
-      dot.setAttribute('class', `narrative-dot ${active ? 'active zoomed' : ''}`);
+      dot.setAttribute('class', `narrative-dot ${active ? 'active' : ''}`);
       dot.setAttribute('cx', String(point.x));
       dot.setAttribute('cy', String(point.y));
-      dot.setAttribute('r', String(Math.max(2.4, Math.min(4.8, span * 18)) * (active ? 1.25 : 1)));
+      dot.setAttribute('r', String(Math.max(2.4, Math.min(4.8, span * 18))));
       dot.setAttribute('fill', color);
       if (props.selectedFlow) dot.setAttribute('opacity', active ? '1' : '0.18');
       dot.addEventListener('mousemove', (event) => showTooltip(event, `<strong>${escapeHtml(flow.narrativeType)}</strong>${stageName(index, profile.length)}张力：${Math.round(value * 100)}%<br>${escapeHtml(flow.relationType)} -> ${escapeHtml(flow.themeCombo)}`));
@@ -738,6 +740,26 @@ function drawNarrativeGlyphTrack(svg: SVGSVGElement, cx: number, cy: number, inn
 function narrativeProfile(flow: LoopFlow) {
   if (flow.narrativeCurve?.length) return normalizeProfile(flow.narrativeCurve);
   return fallbackProfile(flow);
+}
+
+function narrativeDotPoints(profile: number[]) {
+  const maxDots = 5;
+  if (profile.length <= maxDots) {
+    return profile.map((value, index) => ({
+      value,
+      sourceIndex: index,
+      t: profile.length === 1 ? 0.5 : index / (profile.length - 1),
+    }));
+  }
+
+  return Array.from({ length: maxDots }, (_, index) => {
+    const t = maxDots === 1 ? 0.5 : index / (maxDots - 1);
+    return {
+      value: sampleProfile(profile, t),
+      sourceIndex: Math.round(t * (profile.length - 1)),
+      t,
+    };
+  });
 }
 
 function normalizeProfile(curve: number[]) {
@@ -782,6 +804,34 @@ function tangentialLabel(text: string, cx: number, cy: number, radius: number, a
   return label;
 }
 
+function verticalLabel(text: string, cx: number, cy: number, radius: number, angle: number, className: string) {
+  const point = polar(cx, cy, radius, angle);
+  const label = element('text');
+  const chars = Array.from(text);
+  const lineHeight = className.includes('arc-label--theme') ? 12 : 14;
+  const startDy = -((chars.length - 1) * lineHeight) / 2;
+  const normalized = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  const flip = normalized > Math.PI / 2 && normalized < Math.PI * 1.5;
+  const rotation = (angle * 180) / Math.PI - 90 + (flip ? 180 : 0);
+
+  label.setAttribute('class', `${className} arc-label--vertical`);
+  label.setAttribute('x', String(point.x));
+  label.setAttribute('y', String(point.y));
+  label.setAttribute('text-anchor', 'middle');
+  label.setAttribute('dominant-baseline', 'middle');
+  label.setAttribute('transform', `rotate(${rotation} ${point.x} ${point.y})`);
+
+  chars.forEach((char, index) => {
+    const tspan = element('tspan');
+    tspan.setAttribute('x', String(point.x));
+    tspan.setAttribute('dy', index === 0 ? String(startDy) : String(lineHeight));
+    tspan.textContent = char;
+    label.appendChild(tspan);
+  });
+
+  return label;
+}
+
 function outcomeLabelText(value: string) {
   return value
     .replace(/^关系/, '')
@@ -821,6 +871,16 @@ function relationOutcome(flow: LoopFlow) {
   return text || '关系演化未明';
 }
 
+function flowNarrativeText(flow: LoopFlow) {
+  return flow.waveType ? `${flow.narrativeType}/${flow.waveType}` : flow.narrativeType;
+}
+
+function narrativeVariantColor(flow: LoopFlow, baseColor: string) {
+  const seed = hashText(`${flow.id}${flow.themeCombo}${flow.waveType || ''}`);
+  const amount = ((seed % 7) - 3) * 0.045;
+  return shadeColor(baseColor, amount);
+}
+
 function drawOuterBars(svg: SVGSVGElement, cx: number, cy: number, innerR: number, outerR: number) {
   const maxCount = Math.max(...props.flows.map((flow) => flow.count), 1);
   const span = (Math.PI * 2) / Math.max(1, props.flows.length);
@@ -846,6 +906,7 @@ function drawOuterBars(svg: SVGSVGElement, cx: number, cy: number, innerR: numbe
 
 function selectAndPopup(flow: LoopFlow) {
   selectionScope.value = { type: 'flow', flowId: flow.id };
+  setLoopFilter(selectionScope.value, flow);
   emit('select', flow);
 }
 
@@ -860,6 +921,7 @@ function selectNode(node: NodeDatum) {
       themeCombo: representative.themeCombo,
     };
   }
+  setLoopFilter(selectionScope.value, representative);
   emit('select', representative);
 }
 
@@ -1614,6 +1676,20 @@ function lighten(hex: string, amount: number) {
   const r = Math.min(255, Math.round(((n >> 16) & 255) + 255 * amount));
   const g = Math.min(255, Math.round(((n >> 8) & 255) + 255 * amount));
   const b = Math.min(255, Math.round((n & 255) + 255 * amount));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function shadeColor(hex: string, amount: number) {
+  const value = hex.replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(value)) return hex;
+
+  const n = parseInt(value, 16);
+  const mix = amount >= 0 ? 255 : 0;
+  const ratio = Math.min(0.28, Math.abs(amount));
+  const r = Math.round(((n >> 16) & 255) * (1 - ratio) + mix * ratio);
+  const g = Math.round(((n >> 8) & 255) * (1 - ratio) + mix * ratio);
+  const b = Math.round((n & 255) * (1 - ratio) + mix * ratio);
+
   return `rgb(${r}, ${g}, ${b})`;
 }
 

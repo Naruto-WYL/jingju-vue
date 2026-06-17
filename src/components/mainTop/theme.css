@@ -399,7 +399,13 @@
   stroke-width: 3.8px;
 }
 
+.arc-label--vertical {
+  text-orientation: upright;
+  letter-spacing: 0;
+}
+
 .narrative-label {
+  display: none;
   fill: rgba(143, 47, 36, 0.82);
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
   font-size: 10.5px;
@@ -472,29 +478,29 @@
 
 .narrative-ribbon:hover,
 .narrative-ribbon.active {
-  opacity: 0.72;
+  opacity: 0.86;
+  stroke: rgba(255, 253, 246, 0.94);
+  stroke-width: 1.8;
   filter:
-    brightness(1.08)
-    saturate(1.45)
-    drop-shadow(0 0 8px rgba(255, 246, 210, 0.52))
-    drop-shadow(0 8px 13px rgba(143, 21, 22, 0.26));
+    brightness(1.06)
+    saturate(1.28)
+    contrast(1.08);
 }
 
 .narrative-dot {
   cursor: pointer;
-  stroke: rgba(255, 253, 246, 0.92);
-  stroke-width: 1.4;
+  stroke: rgba(255, 253, 246, 0.94);
+  stroke-width: 1.8;
   opacity: 0.86;
-  transition: opacity 0.24s ease, filter 0.24s ease, r 0.24s ease;
+  transition: opacity 0.24s ease, filter 0.24s ease, stroke-width 0.24s ease;
 }
 
 .narrative-dot:hover,
 .narrative-dot.active {
   opacity: 1;
-  filter:
-    brightness(1.08)
-    drop-shadow(0 0 8px rgba(228, 184, 74, 0.62))
-    drop-shadow(0 5px 9px rgba(82, 31, 18, 0.26));
+  stroke: rgba(255, 253, 246, 0.94);
+  stroke-width: 1.8;
+  filter: brightness(1.08) contrast(1.08);
 }
 
 .center-aura {

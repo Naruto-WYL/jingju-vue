@@ -7,6 +7,7 @@
           class="script-select"
           aria-label="选择剧本"
           :disabled="loading || !scriptOptions.length"
+          @change="handleScriptSelectChange"
         >
           <option v-for="script in scriptOptions" :key="script" :value="script">
             {{ script }}
@@ -19,6 +20,7 @@
         class="script-select"
         aria-label="选择剧本"
         :disabled="loading || !scriptOptions.length"
+        @change="handleScriptSelectChange"
       >
         <option v-for="script in scriptOptions" :key="script" :value="script">
           {{ script }}
@@ -65,6 +67,15 @@
       <div v-else-if="errorMessage" class="chart-state chart-state--error">{{ errorMessage }}</div>
       <div v-else-if="!currentGraph.nodes.length" class="chart-state">暂无关系数据</div>
 
+      <button
+        v-if="isFocusedGraphVisible"
+        class="focus-return-btn"
+        type="button"
+        @click="returnToFullGraph"
+      >
+        返回全图
+      </button>
+
       <div
         ref="tooltipRef"
         class="relation-tooltip"
@@ -109,6 +120,7 @@ const props = defineProps({
 const DATA_URL = '/数据表合集/2/两剧本人物关系_简化版.csv'
 const VIEW_WIDTH = 1600
 const VIEW_HEIGHT = 1360
+const FOCUS_LAYOUT_DURATION = 2600
 
 const GOLD = '#d4a64a'
 const DEEP_GOLD = '#7a4b19'
@@ -192,6 +204,19 @@ function setRelationFilter(type) {
   scheduleDraw()
 }
 
+function handleScriptSelectChange() {
+  if (syncingFromLinkage) return
+  focusSuppressed.value = true
+  previousNodePositions = new Map()
+  scheduleDraw()
+}
+
+function returnToFullGraph() {
+  focusSuppressed.value = true
+  previousNodePositions = new Map()
+  scheduleDraw()
+}
+
 function syncSelectedScriptFromLinkage() {
   const play = findPlayById(linkageState.selectedPlayId)
   const nextScript = play?.title && scriptOptions.value.includes(play.title) ? play.title : scriptOptions.value[0] || ''
@@ -209,6 +234,8 @@ let drawFrame = 0
 let lastStageWidth = 0
 let lastStageHeight = 0
 let syncingFromLinkage = false
+let previousNodePositions = new Map()
+const focusSuppressed = ref(false)
 
 const scriptOptions = computed(() => {
   return Array.from(new Set(rows.value.map((row) => row.script).filter(Boolean)))
@@ -220,6 +247,10 @@ const currentRows = computed(() => {
 })
 
 const currentGraph = computed(() => buildGraph(currentRows.value))
+
+const isFocusedGraphVisible = computed(() => {
+  return Boolean(getFocusCharacterId(currentGraph.value.nodes))
+})
 
 onMounted(async () => {
   await loadRows()
@@ -258,7 +289,10 @@ watch([currentGraph, selectedScript], async () => {
 watch(
   () => [linkageState.selectedPlayId, linkageState.selectedCharacterId, linkageState.selectedTrade, linkageState.selectedSceneId],
   async () => {
-    if (isLinkageTriggerSource()) syncSelectedScriptFromLinkage()
+    if (isLinkageTriggerSource()) {
+      focusSuppressed.value = false
+      syncSelectedScriptFromLinkage()
+    }
     await nextTick()
     drawChart()
   },
@@ -520,18 +554,34 @@ function drawChart() {
 
   hideTooltip()
 
-  const nodes = currentGraph.value.nodes.map((node, index) => ({
+  const graphNodes = currentGraph.value.nodes.map((node, index) => ({
     ...node,
     order: index,
     uid: `node-${index}`,
   }))
-  const links = currentGraph.value.links.map((link, index) => ({
+  const graphLinks = currentGraph.value.links.map((link, index) => ({
     ...link,
     uid: `edge-${index}`,
   }))
 
+  const requestedFocusId = getFocusCharacterId(graphNodes)
+  const renderGraph = buildFocusedGraph(graphNodes, graphLinks, requestedFocusId)
+  const nodes = renderGraph.nodes
+  const links = renderGraph.links.map((link, index) => ({
+    ...link,
+    uid: link.uid || `edge-${index}`,
+  }))
   const nodeById = new Map(nodes.map((node) => [node.id, node]))
-  layoutPosterGraph(nodes, links, nodeById)
+  const isFocusedLayout = Boolean(renderGraph.focusCharacterId)
+
+  if (isFocusedLayout) {
+    layoutFocusedGraph(nodes, links, renderGraph.focusCharacterId)
+  } else {
+    layoutPosterGraph(nodes, links, nodeById)
+  }
+
+  const fullLayoutStartPositions = isFocusedLayout ? buildFullLayoutStartPositions(graphNodes, graphLinks) : null
+  prepareNodeAnimation(nodes, isFocusedLayout, fullLayoutStartPositions)
 
   const defs = svg.append('defs')
 
@@ -551,9 +601,295 @@ function drawChart() {
   const edgeLayer = viewport.append('g')
   const nodeLayer = viewport.append('g')
 
-  drawEdges(edgeLayer, links, nodeById)
-drawNodes(nodeLayer, nodes, links, nodeById, edgeLayer)
-applyExternalFocus()
+  drawEdges(edgeLayer, links, nodeById, isFocusedLayout)
+  drawNodes(nodeLayer, nodes, links, nodeById, edgeLayer, isFocusedLayout, renderGraph.focusCharacterId)
+  applyExternalFocus()
+  if (isFocusedLayout) applyFocusedSubgraph(renderGraph.focusCharacterId)
+  rememberNodePositions(nodes)
+}
+
+function getFocusCharacterId(nodes) {
+  const focusId = text(linkageState.selectedCharacterId)
+  if (focusSuppressed.value) return ''
+  if (!isLinkageTriggerSource() || !focusId) return ''
+  return nodes.some((node) => node.id === focusId) ? focusId : ''
+}
+
+function buildFocusedGraph(nodes, links, focusCharacterId) {
+  if (!focusCharacterId) {
+    return {
+      nodes,
+      links,
+      focusCharacterId: '',
+    }
+  }
+
+  const focusNode = nodes.find((node) => node.id === focusCharacterId)
+  if (!focusNode) {
+    return {
+      nodes,
+      links,
+      focusCharacterId: '',
+    }
+  }
+
+  const nodeLookup = new Map(nodes.map((node) => [node.id, node]))
+  const directLinks = links.filter((edge) => edge.source === focusCharacterId || edge.target === focusCharacterId)
+  const focusLinks = directLinks.slice()
+
+  const hasCoreNeighbor = directLinks.some((edge) => {
+    const otherId = edge.source === focusCharacterId ? edge.target : edge.source
+    const otherNode = nodeLookup.get(otherId)
+    return Boolean(otherNode?.core || normalizeLevel(otherNode?.level) === 'core')
+  })
+
+  const fallbackCoreLink =
+    !hasCoreNeighbor && normalizeLevel(focusNode.level) !== 'core'
+      ? createFallbackCoreLink(nodes, focusNode, focusLinks)
+      : null
+
+  if (fallbackCoreLink) focusLinks.push(fallbackCoreLink)
+
+  const visibleIds = new Set([focusCharacterId])
+  focusLinks.forEach((edge) => {
+    visibleIds.add(edge.source)
+    visibleIds.add(edge.target)
+  })
+
+  return {
+    nodes: nodes
+      .filter((node) => visibleIds.has(node.id))
+      .map((node) => createFocusedNode(node, focusCharacterId, focusLinks)),
+    links: focusLinks,
+    focusCharacterId,
+  }
+}
+
+function createFallbackCoreLink(nodes, focusNode, existingLinks) {
+  const targetCore = nodes
+    .filter((node) => node.id !== focusNode.id)
+    .sort((a, b) => {
+      return (
+        Number(Boolean(b.core || normalizeLevel(b.level) === 'core')) -
+          Number(Boolean(a.core || normalizeLevel(a.level) === 'core')) ||
+        nodeLevelRank(b.level) - nodeLevelRank(a.level) ||
+        b.score - a.score ||
+        b.degree - a.degree ||
+        a.order - b.order
+      )
+    })[0]
+
+  if (!targetCore) return null
+
+  const alreadyLinked = existingLinks.some((edge) => {
+    return (
+      (edge.source === focusNode.id && edge.target === targetCore.id) ||
+      (edge.target === focusNode.id && edge.source === targetCore.id)
+    )
+  })
+
+  if (alreadyLinked) return null
+
+  return {
+    id: `focus-core-${focusNode.id}-${targetCore.id}`,
+    source: focusNode.id,
+    target: targetCore.id,
+    sourceName: focusNode.name,
+    targetName: targetCore.name,
+    sourceTrade: focusNode.trade || '',
+    targetTrade: targetCore.trade || '',
+    relation: '\u6838\u5fc3\u5173\u8054',
+    relationType: 'support',
+    description: '\u4eba\u7269\u7f3a\u5c11\u76f4\u63a5\u6838\u5fc3\u8fb9\u65f6\u7684\u8054\u52a8\u8865\u5145',
+    weight: 1,
+    sceneIds: [],
+    syntheticFocus: true,
+  }
+}
+
+function createFocusedNode(node, focusCharacterId, focusLinks) {
+  const isFocusCenter = node.id === focusCharacterId
+  const isSyntheticFocusNeighbor = focusLinks.some((edge) => {
+    return edge.syntheticFocus && (edge.source === node.id || edge.target === node.id)
+  })
+
+  if (isFocusCenter) {
+    return {
+      ...node,
+      isFocusCenter: true,
+      isFocusNeighbor: false,
+      isSyntheticFocusNeighbor,
+    }
+  }
+
+  return {
+    ...node,
+    isFocusCenter: false,
+    isFocusNeighbor: true,
+    isSyntheticFocusNeighbor,
+  }
+}
+
+function layoutFocusedGraph(nodes, links, focusCharacterId) {
+  const focusNode = nodes.find((node) => node.id === focusCharacterId)
+  if (!focusNode) return
+
+  const centerX = VIEW_WIDTH * 0.5
+  const centerY = VIEW_HEIGHT * 0.53
+  const relatedNodes = nodes
+    .filter((node) => node.id !== focusCharacterId)
+    .sort((a, b) => {
+      return (
+        getFocusLinkWeight(b.id, links, focusCharacterId) -
+          getFocusLinkWeight(a.id, links, focusCharacterId) ||
+        nodeLevelRank(b.level) - nodeLevelRank(a.level) ||
+        b.score - a.score ||
+        b.degree - a.degree ||
+        a.order - b.order
+      )
+    })
+
+  setPosterNode(focusNode, centerX, centerY, focusNode.r || nodeRadius(focusNode), focusNode.core)
+  focusNode.layoutRole = 'focus-center'
+  focusNode.anchorX = centerX
+  focusNode.anchorY = centerY
+  focusNode.clusterId = `focus:${focusCharacterId}`
+  focusNode.clusterHubX = centerX
+  focusNode.clusterHubY = centerY
+  focusNode.fx = centerX
+  focusNode.fy = centerY
+
+  const count = relatedNodes.length
+  const radiusX = clamp(360 + count * 26, 390, 590)
+  const radiusY = clamp(245 + count * 18, 270, 430)
+
+  relatedNodes.forEach((node, index) => {
+    const angle = count <= 1 ? -Math.PI / 2 : -Math.PI / 2 + (Math.PI * 2 * index) / count
+    const ring = Math.floor(index / 8)
+    const wave = count > 5 ? (index % 2) * 34 : 0
+    const xRadius = radiusX + ring * 78 + wave
+    const yRadius = radiusY + ring * 56 + wave * 0.65
+
+    node.r = nodeRadius(node)
+    node.plateWidth = getPlateWidth(node.name, node.core, node.level)
+    node.anchorX = centerX + Math.cos(angle) * xRadius
+    node.anchorY = centerY + Math.sin(angle) * yRadius
+    node.x = node.anchorX
+    node.y = node.anchorY
+    node.clusterId = `focus:${focusCharacterId}`
+    node.clusterHubX = centerX + Math.cos(angle) * 170
+    node.clusterHubY = centerY + Math.sin(angle) * 130
+
+    keepNodeInBounds(node)
+  })
+
+  runFocusForceLayout(nodes, links, focusNode)
+  polishNodeCollisions(nodes, [focusNode])
+  nodes.forEach((node) => keepNodeInBounds(node))
+  updateEdgeHubs(nodes)
+}
+
+function runFocusForceLayout(nodes, links, focusNode) {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]))
+  const simulationLinks = links
+    .map((link) => {
+      const source = nodeById.get(link.source)
+      const target = nodeById.get(link.target)
+      if (!source || !target) return null
+      return {
+        ...link,
+        source,
+        target,
+      }
+    })
+    .filter(Boolean)
+
+  focusNode.fx = focusNode.anchorX
+  focusNode.fy = focusNode.anchorY
+
+  const simulation = d3
+    .forceSimulation(nodes)
+    .alpha(1)
+    .alphaDecay(0.04)
+    .velocityDecay(0.48)
+    .force(
+      'link',
+      d3
+        .forceLink(simulationLinks)
+        .distance((link) => (link.source.id === focusNode.id || link.target.id === focusNode.id ? 365 : 250))
+        .strength((link) => (link.syntheticFocus ? 0.05 : 0.1 + Math.min(0.08, link.weight * 0.012))),
+    )
+    .force(
+      'charge',
+      d3.forceManyBody().strength((node) => (node.id === focusNode.id ? -1700 : node.level === 'major' ? -760 : -560)),
+    )
+    .force(
+      'collide',
+      d3
+        .forceCollide()
+        .radius((node) => collisionRadius(node) * 0.8)
+        .strength(1)
+        .iterations(4),
+    )
+    .force('x', d3.forceX((node) => node.anchorX ?? focusNode.anchorX).strength((node) => (node.id === focusNode.id ? 1 : 0.34)))
+    .force('y', d3.forceY((node) => node.anchorY ?? focusNode.anchorY).strength((node) => (node.id === focusNode.id ? 1 : 0.34)))
+    .force('bounds', forcePosterBounds())
+    .stop()
+
+  for (let index = 0; index < 240; index += 1) {
+    simulation.tick()
+  }
+
+  delete focusNode.fx
+  delete focusNode.fy
+}
+
+function getFocusLinkWeight(nodeId, links, focusCharacterId) {
+  return links.reduce((sum, edge) => {
+    const connected =
+      (edge.source === focusCharacterId && edge.target === nodeId) ||
+      (edge.target === focusCharacterId && edge.source === nodeId)
+    return connected ? sum + (Number(edge.weight) || 1) : sum
+  }, 0)
+}
+
+function buildFullLayoutStartPositions(graphNodes, graphLinks) {
+  const startNodes = graphNodes.map((node) => ({ ...node }))
+  const startLinks = graphLinks.map((link) => ({ ...link }))
+  const startNodeById = new Map(startNodes.map((node) => [node.id, node]))
+
+  layoutPosterGraph(startNodes, startLinks, startNodeById)
+
+  return new Map(startNodes.map((node) => [node.id, { x: node.x, y: node.y }]))
+}
+
+function prepareNodeAnimation(nodes, shouldAnimate, fullLayoutStartPositions = null) {
+  const fallbackX = VIEW_WIDTH * 0.5
+  const fallbackY = VIEW_HEIGHT * 0.53
+
+  nodes.forEach((node) => {
+    const previous = previousNodePositions.get(node.id) || fullLayoutStartPositions?.get(node.id)
+    node.startX = shouldAnimate ? previous?.x ?? fallbackX : node.x
+    node.startY = shouldAnimate ? previous?.y ?? fallbackY : node.y
+  })
+}
+
+function getStartNodeById(nodeById) {
+  const startNodeById = new Map()
+
+  nodeById.forEach((node, id) => {
+    startNodeById.set(id, {
+      ...node,
+      x: Number.isFinite(node.startX) ? node.startX : node.x,
+      y: Number.isFinite(node.startY) ? node.startY : node.y,
+    })
+  })
+
+  return startNodeById
+}
+
+function rememberNodePositions(nodes) {
+  previousNodePositions = new Map(nodes.map((node) => [node.id, { x: node.x, y: node.y }]))
 }
 function getRelationType(edge) {
   const type = String(edge.relationType || edge.relation || '').trim().toLowerCase()
@@ -1220,12 +1556,14 @@ function setPosterNode(node, x, y, radius, isCore = node.core) {
   node.plateWidth = getPlateWidth(node.name, isCore, node.level)
 }
 
-function drawEdges(edgeLayer, links, nodeById) {
+function drawEdges(edgeLayer, links, nodeById, shouldAnimate = false) {
+  const startNodeById = shouldAnimate ? getStartNodeById(nodeById) : nodeById
   const edgeGroups = edgeLayer
   .selectAll('g.edge')
   .data(links)
   .join('g')
   .attr('class', 'edge')
+  .classed('is-synthetic-focus', (edge) => Boolean(edge.syntheticFocus))
   .classed('is-filter-muted', (edge) => {
     const relationType = getRelationType(edge)
     return activeRelationType.value !== 'all' && relationType !== activeRelationType.value
@@ -1243,27 +1581,27 @@ function drawEdges(edgeLayer, links, nodeById) {
       hideTooltip()
     })
 
-  edgeGroups
-  .append('path')
-  .attr('class', 'edge__line-bg')
-  .attr('d', (edge, index) => edgePath(edge, nodeById, index))
-  .attr('stroke', (edge) => getEdgeTheme(edge).glow)
-  .attr('stroke-width', (edge) => Math.min(14, 8 + edge.weight * 0.7))
+  const backgroundLines = edgeGroups
+    .append('path')
+    .attr('class', 'edge__line-bg')
+    .attr('d', (edge, index) => edgePath(edge, startNodeById, index))
+    .attr('stroke', (edge) => getEdgeTheme(edge).glow)
+    .attr('stroke-width', (edge) => Math.min(14, 8 + edge.weight * 0.7))
 
-edgeGroups
-  .append('path')
-  .attr('id', (edge) => edge.uid)
-  .attr('class', 'edge__line')
-  .attr('d', (edge, index) => edgePath(edge, nodeById, index))
-  .attr('stroke', (edge) => getEdgeTheme(edge).color)
-  .attr('stroke-width', (edge) => Math.min(8, 4.8 + edge.weight * 0.6))
-  .attr('stroke-dasharray', (edge) => getEdgeTheme(edge).dash)
-  .attr('marker-end', (edge) => `url(#${getEdgeMarkerId(edge)})`)
+  const mainLines = edgeGroups
+    .append('path')
+    .attr('id', (edge) => edge.uid)
+    .attr('class', 'edge__line')
+    .attr('d', (edge, index) => edgePath(edge, startNodeById, index))
+    .attr('stroke', (edge) => getEdgeTheme(edge).color)
+    .attr('stroke-width', (edge) => Math.min(8, 4.8 + edge.weight * 0.6))
+    .attr('stroke-dasharray', (edge) => getEdgeTheme(edge).dash)
+    .attr('marker-end', (edge) => `url(#${getEdgeMarkerId(edge)})`)
 
-  edgeGroups
+  const hitLines = edgeGroups
     .append('path')
     .attr('class', 'edge__hit')
-    .attr('d', (edge, index) => edgePath(edge, nodeById, index))
+    .attr('d', (edge, index) => edgePath(edge, startNodeById, index))
 
   const labels = edgeGroups
     .append('text')
@@ -1276,9 +1614,17 @@ edgeGroups
     .attr('startOffset', '50%')
     .attr('text-anchor', 'middle')
     .text((edge) => edge.relation)
+
+  if (shouldAnimate) {
+    const transition = d3.transition().duration(FOCUS_LAYOUT_DURATION).ease(d3.easeCubicInOut)
+
+    backgroundLines.transition(transition).attr('d', (edge, index) => edgePath(edge, nodeById, index))
+    mainLines.transition(transition).attr('d', (edge, index) => edgePath(edge, nodeById, index))
+    hitLines.transition(transition).attr('d', (edge, index) => edgePath(edge, nodeById, index))
+  }
 }
 
-function drawNodes(nodeLayer, nodes, links, nodeById, edgeLayer) {
+function drawNodes(nodeLayer, nodes, links, nodeById, edgeLayer, shouldAnimate = false, focusCharacterId = '') {
   const filteredNodeIds = new Set()
 
   if (activeRelationType.value !== 'all') {
@@ -1294,10 +1640,17 @@ function drawNodes(nodeLayer, nodes, links, nodeById, edgeLayer) {
   .data(nodes)
   .join('g')
   .attr('class', 'node')
+  .classed('is-focus-center', (node) => node.id === focusCharacterId)
+  .classed('is-focus-neighbor', (node) => shouldAnimate && node.id !== focusCharacterId)
   .classed('is-filter-muted', (node) => {
     return activeRelationType.value !== 'all' && !filteredNodeIds.has(node.id)
   })
-  .attr('transform', (node) => `translate(${node.x},${node.y})`)
+  .attr('transform', (node) => {
+    const x = shouldAnimate && Number.isFinite(node.startX) ? node.startX : node.x
+    const y = shouldAnimate && Number.isFinite(node.startY) ? node.startY : node.y
+    return `translate(${x},${y})`
+  })
+  .style('opacity', shouldAnimate ? 0.72 : null)
   .on('mouseenter', (event, node) => {
     setNodeActive(node.id)
     showNodeTooltip(event, node, links, nodeById)
@@ -1349,6 +1702,15 @@ function drawNodes(nodeLayer, nodes, links, nodeById, edgeLayer) {
       d3.select(this).classed('is-dragging', false)
     }),
 )
+
+  if (shouldAnimate) {
+    nodeGroups
+      .transition()
+      .duration(FOCUS_LAYOUT_DURATION)
+      .ease(d3.easeCubicInOut)
+      .attr('transform', (node) => `translate(${node.x},${node.y})`)
+      .style('opacity', 1)
+  }
 
   nodeGroups.append('circle').attr('class', 'node__halo').attr('r', (node) => node.r + 10)
   nodeGroups.append('circle').attr('class', 'node__ring-outer').attr('r', (node) => node.r + 5)
@@ -1515,11 +1877,31 @@ function clearActive() {
   const svg = d3.select(svgRef.value)
   svg.selectAll('.node,.edge').classed('is-muted', false).classed('is-active', false)
   applyExternalFocus()
+  const focusCharacterId = getFocusCharacterId(currentGraph.value.nodes)
+  if (focusCharacterId) applyFocusedSubgraph(focusCharacterId)
+}
+
+function applyFocusedSubgraph(focusCharacterId) {
+  const svg = d3.select(svgRef.value)
+  if (!svgRef.value || !focusCharacterId) return
+
+  svg
+    .selectAll('.node')
+    .classed('is-muted', false)
+    .classed('is-active', false)
+    .classed('is-focus-center', (node) => node.id === focusCharacterId)
+    .classed('is-focus-neighbor', (node) => node.id !== focusCharacterId)
+
+  svg
+    .selectAll('.edge')
+    .classed('is-muted', false)
+    .classed('is-active', false)
 }
 
 function applyExternalFocus() {
   const svg = d3.select(svgRef.value)
   if (!svgRef.value || !currentGraph.value.nodes.length) return
+  if (focusSuppressed.value) return
   if (!isLinkageTriggerSource()) return
 
   const focusCharacterId = linkageState.selectedCharacterId
@@ -1740,6 +2122,30 @@ function clamp(value, min, max) {
   gap: 0px;
 }
 
+.focus-return-btn {
+  position: absolute;
+  top: 34px;
+  left: 12px;
+  z-index: 6;
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid rgba(143, 47, 36, 0.46);
+  border-radius: 6px;
+  background: rgba(255, 249, 237, 0.92);
+  color: #7a241d;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 24px;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(80, 35, 12, 0.12);
+}
+
+.focus-return-btn:hover {
+  border-color: rgba(143, 47, 36, 0.72);
+  background: #fff4dc;
+}
+
 
 .relation-legend {
   position: relative;
@@ -1954,6 +2360,15 @@ function clamp(value, min, max) {
 
 :deep(.edge.is-active .edge__line-bg) {
   opacity: 0.34;
+}
+
+:deep(.edge.is-synthetic-focus .edge__line) {
+  stroke-dasharray: 10 9;
+  opacity: 0.64;
+}
+
+:deep(.edge.is-synthetic-focus .edge__line-bg) {
+  opacity: 0.12;
 }
 
 /* 激活状态下显示关系标签 */

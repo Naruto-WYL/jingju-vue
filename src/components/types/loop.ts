@@ -15,6 +15,9 @@ export interface LoopFlow {
   scripts: string[];
   narrativeCurve?: number[];
   evolutionCurve?: number[];
+  waveType?: string;
+  waveDescription?: string;
+  outcomeDescription?: string;
 }
 
 export interface ScriptRecord {

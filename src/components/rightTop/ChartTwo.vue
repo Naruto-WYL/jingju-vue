@@ -6,6 +6,10 @@
     <div v-else-if="errorMessage" class="chart-state chart-state--error">{{ errorMessage }}</div>
     <div v-else-if="!points.length" class="chart-state">暂无散点数据</div>
 
+    <button v-if="activeFilterLabel" class="scatter-return-btn" type="button" @click="returnToFullScatter">
+      返回全图
+    </button>
+
     <div ref="tooltipRef" class="scatter-tooltip" />
   </div>
 </template>
@@ -13,34 +17,48 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as d3 from 'd3'
+import { clearLoopFilter, loopFilterState } from '../../services/loopFilterStore'
 
-const DATA_URL = '/数据表合集/2/京剧剧本_网络指标总表.csv'
-const width = 760
-const height = 700
-const margin = {
-  top: 12,
-  right: 20,
-  bottom: 120,
-  left: 80,
+const H = {
+  scriptId: '\u5267\u672cID',
+  title: '\u5267\u76ee\u540d\u79f0',
+  category: '\u5267\u76ee\u7c7b\u522b',
+  weight: '\u5185\u5bb9\u91cf\u6743\u91cd',
+  density: '\u7f51\u7edc\u5bc6\u5ea6',
+  centralization: '\u5ea6\u4e2d\u5fc3\u5316',
+  nodeCount: '\u7f51\u7edc\u8282\u70b9\u6570',
+  edgeCount: '\u7f51\u7edc\u8fb9\u6570\u4f30\u8ba1',
+  roleCount: '\u89d2\u8272\u6570',
+  primaryRelation: '\u4e3b\u89d2\u8272\u5173\u7cfb',
+  primaryTheme: '\u4e3b\u4e3b\u9898',
+  relation: '\u89d2\u8272\u5173\u7cfb\u7c7b\u578b',
+  theme: '\u4e3b\u9898',
+  narrative: '\u53d9\u4e8b\u7ed3\u6784\u7ebf',
+  wave: '\u6ce2\u52a8\u578b',
+  outcome: '\u5173\u7cfb\u6f14\u5316\u7ed3\u5c40',
+  flowId: '\u95ed\u73afID',
 }
 
+const SCATTER_URL = '/data/script_scatter_loop_metrics.csv'
+const LINKAGE_URL = '/data/script_loop_linkage_long.csv'
+const width = 760
+const height = 700
+const margin = { top: 12, right: 20, bottom: 120, left: 80 }
 const chartUid = `script-scatter-${Math.random().toString(36).slice(2, 10)}`
-const paperInset = 0
 
 const categoryColors = new Map([
-  ['历史戏', '#d84f5d'],
-  ['家庭戏', '#e68a57'],
-  ['神怪戏', '#36a8b6'],
   ['公案戏', '#d0a53c'],
+  ['家庭戏', '#e68a57'],
   ['江湖戏', '#5f82c8'],
-  ['战争戏', '#aa72c8'],
-  ['综合戏', '#b78263'],
+  ['历史戏', '#d84f5d'],
+  ['神怪戏', '#36a8b6'],
 ])
 
 const svgRef = ref(null)
 const panelRef = ref(null)
 const tooltipRef = ref(null)
 const rows = ref([])
+const linkageRows = ref([])
 const loading = ref(false)
 const errorMessage = ref('')
 let resizeObserver = null
@@ -58,16 +76,20 @@ defineProps({
 const points = computed(() =>
   rows.value
     .map((row) => ({
-      id: normalizeText(row['剧本ID']),
-      title: normalizeText(row['剧本名称']),
-      category: normalizeText(row['剧目类别']) || '其他',
-      nodeCount: toNumber(row['角色总数'], 0),
-      edgeCount: toNumber(row['实际关系数'], 0),
-      density: toNumber(row['网络密度'], Number.NaN),
-      centralization: toNumber(row['度中心化'], Number.NaN),
+      id: field(row, H.scriptId, 'play_id', 'script_id'),
+      title: field(row, H.title, '\u5267\u672c\u540d\u79f0', 'title'),
+      category: field(row, H.category, 'category') || '\u5176\u4ed6',
+      weight: toNumber(field(row, H.weight, 'weight'), 0),
+      nodeCount: toNumber(field(row, H.nodeCount, H.roleCount, '\u89d2\u8272\u603b\u6570', 'node_count'), 0),
+      edgeCount: toNumber(field(row, H.edgeCount, '\u5b9e\u9645\u5173\u7cfb\u6570', 'edge_count'), 0),
+      density: toNumber(field(row, H.density, 'density'), Number.NaN),
+      centralization: toNumber(field(row, H.centralization, 'centralization'), Number.NaN),
+      primaryRelation: field(row, H.primaryRelation),
+      primaryTheme: field(row, H.primaryTheme),
     }))
     .filter(
       (row) =>
+        row.id &&
         row.title &&
         Number.isFinite(row.density) &&
         Number.isFinite(row.centralization) &&
@@ -80,23 +102,39 @@ const categories = computed(() =>
   Array.from(new Set(points.value.map((point) => point.category))).sort((a, b) => a.localeCompare(b, 'zh-CN')),
 )
 
+const linkageByPlayId = computed(() => {
+  const map = new Map()
+  linkageRows.value.forEach((row) => {
+    const playId = field(row, H.scriptId, 'play_id', 'script_id')
+    if (!playId) return
+    if (!map.has(playId)) map.set(playId, [])
+    map.get(playId).push(row)
+  })
+  return map
+})
+
+const activeFilterLabel = computed(() => {
+  const scope = loopFilterState.scope
+  const flow = loopFilterState.flow
+  if (!scope) return ''
+  if (scope.type === 'relation') return scope.relationType
+  if (scope.type === 'theme') return `${scope.relationType} / ${scope.themeCombo}`
+  if (scope.type === 'flow' && flow) return `${flow.relationType} / ${flow.themeCombo} / ${flow.narrativeType}`
+  return ''
+})
+
 onMounted(async () => {
   resizeObserver = new ResizeObserver((entries) => {
     const entry = entries[0]
     const nextWidth = Math.round(entry?.contentRect.width || 0)
     const nextHeight = Math.round(entry?.contentRect.height || 0)
-
     if (nextWidth === lastPanelWidth && nextHeight === lastPanelHeight) return
-
     lastPanelWidth = nextWidth
     lastPanelHeight = nextHeight
     scheduleDraw()
   })
 
-  if (panelRef.value) {
-    resizeObserver.observe(panelRef.value)
-  }
-
+  if (panelRef.value) resizeObserver.observe(panelRef.value)
   await loadRows()
 })
 
@@ -111,21 +149,39 @@ watch(points, async () => {
   scheduleDraw()
 })
 
+watch([activeFilterLabel, linkageByPlayId], async () => {
+  await nextTick()
+  updateScatterFilter()
+})
+
 async function loadRows() {
   loading.value = true
   errorMessage.value = ''
 
   try {
-    const response = await fetch(encodeURI(DATA_URL))
-    if (!response.ok) throw new Error(`读取失败：${response.status}`)
+    const [scatterResponse, linkageResponse] = await Promise.all([
+      fetch(`${SCATTER_URL}?t=${Date.now()}`, { cache: 'no-store' }),
+      fetch(`${LINKAGE_URL}?t=${Date.now()}`, { cache: 'no-store' }),
+    ])
+    if (!scatterResponse.ok) throw new Error(`读取散点数据失败：${scatterResponse.status}`)
+    if (!linkageResponse.ok) throw new Error(`读取联动长表失败：${linkageResponse.status}`)
 
-    const text = await response.text()
-    rows.value = d3.csvParse(text.replace(/^\uFEFF/, ''))
+    const [scatterText, linkageText] = await Promise.all([scatterResponse.text(), linkageResponse.text()])
+    rows.value = d3.csvParse(scatterText.replace(/^\uFEFF/, ''))
+    linkageRows.value = d3.csvParse(linkageText.replace(/^\uFEFF/, ''))
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '数据读取失败'
   } finally {
     loading.value = false
   }
+}
+
+function field(row, ...names) {
+  for (const name of names) {
+    const value = normalizeText(row[name])
+    if (value) return value
+  }
+  return ''
 }
 
 function normalizeText(value) {
@@ -135,6 +191,38 @@ function normalizeText(value) {
 function toNumber(value, fallback = 0) {
   const numberValue = Number(String(value ?? '').replace(/,/g, '').trim())
   return Number.isFinite(numberValue) ? numberValue : fallback
+}
+
+function pointMatchesFilter(point) {
+  const scope = loopFilterState.scope
+  if (!scope) return true
+  const playRows = linkageByPlayId.value.get(point.id) || []
+  return playRows.some((row) => loopRowMatchesScope(row, scope, loopFilterState.flow))
+}
+
+function loopRowMatchesScope(row, scope, flow) {
+  const relation = field(row, H.relation)
+  const theme = field(row, H.theme)
+  const narrative = field(row, H.narrative)
+  const wave = field(row, H.wave)
+  const outcome = field(row, H.outcome)
+  const flowId = field(row, H.flowId)
+
+  if (scope.type === 'relation') return relation === scope.relationType
+  if (scope.type === 'theme') return relation === scope.relationType && theme === scope.themeCombo
+
+  if (scope.type === 'flow' && flow) {
+    if (flowId && flow.id && flowId === flow.id) return true
+    return (
+      relation === flow.relationType &&
+      theme === flow.themeCombo &&
+      narrative === flow.narrativeType &&
+      (!flow.waveType || wave === flow.waveType) &&
+      outcome === flow.evolutionType
+    )
+  }
+
+  return true
 }
 
 function drawChart() {
@@ -155,16 +243,15 @@ function drawChart() {
   const plotHeight = chartHeight - margin.top - margin.bottom
   const x = d3.scaleLinear().domain([0, 1]).range([margin.left, margin.left + plotWidth])
   const y = d3.scaleLinear().domain([0, 1]).range([margin.top + plotHeight, margin.top])
-  const nodeExtent = d3.extent(renderPoints, (point) => point.nodeCount)
-  const nodeDomain = nodeExtent[0] === nodeExtent[1] ? [0, nodeExtent[1] || 1] : nodeExtent
-  const radius = d3.scaleSqrt().domain(nodeDomain).range([4.5, 17])
+  const weightExtent = d3.extent(renderPoints, (point) => point.weight || point.nodeCount)
+  const weightDomain = weightExtent[0] === weightExtent[1] ? [0, weightExtent[1] || 1] : weightExtent
+  const radius = d3.scaleSqrt().domain(weightDomain).range([4.5, 17])
   const xTicks = d3.range(0, 1.01, 0.2)
   const yTicks = d3.range(0, 1.01, 0.2)
   const paperFilterId = `${chartUid}-paper-grain`
   const plotClipId = `${chartUid}-plot-clip`
 
   const defs = svg.append('defs')
-
   const paperFilter = defs
     .append('filter')
     .attr('id', paperFilterId)
@@ -202,10 +289,10 @@ function drawChart() {
   svg
     .append('rect')
     .attr('class', 'paper-background')
-    .attr('x', paperInset)
-    .attr('y', paperInset)
-    .attr('width', chartWidth - paperInset * 2)
-    .attr('height', chartHeight - paperInset * 2)
+    .attr('x', 0)
+    .attr('y', 0)
+    .attr('width', chartWidth)
+    .attr('height', chartHeight)
     .attr('filter', `url(#${paperFilterId})`)
 
   svg
@@ -217,7 +304,6 @@ function drawChart() {
     .attr('height', plotHeight)
 
   const grid = svg.append('g').attr('class', 'grid-lines')
-
   grid
     .selectAll('line.vertical')
     .data(xTicks)
@@ -239,7 +325,6 @@ function drawChart() {
     .attr('y2', (d) => y(d))
 
   const quadrantLines = svg.append('g').attr('class', 'quadrant-lines')
-
   quadrantLines
     .append('line')
     .attr('x1', x(0.5))
@@ -280,20 +365,26 @@ function drawChart() {
     .attr('text-anchor', 'middle')
     .text('密度')
 
+  svg.append('text').attr('class', 'filter-label').attr('x', margin.left).attr('y', margin.top + 24)
+
   const dotGroups = svg
     .append('g')
     .attr('class', 'dot-layer')
     .attr('clip-path', `url(#${plotClipId})`)
     .selectAll('g')
-    .data(renderPoints)
+    .data(renderPoints, (d) => d.id)
     .join('g')
-    .attr('class', 'scatter-dot')
+    .attr('class', 'scatter-dot is-matched')
     .attr('transform', (d) => `translate(${x(d.density)},${y(d.centralization)})`)
+    .style('opacity', 1)
     .on('mouseenter', (event, d) => {
+      if (!pointMatchesFilter(d)) return
       d3.select(event.currentTarget).raise().classed('is-active', true)
       showTooltip(event, d, tooltipElement)
     })
-    .on('mousemove', (event, d) => showTooltip(event, d, tooltipElement))
+    .on('mousemove', (event, d) => {
+      if (pointMatchesFilter(d)) showTooltip(event, d, tooltipElement)
+    })
     .on('mouseleave', (event) => {
       d3.select(event.currentTarget).classed('is-active', false)
       hideTooltip(tooltipElement)
@@ -302,15 +393,43 @@ function drawChart() {
   dotGroups
     .append('circle')
     .attr('class', 'scatter-circle')
-    .attr('r', (d) => radius(d.nodeCount))
+    .attr('r', (d) => radius(d.weight || d.nodeCount))
     .attr('fill', (d) => getCategoryColor(d.category))
 
   drawLegend(svg, chartWidth, chartHeight)
+  updateScatterFilter(false)
+}
+
+function updateScatterFilter(animate = true) {
+  const svgElement = svgRef.value
+  if (!svgElement) return
+
+  const dots = d3.select(svgElement).selectAll('.scatter-dot')
+  if (dots.empty()) return
+
+  dots
+    .interrupt()
+    .classed('is-muted', (d) => !pointMatchesFilter(d))
+    .classed('is-matched', (d) => pointMatchesFilter(d))
+    .style('pointer-events', (d) => (pointMatchesFilter(d) ? 'auto' : 'none'))
+    .transition()
+    .duration(animate ? 900 : 0)
+    .ease(d3.easeCubicOut)
+    .style('opacity', (d) => (pointMatchesFilter(d) ? 1 : 0))
+
+  d3.select(svgElement)
+    .select('.filter-label')
+    .text(activeFilterLabel.value ? `中上联动：${activeFilterLabel.value}` : '')
+}
+
+function returnToFullScatter() {
+  clearLoopFilter()
+  if (tooltipRef.value) hideTooltip(tooltipRef.value)
+  updateScatterFilter()
 }
 
 function scheduleDraw() {
   if (drawFrame) cancelAnimationFrame(drawFrame)
-
   drawFrame = requestAnimationFrame(() => {
     drawFrame = 0
     drawChart()
@@ -319,9 +438,7 @@ function scheduleDraw() {
 
 function getResponsiveHeight(svgElement) {
   const rect = svgElement.getBoundingClientRect()
-
   if (!rect.width || !rect.height) return height
-
   return Math.max(360, Math.round((width * rect.height) / rect.width))
 }
 
@@ -349,12 +466,7 @@ function drawLegend(svg, chartWidth, chartHeight) {
       .attr('transform', `translate(${titleWidth + column * itemStep},${row * rowGap})`)
 
     item.append('circle').attr('class', 'legend-dot').attr('r', 8).attr('fill', getCategoryColor(category))
-
-    item
-      .append('text')
-      .attr('x', 18)
-      .attr('y', 6)
-      .text(category)
+    item.append('text').attr('x', 18).attr('y', 6).text(category)
   })
 }
 
@@ -372,7 +484,10 @@ function showTooltip(event, point, tooltipElement) {
     <span>类别：${point.category}</span>
     <span>密度：${point.density.toFixed(4)}</span>
     <span>中心化：${point.centralization.toFixed(4)}</span>
+    <span>内容量权重：${point.weight.toFixed(2)}</span>
     <span>角色：${point.nodeCount} 关系：${point.edgeCount}</span>
+    <span>主关系：${point.primaryRelation || '未标注'}</span>
+    <span>主主题：${point.primaryTheme || '未标注'}</span>
   `
   tooltipElement.style.left = `${event.offsetX + 14}px`
   tooltipElement.style.top = `${event.offsetY + 14}px`
@@ -419,6 +534,16 @@ function hideTooltip(tooltipElement) {
   font-weight: 800;
 }
 
+.scatter-chart :deep(.filter-label) {
+  fill: #8f2f24;
+  font-family: 'STKaiti', 'KaiTi', 'Microsoft YaHei', sans-serif;
+  font-size: 18px;
+  font-weight: 900;
+  paint-order: stroke;
+  stroke: rgba(255, 248, 232, 0.88);
+  stroke-width: 4px;
+}
+
 .scatter-chart :deep(.grid-lines line) {
   stroke: #c7a87a;
   stroke-width: 1;
@@ -454,11 +579,13 @@ function hideTooltip(tooltipElement) {
   cursor: pointer;
 }
 
+.scatter-chart :deep(.scatter-dot.is-muted) {
+  pointer-events: none;
+}
+
 .scatter-chart :deep(.scatter-circle) {
   fill-opacity: 0.72;
-  transition:
-    fill-opacity 0.15s ease,
-    r 0.15s ease;
+  transition: fill-opacity 0.15s ease;
 }
 
 .scatter-chart :deep(.scatter-dot.is-active .scatter-circle) {
@@ -495,6 +622,30 @@ function hideTooltip(tooltipElement) {
 
 .chart-state--error {
   color: #9b2f2a;
+}
+
+.scatter-return-btn {
+  position: absolute;
+  right: 18px;
+  bottom: 56px;
+  z-index: 4;
+  min-width: 82px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgba(143, 47, 36, 0.36);
+  border-radius: 999px;
+  color: #fff8ed;
+  background: linear-gradient(135deg, #8f2f24, #3d1d17);
+  box-shadow: 0 10px 22px rgba(82, 31, 18, 0.22);
+  cursor: pointer;
+  font-family: 'STKaiti', 'KaiTi', 'Microsoft YaHei', sans-serif;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 26px;
+}
+
+.scatter-return-btn:hover {
+  filter: brightness(1.08) saturate(1.18);
 }
 
 .scatter-tooltip {
