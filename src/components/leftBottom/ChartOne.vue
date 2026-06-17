@@ -937,6 +937,7 @@ function isInside(mask, width, height, x, y) {
   overflow: hidden;
   place-items: center;
   border-radius: 2px;
+  background: #FBF6E9;
 }
 
 .poster-svg {

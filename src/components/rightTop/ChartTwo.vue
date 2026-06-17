@@ -466,6 +466,7 @@ function hideTooltip(tooltipElement) {
   min-height: 0;
   overflow: hidden;
   border-radius: 2px;
+  background: #FBF6E9;
 }
 
 .scatter-chart {
@@ -476,11 +477,11 @@ function hideTooltip(tooltipElement) {
 }
 
 .scatter-chart :deep(.paper-background) {
-  fill: #fef9ed;
+  fill: #FBF6E9;
 }
 
 .scatter-chart :deep(.plot-background) {
-  fill: #f7efde;
+  fill: #FBF6E9;
   stroke: rgba(143, 47, 36, 0.2);
   stroke-width: 1;
 }

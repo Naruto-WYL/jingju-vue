@@ -1520,7 +1520,7 @@ function hideTooltip() {
   overflow: hidden;
   border-radius: 6px;
   color: #3f332b;
-  background: transparent;
+  background: #FBF6E9;
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
   animation: chart-two-enter 260ms ease-out both;
 }
@@ -1589,6 +1589,7 @@ function hideTooltip() {
   min-height: 0;
   overflow: hidden;
   border-radius: 6px;
+  background: #FBF6E9;
 }
 
 .vertical-pattern-svg {
@@ -1597,9 +1598,7 @@ function hideTooltip() {
   height: 100%;
   min-height: 0;
   border-radius: 6px;
-  background:
-    linear-gradient(180deg, rgba(255, 252, 244, 0.22), rgba(246, 235, 213, 0.18)),
-    transparent;
+  background: #FBF6E9;
   cursor: grab;
   touch-action: none;
 }

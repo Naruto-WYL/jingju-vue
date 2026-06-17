@@ -2027,6 +2027,7 @@ function clamp(value, min, max) {
 
   /* 设置默认文字颜色 */
   color: #273b58;
+  background: #FBF6E9;
 
   /* 设置字体，优先使用楷体，体现戏曲/传统风格 */
   font-family:
@@ -2111,10 +2112,7 @@ function clamp(value, min, max) {
   min-height: 0;
   overflow: hidden;
   border-radius: 8px;
-  background:
-    linear-gradient(90deg, rgba(142, 47, 36, 0.035) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(142, 47, 36, 0.025) 1px, transparent 1px),
-    #FDF8EB;
+  background: #FBF6E9;
   background-size: 34px 34px, 34px 34px, auto;
 
   display: flex;

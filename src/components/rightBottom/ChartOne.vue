@@ -683,6 +683,7 @@ function toShare(value) {
   width: 100%;
   height: 100%;
   min-height: 0;
+  background: #FBF6E9;
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
 }
 
@@ -695,6 +696,7 @@ function toShare(value) {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  background: #FBF6E9;
 }
 
 .play-chord-card {
@@ -707,7 +709,7 @@ function toShare(value) {
   overflow: hidden;
   border: none;
   border-radius: 0;
-  background: transparent;
+  background: #FBF6E9;
   box-shadow: none;
 }
 

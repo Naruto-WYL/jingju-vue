@@ -675,6 +675,7 @@ function escapeHtml(value) {
   min-height: 0;
   overflow: hidden;
   color: #39251c;
+  background: #FBF6E9;
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
 }
 
@@ -696,6 +697,7 @@ function escapeHtml(value) {
   display: block;
   width: 100%;
   height: 100%;
+  background: #FBF6E9;
 }
 
 .vertical-upset-svg :deep(.filter-label) {

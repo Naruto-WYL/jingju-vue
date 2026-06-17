@@ -722,6 +722,7 @@ function makeEmptyState() {
   height: 100%;
   min-height: 0;
   color: #4a3b32;
+  background: #FBF6E9;
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
 }
 
@@ -735,7 +736,7 @@ function makeEmptyState() {
   min-height: 0;
   padding: 6px;
   overflow: hidden;
-  background: #fdfbf7;
+  background: #FBF6E9;
   border: 1px solid #d9cebf;
   border-radius: 8px;
   box-shadow: 0 5px 14px rgba(94, 63, 42, 0.08);
@@ -886,7 +887,7 @@ function makeEmptyState() {
   position: relative;
   min-height: 0;
   overflow: hidden;
-  background: #fdfbf7;
+  background: #FBF6E9;
   border: 1px solid #e6dcd3;
   border-radius: 7px;
 }

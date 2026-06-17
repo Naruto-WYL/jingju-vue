@@ -1043,6 +1043,7 @@ function cosineSimilarity(a, b) {
   width: var(--left-top-content-width, 467px);
   height: 100%;
   min-height: 0;
+  background: #FBF6E9;
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
 }
 
@@ -1168,7 +1169,7 @@ function cosineSimilarity(a, b) {
   overflow: hidden;
   border: none;
   border-radius: 0;
-  background: transparent;
+  background: #FBF6E9;
 }
 
 .trade-preview-card {

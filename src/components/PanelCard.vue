@@ -53,9 +53,7 @@ const hasHeader = computed(() => hasTitleBlock.value || Boolean(slots.action))
   overflow: hidden;
   border: 1px solid rgba(143, 47, 36, 0.58);
   border-radius: 2px;
-  background:
-    linear-gradient(180deg, rgba(255, 251, 241, 0.88), rgba(246, 235, 213, 0.76)),
-    #f7edd8;
+  background: #FBF6E9;
   box-shadow:
     inset 0 0 0 1px rgba(198, 121, 73, 0.14),
     0 0 0 1px rgba(255, 248, 232, 0.5);
