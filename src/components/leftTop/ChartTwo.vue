@@ -1537,7 +1537,7 @@ function hideTooltip() {
   overflow-y: hidden;
   border-radius: 999px;
   border: 1px solid rgba(143, 47, 36, 0.12);
-  background: rgba(255, 249, 237, 0.74);
+  background: #FBF6E9;
   box-shadow: inset 0 0 0 1px rgba(255, 248, 232, 0.64);
   scrollbar-width: none;
   transform: translateY(3px);
@@ -1572,12 +1572,12 @@ function hideTooltip() {
 
 .period-tabs button:hover {
   color: #8b2a25;
-  background: rgba(143, 47, 36, 0.08);
+  background: #FBF6E9;
 }
 
 .period-tabs button.active {
-  color: #fff8ed;
-  background: #8f2f24;
+  color: #8b2a25;
+  background: #FBF6E9;
   box-shadow:
     inset 0 0 0 1px rgba(255, 248, 232, 0.26),
     0 2px 7px rgba(143, 47, 36, 0.18);
@@ -1597,9 +1597,7 @@ function hideTooltip() {
   height: 100%;
   min-height: 0;
   border-radius: 6px;
-  background:
-    linear-gradient(180deg, rgba(255, 252, 244, 0.22), rgba(246, 235, 213, 0.18)),
-    transparent;
+  background: #FBF6E9;
   cursor: grab;
   touch-action: none;
 }
@@ -1618,7 +1616,7 @@ function hideTooltip() {
   padding: 2px;
   border: 1px solid rgba(143, 47, 36, 0.22);
   border-radius: 999px;
-  background: rgba(255, 249, 237, 0.84);
+  background: #FBF6E9;
   box-shadow: 0 4px 10px rgba(82, 54, 32, 0.12);
 }
 
@@ -1639,8 +1637,8 @@ function hideTooltip() {
 }
 
 .zoom-controls button:hover {
-  color: #fff8ed;
-  background: #8f2f24;
+  color: #7a241d;
+  background: #FBF6E9;
 }
 
 .vertical-pattern-svg :deep(text) {
@@ -1724,7 +1722,7 @@ function hideTooltip() {
   border: 1px solid rgba(143, 47, 36, 0.22);
   border-radius: 6px;
   color: #49342b;
-  background: rgba(255, 250, 239, 0.96);
+  background: #FBF6E9;
   box-shadow: 0 8px 18px rgba(58, 34, 22, 0.16);
   animation: tooltip-in 120ms ease-out both;
 }
@@ -1746,7 +1744,7 @@ function hideTooltip() {
   border-left: 3px solid rgba(139, 42, 37, 0.62);
   border-radius: 0;
   color: #4b4945;
-  background: rgb(236 209 158 / 52%);
+  background: #FBF6E9;
   box-shadow: none;
 }
 

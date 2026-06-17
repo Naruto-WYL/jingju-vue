@@ -1086,7 +1086,7 @@ function cosineSimilarity(a, b) {
   overflow: hidden;
   border: 1px solid rgba(139, 42, 37, 0.16);
   border-radius: 999px;
-  background: rgba(255, 246, 229, 0.78);
+  background: #FBF6E9;
   line-height: 18px;
   text-align: center;
   text-overflow: ellipsis;
@@ -1122,7 +1122,7 @@ function cosineSimilarity(a, b) {
   border: 1px solid rgba(111, 20, 24, 0.16);
   border-radius: 5px;
   color: #352d27;
-  background: rgba(255, 252, 244, 0.78);
+  background: #FBF6E9;
   font-size: 15px;
   font-weight: 700;
   overflow: hidden;
@@ -1142,23 +1142,17 @@ function cosineSimilarity(a, b) {
 .trade-badge strong {
   justify-content: center;
   border-color: rgba(111, 20, 24, 0.34);
-  color: #fff7ea;
-  background:
-    linear-gradient(135deg, rgba(111, 20, 24, 0.92), rgba(185, 91, 41, 0.9)),
-    #8b2a25;
+  color: #8b2a25;
+  background: #FBF6E9;
   box-shadow: inset 0 0 0 1px rgba(255, 247, 234, 0.26);
 }
 
 .trade-badge.is-known strong {
-  background:
-    linear-gradient(135deg, rgba(39, 59, 88, 0.94), rgba(47, 111, 109, 0.86)),
-    #273b58;
+  background: #FBF6E9;
 }
 
 .trade-badge.is-inferred strong {
-  background:
-    linear-gradient(135deg, rgba(111, 20, 24, 0.94), rgba(194, 135, 50, 0.92)),
-    #8b2a25;
+  background: #FBF6E9;
 }
 
 .dotplot-wrap {
@@ -1183,7 +1177,7 @@ function cosineSimilarity(a, b) {
   padding: 6px;
   border: 1px solid rgba(139, 42, 37, 0.18);
   border-radius: 8px;
-  background: rgba(255, 252, 244, 0.9);
+  background: #FBF6E9;
   box-shadow: 0 6px 16px rgba(67, 48, 35, 0.1);
   pointer-events: none;
 }
@@ -1282,7 +1276,7 @@ function cosineSimilarity(a, b) {
 }
 
 .trade-dotplot :deep(.trade-icons circle) {
-  fill: rgba(255, 252, 244, 0.92);
+  fill: #FBF6E9;
   stroke: rgba(144, 92, 43, 0.84);
   stroke-width: 1.35;
 }
@@ -1292,7 +1286,7 @@ function cosineSimilarity(a, b) {
 }
 
 .trade-dotplot :deep(.trade-icons g.is-active circle) {
-  fill: rgba(255, 246, 229, 0.98);
+  fill: #FBF6E9;
   stroke: #8b2a25;
   stroke-width: 2.2;
 }
@@ -1413,7 +1407,7 @@ function cosineSimilarity(a, b) {
 }
 
 .trade-dotplot :deep(.score-panel-bg) {
-  fill: rgba(255, 252, 244, 0.32);
+  fill: #FBF6E9;
   stroke: rgba(103, 84, 65, 0.08);
   stroke-width: 1;
 }
@@ -1452,7 +1446,7 @@ function cosineSimilarity(a, b) {
 
 .inference-note {
   border-left: 3px solid rgba(139, 42, 37, 0.62);
-  background: rgb(236 209 158 / 52%);
+  background: #FBF6E9;
 }
 
 @media (max-width: 980px) {

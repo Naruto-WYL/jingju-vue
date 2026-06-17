@@ -2079,9 +2079,7 @@ function clamp(value, min, max) {
   outline: none;
 
   /* 设置下拉框背景，使用浅米色渐变 */
-  background:
-    linear-gradient(180deg, rgba(255, 248, 232, 0.94), rgba(242, 224, 188, 0.94)),
-    #f4e8cf;
+  background: #FBF6E9;
 
   /* 设置文字颜色 */
   color: #50301c;
@@ -2111,10 +2109,7 @@ function clamp(value, min, max) {
   min-height: 0;
   overflow: hidden;
   border-radius: 8px;
-  background:
-    linear-gradient(90deg, rgba(142, 47, 36, 0.035) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(142, 47, 36, 0.025) 1px, transparent 1px),
-    #FDF8EB;
+  background: #FBF6E9;
   background-size: 34px 34px, 34px 34px, auto;
 
   display: flex;
@@ -2131,7 +2126,7 @@ function clamp(value, min, max) {
   padding: 0 12px;
   border: 1px solid rgba(143, 47, 36, 0.46);
   border-radius: 6px;
-  background: rgba(255, 249, 237, 0.92);
+  background: #FBF6E9;
   color: #7a241d;
   font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
   font-size: 12px;
@@ -2143,7 +2138,7 @@ function clamp(value, min, max) {
 
 .focus-return-btn:hover {
   border-color: rgba(143, 47, 36, 0.72);
-  background: #fff4dc;
+  background: #FBF6E9;
 }
 
 
@@ -2240,8 +2235,7 @@ function clamp(value, min, max) {
   height: 10px;
   justify-self: center;
   border-radius: 50%;
-  background:
-    linear-gradient(135deg, #b33a2b 0 20%, #2f6f8f 20% 40%, #668a3d 40% 60%, #7a2323 60% 80%, #b87924 80% 100%);
+  background: #FBF6E9;
   box-shadow: none;
 }
 
@@ -2533,7 +2527,7 @@ function clamp(value, min, max) {
   border-radius: 8px;
 
   /* 设置半透明浅色背景 */
-  background: rgba(255, 249, 232, 0.97);
+  background: #FBF6E9;
 
   /* 设置阴影 */
   box-shadow: 0 10px 24px rgba(50, 24, 10, 0.22);

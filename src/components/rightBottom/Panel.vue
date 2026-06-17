@@ -50,7 +50,7 @@ const view = ref('a')
   height: 28px;
   border-color: rgba(143, 47, 36, 0.48);
   color: #7a241d;
-  background: rgba(255, 249, 237, 0.78);
+  background: #FBF6E9;
   box-shadow: inset 0 0 0 1px rgba(255, 248, 232, 0.74);
 }
 
@@ -63,8 +63,8 @@ const view = ref('a')
 }
 
 .right-bottom-card :deep(.chart-toggle .active) {
-  color: #fff8ed;
-  background: #8f2f24;
+  color: #7a241d;
+  background: #FBF6E9;
 }
 
 .right-bottom-content {

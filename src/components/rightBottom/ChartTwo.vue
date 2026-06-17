@@ -772,8 +772,8 @@ function escapeHtml(value) {
   padding: 0 12px;
   border: 1px solid rgba(143, 47, 36, 0.36);
   border-radius: 999px;
-  color: #fff8ed;
-  background: linear-gradient(135deg, #8f2f24, #3d1d17);
+  color: #7a241d;
+  background: #FBF6E9;
   box-shadow: 0 10px 22px rgba(82, 31, 18, 0.2);
   cursor: pointer;
   font-family: "STKaiti", "KaiTi", "Microsoft YaHei", sans-serif;
@@ -799,7 +799,7 @@ function escapeHtml(value) {
   font-size: 11px;
   line-height: 1.35;
   pointer-events: none;
-  background: rgba(255, 253, 247, 0.96);
+  background: #FBF6E9;
   box-shadow: 0 8px 18px rgba(70, 40, 22, 0.14);
 }
 

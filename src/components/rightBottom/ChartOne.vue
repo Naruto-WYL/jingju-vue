@@ -720,7 +720,7 @@ function toShare(value) {
   height: 24px;
   border: 1px solid rgba(139, 42, 37, 0.3);
   border-radius: 50%;
-  background: rgba(255, 252, 244, 0.9);
+  background: #FBF6E9;
   color: #8b2a25;
   font-size: 16px;
   font-weight: 900;
@@ -762,9 +762,7 @@ function toShare(value) {
   font-size: 13px;
   font-weight: 900;
 
-  background:
-    linear-gradient(180deg, rgba(255, 250, 238, 0.92), rgba(246, 236, 214, 0.78)),
-    #f6ecd6;
+  background: #FBF6E9;
 
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.5),
