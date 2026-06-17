@@ -387,7 +387,7 @@ function isLinkageTriggerSource() {
   min-height: 0;
   padding: 6px;
   overflow: hidden;
-  background: #FBF6E9;
+  background: #fdfbf7;
   border: 1px solid #d9cebf;
   border-radius: 8px;
   box-shadow: 0 5px 14px rgba(94, 63, 42, 0.08);
@@ -403,7 +403,7 @@ function isLinkageTriggerSource() {
   padding: 6px 9px;
   overflow: hidden;
   font: 12px/1.2 "Microsoft YaHei", sans-serif;
-  background: #FBF6E9;
+  background: #fdfbf7;
   border: 1px solid #e6dcd3;
   border-radius: 5px;
   box-shadow: 0 1px 3px rgba(90, 60, 35, 0.06);
@@ -456,7 +456,7 @@ function isLinkageTriggerSource() {
   position: relative;
   min-height: 0;
   overflow: hidden;
-  background: #FBF6E9;
+  background: #fdfbf7;
   border: 1px solid #e6dcd3;
   border-radius: 7px;
 }
@@ -543,7 +543,7 @@ function isLinkageTriggerSource() {
   margin-bottom: 7px;
   color: #5c4636;
   font: 11px/1.5 "Microsoft YaHei", sans-serif;
-  background: #FBF6E9;
+  background: #fff;
   border: 1px solid #e6dcd3;
   border-radius: 6px;
   box-shadow: 0 1px 4px rgba(90, 60, 35, 0.06);
@@ -588,7 +588,7 @@ function isLinkageTriggerSource() {
   font-size: 13px;
   font-weight: 800;
   text-align: center;
-  background: #FBF6E9;
+  background: rgba(253, 251, 247, 0.86);
 }
 
 .load-state.error {

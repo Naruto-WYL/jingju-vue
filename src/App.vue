@@ -238,7 +238,7 @@ function cleanTitle(title, id) {
   min-height: 100vh;
   padding: 0;
   overflow: hidden;
-  background: #FBF6E9;
+  background: #877460;
 }
 
 .dashboard-grid {
@@ -258,7 +258,7 @@ function cleanTitle(title, id) {
   min-height: 0;
   overflow: hidden;
   border-radius: 0;
-  background: #FBF6E9;
+  background: #f6f2e7;
 }
 
 .block-left-top {

@@ -476,11 +476,11 @@ function hideTooltip(tooltipElement) {
 }
 
 .scatter-chart :deep(.paper-background) {
-  fill: #FBF6E9;
+  fill: #fef9ed;
 }
 
 .scatter-chart :deep(.plot-background) {
-  fill: #FBF6E9;
+  fill: #f7efde;
   stroke: rgba(143, 47, 36, 0.2);
   stroke-width: 1;
 }
@@ -573,7 +573,7 @@ function hideTooltip(tooltipElement) {
   display: grid;
   place-items: center;
   color: #6b4d35;
-  background: #FBF6E9;
+  background: rgba(244, 234, 214, 0.72);
   font-size: 13px;
   pointer-events: none;
 }
@@ -593,7 +593,7 @@ function hideTooltip(tooltipElement) {
   border: 1px solid rgba(143, 47, 36, 0.36);
   border-radius: 999px;
   color: #fff8ed;
-  background: #FBF6E9;
+  background: linear-gradient(135deg, #8f2f24, #3d1d17);
   box-shadow: 0 10px 22px rgba(82, 31, 18, 0.22);
   cursor: pointer;
   font-family: 'STKaiti', 'KaiTi', 'Microsoft YaHei', sans-serif;
@@ -616,7 +616,7 @@ function hideTooltip(tooltipElement) {
   border: 1px solid rgba(143, 47, 36, 0.32);
   border-radius: 6px;
   color: #3f2c20;
-  background: #FBF6E9;
+  background: rgba(248, 238, 216, 0.97);
   box-shadow: 0 10px 24px rgba(88, 45, 28, 0.2);
   font-family: 'Microsoft YaHei', sans-serif;
   font-size: 13px;

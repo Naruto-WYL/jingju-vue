@@ -121,7 +121,7 @@ function updateScale() {
   height: 28px;
   border-color: rgba(143, 47, 36, 0.48);
   color: #7a241d;
-  background: #FBF6E9;
+  background: rgba(255, 249, 237, 0.78);
   box-shadow: inset 0 0 0 1px rgba(255, 248, 232, 0.74);
   pointer-events: auto;
 }
@@ -135,7 +135,7 @@ function updateScale() {
 }
 
 .left-top-card :deep(.chart-toggle .active) {
-  color: #7a241d;
-  background: #FBF6E9;
+  color: #fff8ed;
+  background: #8f2f24;
 }
 </style>

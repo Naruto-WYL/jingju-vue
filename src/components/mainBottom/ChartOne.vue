@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <section class="qiyun-view">
     <div class="qiyun-card">
       <div class="qiyun-topbar">
@@ -503,7 +503,7 @@ function drawSceneAnchors(graphW, graphH, baseY, visibleRatio) {
     ctx.beginPath()
     ctx.arc(x, y, isLocked ? 6 : 4, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = '#FBF6E9'
+    ctx.fillStyle = '#fff'
     ctx.beginPath()
     ctx.arc(x, y, 2, 0, Math.PI * 2)
     ctx.fill()
@@ -735,7 +735,7 @@ function makeEmptyState() {
   min-height: 0;
   padding: 6px;
   overflow: hidden;
-  background: #FBF6E9;
+  background: #fdfbf7;
   border: 1px solid #d9cebf;
   border-radius: 8px;
   box-shadow: 0 5px 14px rgba(94, 63, 42, 0.08);
@@ -765,7 +765,7 @@ function makeEmptyState() {
   height: 26px;
   min-width: 0;
   padding: 0 8px;
-  background: #FBF6E9;
+  background: #fdfbf7;
   border: 1px solid #cfc0b0;
   border-radius: 4px;
   box-shadow: 0 1px 3px rgba(90, 60, 35, 0.08);
@@ -805,7 +805,7 @@ function makeEmptyState() {
   max-width: 178px;
   padding: 3px;
   overflow-x: auto;
-  background: #FBF6E9;
+  background: #fff;
   border: 1px solid #e6dcd3;
   border-radius: 4px;
   box-shadow: 0 1px 3px rgba(90, 60, 35, 0.08);
@@ -839,7 +839,7 @@ function makeEmptyState() {
   padding: 4px 8px;
   overflow: hidden;
   font: 12px/1.2 "Microsoft YaHei", sans-serif;
-  background: #FBF6E9;
+  background: #fdfbf7;
   border: 1px solid #e6dcd3;
   border-radius: 5px;
   box-shadow: 0 1px 3px rgba(90, 60, 35, 0.06);
@@ -886,7 +886,7 @@ function makeEmptyState() {
   position: relative;
   min-height: 0;
   overflow: hidden;
-  background: #FBF6E9;
+  background: #fdfbf7;
   border: 1px solid #e6dcd3;
   border-radius: 7px;
 }
@@ -936,7 +936,7 @@ function makeEmptyState() {
   padding: 8px;
   pointer-events: none;
   opacity: 0;
-  background: #FBF6E9;
+  background: #fff;
   border: 1px solid #d9cebf;
   border-radius: 6px;
   box-shadow: 0 8px 20px rgba(70, 45, 30, 0.18);
@@ -998,7 +998,7 @@ function makeEmptyState() {
   position: absolute;
   inset: -90px 0 -58px;
   z-index: 8;
-  background: rgba(251, 246, 233, 0.44);
+  background: rgba(253, 251, 247, 0.44);
   backdrop-filter: blur(1px);
 }
 
@@ -1012,10 +1012,10 @@ function makeEmptyState() {
   color: #8b4513;
   font: 900 12px/1 "Microsoft YaHei", sans-serif;
   white-space: nowrap;
-  background: linear-gradient(180deg, #FBF6E9 0%, #f6eadb 100%);
+  background: linear-gradient(180deg, #fffdfa 0%, #f6eadb 100%);
   border: 1px solid #caa98a;
   border-radius: 999px;
-  box-shadow: 0 2px 7px rgba(114, 73, 38, 0.15), inset 0 1px 0 rgba(251, 246, 233, 0.8);
+  box-shadow: 0 2px 7px rgba(114, 73, 38, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.8);
   cursor: pointer;
 }
 
@@ -1036,7 +1036,7 @@ function makeEmptyState() {
 }
 
 .analysis-toggle.active::before {
-  background: #FBF6E9;
+  background: #fff8ed;
   box-shadow: 0 0 0 3px rgba(255, 248, 237, 0.18);
 }
 
@@ -1069,7 +1069,7 @@ function makeEmptyState() {
   place-items: center;
   color: #998370;
   font: 800 11px/1 "Microsoft YaHei", sans-serif;
-  background: #FBF6E9;
+  background: #fff;
   border: 1px solid #d9cebf;
   border-radius: 50%;
   cursor: pointer;
@@ -1081,7 +1081,7 @@ function makeEmptyState() {
   padding: 0 6px;
   color: #998370;
   font: 800 10px/1 "Microsoft YaHei", sans-serif;
-  background: #FBF6E9;
+  background: #fff;
   border: 1px solid #d9cebf;
   border-radius: 4px;
   cursor: pointer;
@@ -1101,7 +1101,7 @@ function makeEmptyState() {
   font: 11px/1.45 "Microsoft YaHei", sans-serif;
   pointer-events: none;
   opacity: 0;
-  background: #FBF6E9;
+  background: #fff;
   border: 1px solid #b35c37;
   border-radius: 6px;
   box-shadow: 0 8px 20px rgba(70, 45, 30, 0.18);
@@ -1185,7 +1185,7 @@ function makeEmptyState() {
 .locked-meta span {
   min-width: 0;
   padding: 5px 6px;
-  background: #FBF6E9;
+  background: #fff;
   border: 1px solid #e6dcd3;
   border-radius: 5px;
 }
@@ -1220,7 +1220,7 @@ function makeEmptyState() {
 .locked-metric-grid span {
   min-width: 0;
   padding: 4px 5px;
-  background: #FBF6E9;
+  background: #fff;
   border: 1px solid #e6dcd3;
   border-radius: 5px;
 }
@@ -1245,7 +1245,7 @@ function makeEmptyState() {
   flex: 0 0 auto;
   padding: 6px 7px;
   margin-bottom: 6px;
-  background: #FBF6E9;
+  background: #fff;
   border: 1px solid #e6dcd3;
   border-radius: 5px;
 }
@@ -1295,7 +1295,7 @@ function makeEmptyState() {
   gap: 2px;
   place-items: center;
   padding: 4px 2px;
-  background: #FBF6E9;
+  background: #fdfbf7;
   border: 1px solid #e6dcd3;
   border-radius: 4px;
 }
@@ -1333,7 +1333,7 @@ function makeEmptyState() {
   color: #b35c37;
   font: 800 11px/1.2 "Microsoft YaHei", sans-serif;
   text-align: center;
-  background: #FBF6E9;
+  background: #fff;
   border: 1px solid #e6dcd3;
   border-radius: 5px;
 }
@@ -1348,7 +1348,7 @@ function makeEmptyState() {
   font-size: 13px;
   font-weight: 800;
   text-align: center;
-  background: rgba(251, 246, 233, 0.86);
+  background: rgba(253, 251, 247, 0.86);
 }
 
 .load-state.error {

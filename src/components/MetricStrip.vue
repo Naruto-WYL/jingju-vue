@@ -28,7 +28,7 @@ defineProps({
   padding: 10px;
   border: 1px solid rgba(39, 59, 88, 0.12);
   border-radius: 6px;
-  background: #FBF6E9;
+  background: rgba(255, 255, 255, 0.54);
 }
 
 .metric span {
