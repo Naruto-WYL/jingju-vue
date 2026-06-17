@@ -78,7 +78,7 @@
         <div v-if="analysisOpen" class="analysis-backdrop" @click="analysisOpen = false"></div>
         <aside class="analysis-panel" :class="{ open: analysisOpen }">
           <div class="panel-title-row">
-            <strong>{{ lockedScene ? '极值点反向穿透 (T4↔T1)' : '剧本节奏与起伏刻画' }}</strong>
+            <strong>{{ lockedScene ? '叙事主题结构拆解' : '剧本节奏与起伏刻画' }}</strong>
             <button type="button" class="info-btn" @click.stop="infoOpen = !infoOpen">?</button>
             <button type="button" class="panel-close-btn" @click.stop="analysisOpen = false">关闭</button>
             <div class="info-tooltip" :class="{ visible: infoOpen }">
@@ -136,23 +136,6 @@
         </aside>
       </div>
 
-      <div class="playback-row">
-        <button class="mini-play-btn" type="button" @click="togglePlay">
-          <svg v-if="!isPlaying" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-          <svg v-else viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
-        </button>
-        <div class="progress-percent">{{ Math.floor(globalProgress * 100) }}%</div>
-        <input
-          v-model.number="sliderValue"
-          class="timeline-slider"
-          type="range"
-          min="0"
-          max="100"
-          step="0.01"
-          @input="handleSliderChange(sliderValue)"
-        />
-      </div>
-
       <div v-if="loading || errorMessage" class="load-state" :class="{ error: errorMessage }">
         {{ errorMessage || '数据加载中...' }}
       </div>
@@ -179,8 +162,6 @@ const stageCountFilter = ref('')
 const currentScriptKey = ref('')
 const currentState = ref(makeEmptyState())
 const globalProgress = ref(0)
-const sliderValue = ref(0)
-const isPlaying = ref(false)
 const isHovering = ref(false)
 const hoveringAnchor = ref(false)
 const lockedScene = ref(null)
@@ -194,7 +175,7 @@ let currentMouseY = 0
 let activeAnchors = []
 let resizeHandler = null
 let needsDraw = true
-let physics = { visibleRatio: 0.15 }
+let physics = { visibleRatio: 1 }
 
 const layout = { paddingLeft: 42, paddingRight: 20, paddingTop: 32, paddingBottom: 24 }
 const roleLabels = ['生', '旦', '净', '丑']
@@ -241,7 +222,6 @@ onMounted(async () => {
   await nextTick()
   initCanvas()
   if (isLinkageTriggerSource()) syncFromLinkage()
-  setProgress(0)
   animate()
 })
 
@@ -291,44 +271,61 @@ function filterByStageCount(stageCount) {
 
 function switchScript(key) {
   if (!key || !scripts.value[key]) return
-  if (isPlaying.value) isPlaying.value = false
   currentScriptKey.value = key
   lockedScene.value = null
   infoOpen.value = false
-  physics.visibleRatio = 0.15
-  setProgress(0)
+  showFullScript()
 }
 
 function jumpToStage(stage) {
-  const target = currentScript.value?.stageProgress?.[stage]
-  if (target === undefined) return
+  const target = getStageCutoffProgress(stage)
+  if (target === null) return
   jumpToProgress(target)
 }
 
-function handleSliderChange(value) {
-  jumpToProgress(Number(value) / 100, false)
-}
-
-function jumpToProgress(targetProgress, stopPlaying = true) {
-  if (stopPlaying) isPlaying.value = false
-  physics.visibleRatio = Math.max(0.15, targetProgress / 0.85)
+function jumpToProgress(targetProgress) {
+  physics.visibleRatio = Math.max(0.01, Math.min(1, Number(targetProgress) || 0))
   setProgress(targetProgress)
 }
 
 function setProgress(value) {
   const nextValue = Math.max(0, Math.min(1, Number(value) || 0))
   globalProgress.value = nextValue
-  sliderValue.value = nextValue * 100
   currentState.value = getInterpolatedState(currentScript.value, nextValue)
   requestCanvasDraw()
 }
 
-function togglePlay() {
-  if (!isPlaying.value && globalProgress.value >= 1) {
-    physics.visibleRatio = 0.15
-    setProgress(0)
+function showFullScript() {
+  physics.visibleRatio = 1
+  setProgress(1)
+}
+
+function getStageCutoffProgress(stage) {
+  const script = currentScript.value
+  if (!script?.scenes?.length || !stage) return null
+
+  const stageIndex = script.stages?.indexOf(stage) ?? -1
+  let lastSceneIndex = -1
+
+  script.scenes.forEach((scene, index) => {
+    if (index === 0) return
+    if (scene.stage === stage) {
+      lastSceneIndex = index
+      return
+    }
+
+    const sceneStageIndex = script.stages?.indexOf(scene.stage) ?? -1
+    if (stageIndex >= 0 && sceneStageIndex >= 0 && sceneStageIndex <= stageIndex) {
+      lastSceneIndex = index
+    }
+  })
+
+  if (lastSceneIndex > 0) {
+    return lastSceneIndex / Math.max(1, script.scenes.length - 1)
   }
-  isPlaying.value = !isPlaying.value
+
+  const fallback = script.stageProgress?.[stage]
+  return Number.isFinite(fallback) ? fallback : null
 }
 
 function initCanvas() {
@@ -358,16 +355,6 @@ function resizeCanvas() {
 }
 
 function animate() {
-  if (isPlaying.value) {
-    const nextProgress = globalProgress.value + 0.001
-    if (nextProgress >= 1) {
-      setProgress(1)
-      isPlaying.value = false
-    } else {
-      setProgress(nextProgress)
-    }
-  }
-
   if (needsDraw) {
     drawChart()
     needsDraw = false
@@ -400,9 +387,9 @@ function drawChart() {
   ctx.clearRect(0, 0, w, h)
   drawAxes(w, graphW, graphH, baseY)
 
-  const visibleRatio = 1
-  physics.visibleRatio = 1
-  const currentTrackerX = layout.paddingLeft + globalProgress.value * graphW
+  const visibleRatio = Math.max(0.01, Math.min(1, physics.visibleRatio || 1))
+  const currentProgress = Math.min(globalProgress.value, visibleRatio)
+  const currentTrackerX = layout.paddingLeft + (currentProgress / visibleRatio) * graphW
   trackerXCss = currentTrackerX
   activeAnchors = []
 
@@ -410,8 +397,9 @@ function drawChart() {
   for (let lineIndex = 0; lineIndex < 6; lineIndex++) {
     const points = []
     for (let i = 0; i <= steps; i++) {
-      const relativeX = i / steps
-      const xPixel = layout.paddingLeft + relativeX * graphW
+      const displayX = i / steps
+      const relativeX = displayX * visibleRatio
+      const xPixel = layout.paddingLeft + displayX * graphW
 
       const state = getInterpolatedState(currentScript.value, relativeX)
       const val = state.data[lineIndex]
@@ -477,8 +465,8 @@ function drawAxes(w, graphW, graphH, baseY) {
   ctx.textBaseline = 'top'
   script.axisXLabels.forEach((label, index) => {
     const ratio = (index + 1) / Math.max(1, script.axisXLabels.length)
-    if (ratio <= physics.visibleRatio + 0.05) {
-      const x = layout.paddingLeft + (ratio / Math.max(0.1, physics.visibleRatio)) * graphW
+    if (ratio <= physics.visibleRatio + 0.0001) {
+      const x = layout.paddingLeft + (ratio / Math.max(0.01, physics.visibleRatio)) * graphW
       const activeWindow = 0.5 / Math.max(1, script.axisXLabels.length)
       const isActive = Math.abs(ratio - globalProgress.value) <= activeWindow
       ctx.strokeStyle = 'rgba(28, 28, 28, 0.15)'
@@ -503,8 +491,9 @@ function drawSceneAnchors(graphW, graphH, baseY, visibleRatio) {
   currentScript.value.scenes.forEach((scene, index) => {
     if (index === 0) return
     const ratio = index / Math.max(1, currentScript.value.scenes.length - 1)
+    if (ratio > visibleRatio + 0.0001) return
 
-    const x = layout.paddingLeft + ratio * graphW
+    const x = layout.paddingLeft + (ratio / Math.max(0.01, visibleRatio)) * graphW
     const value = scene.data[5]
     const y = baseY - (value * graphH) / 100
     const isLocked = lockedScene.value?.sceneId === scene.sceneId
@@ -1347,49 +1336,6 @@ function makeEmptyState() {
   background: #fff;
   border: 1px solid #e6dcd3;
   border-radius: 5px;
-}
-
-.playback-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 30px;
-  min-height: 30px;
-  margin-top: 6px;
-  padding: 0 3px;
-}
-
-.mini-play-btn {
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  color: #fff;
-  background: #b35c37;
-  border: 0;
-  border-radius: 50%;
-  box-shadow: 0 2px 6px rgba(94, 43, 24, 0.25);
-  cursor: pointer;
-}
-
-.mini-play-btn svg {
-  width: 14px;
-  height: 14px;
-  fill: currentColor;
-}
-
-.progress-percent {
-  width: 38px;
-  color: #b22222;
-  font: 800 12px/1 "Consolas", monospace;
-  text-align: right;
-}
-
-.timeline-slider {
-  flex: 1 1 auto;
-  height: 6px;
-  accent-color: #b35c37;
-  cursor: pointer;
 }
 
 .load-state {

@@ -539,7 +539,7 @@ function normalizedThemes(play) {
 
   return validThemes.map((theme) => ({
     ...theme,
-    themeId: theme.themeId,
+    themeId: text(theme.themeId || theme.theme_id || theme.id || theme.name),
     share: Number(theme.share || 0) / total,
   }))
 }

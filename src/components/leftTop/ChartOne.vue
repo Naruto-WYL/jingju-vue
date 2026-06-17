@@ -56,11 +56,9 @@ import * as d3 from 'd3'
 import {
   findCharacterById,
   findPlayById,
-  findPlayByTitle,
   linkageState,
   loadLinkageData,
   selectCharacter,
-  selectTrade,
   STANDARD_TRADES,
   standardizeTrade,
 } from '../../services/linkageStore'
@@ -551,23 +549,15 @@ function syncFromLinkage() {
 }
 
 function handleTradePick(trade) {
-  const play = findPlayByTitle(selectedScript.value)
-  if (!play || !trade) return
+  if (!trade) return
 
   const pickedTrade = standardizeTrade(trade)
   const currentRole = selectedRoleRow.value
-  const roleInPickedTrade =
-    currentRole && currentRole.character_id && standardizeTrade(currentRole.trade) === pickedTrade
-      ? currentRole
-      : representativeRoleForTrade(currentScriptRows.value, pickedTrade, play)
 
-  if (roleInPickedTrade?.character_id) {
-    selectedRole.value = roleInPickedTrade.role_name
-    selectCharacter(roleInPickedTrade.character_id, 'leftTopIcon')
-    return
-  }
+  if (!currentRole?.character_id || standardizeTrade(currentRole.trade) !== pickedTrade) return
 
-  selectTrade(play.play_id, pickedTrade, 'leftTopIcon')
+  selectedRole.value = currentRole.role_name
+  selectCharacter(currentRole.character_id, 'leftTopIcon')
 }
 
 function representativeRoleForTrade(rows, trade, play) {

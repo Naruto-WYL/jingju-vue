@@ -1,5 +1,5 @@
 <template>
-  <main class="dashboard-shell" :class="{ 'is-loading': loading }">
+  <main class="dashboard-shell">
     <div class="dashboard-grid">
       <div class="left-stack">
         <section class="layout-block block-left-top">
@@ -26,30 +26,16 @@
       </section>
     </div>
 
-    <div v-if="loading" class="app-mask">
-      <div class="loader" />
-      <span>正在加载京剧数据</span>
-    </div>
-
-    <div v-if="error" class="error-toast">
-      {{ error }}
-    </div>
   </main>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
 import LeftBottomPanel from './components/leftBottom/Panel.vue'
 import LeftTopPanel from './components/leftTop/Panel.vue'
 import BottomTimelinePanel from './components/mainBottom/Panel.vue'
 import NetworkPanel from './components/mainTop/Panel.vue'
 import RightBottomPanel from './components/rightBottom/Panel.vue'
 import RightTopPanel from './components/rightTop/Panel.vue'
-import { fetchJingjuData } from './services/jingjuApi'
-
-const loading = ref(true)
-const error = ref('')
-const rawData = ref(null)
 
 const fallbackModel = {
   stats: {
@@ -72,32 +58,7 @@ const fallbackModel = {
   timeline: [],
 }
 
-const viewModel = computed(() => {
-  if (!rawData.value) return fallbackModel
-
-  const plays = rawData.value.plays || []
-  const characters = rawData.value.characters || plays.flatMap((play) => play.characters || [])
-  const cards = rawData.value.meta?.cards || {}
-
-  return {
-    stats: buildStats(cards, plays, characters),
-    network: buildNetwork(plays, rawData.value),
-    arcRelations: buildArcRelations(plays, rawData.value),
-    themes: buildThemes(plays, rawData.value),
-    topPlays: buildTopPlays(plays),
-    timeline: buildTimeline(plays),
-  }
-})
-
-onMounted(async () => {
-  try {
-    rawData.value = await fetchJingjuData()
-  } catch (err) {
-    error.value = `后端数据暂不可用：${err.message}`
-  } finally {
-    loading.value = false
-  }
-})
+const viewModel = fallbackModel
 
 function buildStats(cards, plays, characters) {
   const eraByPlayId = Object.fromEntries(plays.map((play) => [play.play_id, cleanLabel(play.era || '未知时期')]))
@@ -340,49 +301,6 @@ function cleanTitle(title, id) {
   top: 47.69vh;
   width: 25.97vw;
   height: 52.31vh;
-}
-
-.app-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: #3f332b;
-  background: rgba(247, 242, 235, 0.78);
-  backdrop-filter: blur(6px);
-}
-
-.loader {
-  width: 34px;
-  height: 34px;
-  border: 3px solid rgba(139, 29, 29, 0.18);
-  border-top-color: #8b1d1d;
-  border-radius: 50%;
-  animation: spin 0.9s linear infinite;
-}
-
-.error-toast {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 11;
-  max-width: 420px;
-  padding: 12px 14px;
-  border: 1px solid rgba(139, 29, 29, 0.2);
-  border-radius: 8px;
-  color: #7c241f;
-  background: #fff8f3;
-  box-shadow: 0 12px 28px rgba(54, 42, 32, 0.14);
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @media (max-width: 980px) {

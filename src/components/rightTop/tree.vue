@@ -13,9 +13,6 @@ const svgRef = ref(null)
 
 let resizeObserver = null
 
-// ==========================
-// 虚拟数据：后面你可以换成后端数据
-// ==========================
 const mockData = {
   name: '贾宝玉',
   relation: '核心人物',
