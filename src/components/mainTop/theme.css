@@ -464,18 +464,25 @@
   opacity: 0.34;
   stroke: rgba(255, 253, 246, 0.72);
   stroke-width: 1;
-  transition: opacity 0.24s ease, filter 0.24s ease;
+  transition: opacity 0.3s ease, filter 0.3s ease, stroke-width 0.3s ease;
+}
+
+.narrative-ribbon.muted {
+  opacity: 0.2;
+  stroke: transparent;
+  stroke-width: 0;
+  filter: saturate(0.62);
 }
 
 .narrative-ribbon:hover,
 .narrative-ribbon.active {
-  opacity: 0.86;
-  stroke: rgba(255, 253, 246, 0.94);
-  stroke-width: 1.8;
+  opacity: 0.9;
+  stroke: rgba(255, 250, 235, 0.98);
+  stroke-width: 1.6;
   filter:
-    brightness(1.06)
-    saturate(1.28)
-    contrast(1.08);
+    brightness(1.04)
+    saturate(1.18)
+    contrast(1.06);
 }
 
 .narrative-dot {
@@ -486,12 +493,19 @@
   transition: opacity 0.24s ease, filter 0.24s ease, stroke-width 0.24s ease;
 }
 
+.narrative-dot.muted {
+  opacity: 0.26;
+  stroke: transparent;
+  stroke-width: 0;
+  filter: saturate(0.65);
+}
+
 .narrative-dot:hover,
 .narrative-dot.active {
   opacity: 1;
-  stroke: rgba(255, 253, 246, 0.94);
-  stroke-width: 1.8;
-  filter: brightness(1.08) contrast(1.08);
+  stroke: rgba(255, 250, 235, 0.98);
+  stroke-width: 1.6;
+  filter: brightness(1.05) saturate(1.18) contrast(1.06);
 }
 
 .center-aura {

@@ -15,44 +15,81 @@
           <span>{{ focusLabel(item.play) }}</span>
         </div>
 
-        <div class="play-visual-zone" :class="{ 'has-theme-dashboard': focusedPlayId && index === 0 }">
-          <div :ref="(el) => setChartRef(el, index)" class="g2-play-chord" />
+        <div v-if="focusedPlayId && index === 0 && item.play" class="focus-tree-shell">
+          <div class="tree-hint">角色 → 人物关系 → 关联主题</div>
+          <svg class="relation-theme-tree" viewBox="0 0 360 330" role="img" aria-label="角色关系主题树状图">
+            <g class="tree-root-links">
+              <path v-for="group in relationThemeTree(item.play).groups" :key="`root-${group.id}`" :d="rootRelationPath(group)" />
+            </g>
 
-          <aside v-if="focusedPlayId && index === 0 && item.play" class="theme-dashboard">
-            <div class="focus-meta-line">
-              <span>角色：{{ focusedCharacterCount(item.play) }}人</span>
-              <span>场次：{{ focusedSceneLabel(item.play) }}</span>
-              <span>主题：{{ normalizedThemes(item.play).length }}类</span>
-            </div>
+            <g class="tree-theme-links">
+              <template v-for="group in relationThemeTree(item.play).groups" :key="`themes-${group.id}`">
+                <path
+                  v-for="themeId in group.themeIds"
+                  :key="`${group.id}-${themeId}`"
+                  :d="relationThemePath(group, relationThemeTree(item.play).themeById.get(themeId))"
+                  :class="{ active: isActiveTreeRelation(group.id), dimmed: hasActiveTreeRelation() && !isActiveTreeRelation(group.id) }"
+                />
+              </template>
+            </g>
 
-            <div class="theme-stack" aria-hidden="true">
-              <i
-                v-for="theme in themeSummary(item.play)"
-                :key="theme.themeId"
-                :style="{
-                  flexGrow: Math.max(theme.share, 0.025),
-                  background: themeColor(theme.name),
-                  opacity: isFocusedTheme(theme.themeId) ? 1 : 0.55,
-                }"
-              ></i>
-            </div>
+            <g class="tree-root-node" :transform="`translate(${relationThemeTree(item.play).root.x},${relationThemeTree(item.play).root.y})`">
+              <circle r="27" />
+              <text class="root-name" text-anchor="middle" y="3">{{ relationThemeTree(item.play).root.name }}</text>
+              <text class="root-meta" text-anchor="middle" y="39">{{ relationThemeTree(item.play).root.trade }} · 核心角色</text>
+            </g>
 
-            <div class="theme-rank-list">
-              <div
-                v-for="theme in themeSummary(item.play)"
-                :key="theme.themeId"
-                class="theme-rank-row"
-                :class="{ active: isFocusedTheme(theme.themeId) }"
+            <g
+              v-for="group in relationThemeTree(item.play).groups"
+              :key="group.id"
+              class="tree-relation-group"
+              :class="{ active: isActiveTreeRelation(group.id), dimmed: hasActiveTreeRelation() && !isActiveTreeRelation(group.id) }"
+              :transform="`translate(${group.x},${group.y})`"
+              @mouseenter="hoveredTreeRelationId = group.id"
+              @mouseleave="hoveredTreeRelationId = ''"
+              @click="selectedTreeRelationId = selectedTreeRelationId === group.id ? '' : group.id"
+            >
+              <rect class="group-card" :x="-group.width / 2" y="-29" :width="group.width" height="62" rx="15" />
+              <rect class="relation-label-bg" x="-28" y="-39" width="56" height="19" rx="10" />
+              <text class="relation-type" text-anchor="middle" y="-26">{{ group.type }}</text>
+              <g
+                v-for="person in group.people"
+                :key="person.id"
+                class="relation-person-node"
+                :transform="`translate(${person.x},${person.y})`"
               >
-                <span class="theme-dot" :style="{ background: themeColor(theme.name) }"></span>
-                <b>{{ theme.name }}</b>
-                <i><em :style="{ width: `${Math.max(3, Math.round(theme.share * 100))}%`, background: themeColor(theme.name) }"></em></i>
-                <strong>{{ formatPercent(theme.share) }}</strong>
-              </div>
-            </div>
+                <circle class="person-core" r="14" />
+                <text class="relation-person" text-anchor="middle" y="3.5">{{ person.name }}</text>
+              </g>
+            </g>
 
-            <p class="focus-scene-text">{{ focusedSceneText(item.play) }}</p>
-          </aside>
+            <g
+              v-for="theme in relationThemeTree(item.play).themes"
+              :key="theme.id"
+              class="tree-theme-node"
+              :class="{ active: isTreeThemeActive(theme.id), dimmed: hasActiveTreeRelation() && !isTreeThemeActive(theme.id) }"
+              :transform="`translate(${theme.x},${theme.y})`"
+            >
+              <rect class="theme-card" x="-41" y="-24" width="82" height="48" rx="10" />
+              <circle class="theme-marker" cx="-30" cy="-10" r="3.5" :fill="themeColor(theme.name)" />
+              <text class="theme-name" text-anchor="start" x="-22" y="-6.5">{{ theme.name }}</text>
+              <rect class="theme-track" x="-30" y="5" width="60" height="5" rx="2.5" />
+              <rect
+                class="theme-progress"
+                x="-30"
+                y="5"
+                :width="Math.max(4, 60 * theme.share)"
+                height="5"
+                rx="2.5"
+                :fill="themeColor(theme.name)"
+              />
+              <text class="theme-percent" text-anchor="end" x="30" y="20">{{ formatPercent(theme.share) }}</text>
+            </g>
+          </svg>
+        </div>
+
+        <div v-else class="play-visual-zone">
+          <div :ref="(el) => setChartRef(el, index)" class="g2-play-chord" />
         </div>
 
         <button
@@ -97,6 +134,8 @@ const error = ref('')
 const selectedPlayIds = ref([])
 const chartRefs = ref([])
 const chartInstances = []
+const hoveredTreeRelationId = ref('')
+const selectedTreeRelationId = ref('')
 
 const themeColors = {
   家庭伦理: '#ad3936',
@@ -222,6 +261,14 @@ watch(
   { deep: true, flush: 'post' },
 )
 
+watch(
+  () => [focusedPlayId.value, linkageState.selectedCharacterId, linkageState.selectedTrade],
+  () => {
+    hoveredTreeRelationId.value = ''
+    selectedTreeRelationId.value = ''
+  },
+)
+
 onBeforeUnmount(() => {
   destroyCharts()
 })
@@ -325,6 +372,7 @@ async function renderCharts() {
   await nextTick()
 
   destroyCharts()
+  if (focusedPlayId.value) return
 
   displaySlots.value.forEach((item, index) => {
     const container = chartRefs.value[index]
@@ -631,6 +679,312 @@ function linkagePlay(play) {
   return linkageState.plays.find((item) => item.play_id === play?.playId) || null
 }
 
+function relationThemeTree(play) {
+  const fullPlay = linkagePlay(play)
+  const characters = fullPlay?.characters || []
+  const allRelations = fullPlay?.relations || []
+  const root = treeRootCharacter(fullPlay)
+  const themes = normalizedThemes(play)
+    .slice(0, 5)
+    .map((theme, index, source) => ({
+      id: theme.themeId,
+      name: theme.name,
+      share: theme.share,
+      x: spacedPosition(index, source.length, 43, 317),
+      y: 286,
+    }))
+  const themeById = new Map(themes.map((theme) => [theme.id, theme]))
+  const characterById = new Map(characters.map((character) => [character.character_id, character]))
+
+  const relations = allRelations
+    .filter(
+      (relation) =>
+        relation.source_character_id === root.character_id ||
+        relation.target_character_id === root.character_id,
+    )
+    .sort((a, b) => Number(b.weight || 0) - Number(a.weight || 0))
+    .slice(0, 6)
+    .map((relation) => {
+      const otherId =
+        relation.source_character_id === root.character_id
+          ? relation.target_character_id
+          : relation.source_character_id
+      const other = characterById.get(otherId)
+      return {
+        id: relation.relation_id,
+        type: relation.relation_label || relation.relation_type || '人物互动',
+        person: other?.name || (relation.source_character_id === root.character_id ? relation.target : relation.source),
+        weight: Number(relation.weight || 0),
+        themeIds: inferredRelationThemes(root, other, relation, themeById),
+      }
+    })
+  const grouped = new Map()
+  relations.forEach((relation) => {
+    const current = grouped.get(relation.type) || {
+      id: `group-${relation.type}`,
+      type: relation.type,
+      people: [],
+      themeIds: new Set(),
+      totalWeight: 0,
+    }
+    current.people.push({
+      id: relation.id,
+      name: relation.person,
+      weight: relation.weight,
+    })
+    relation.themeIds.forEach((id) => current.themeIds.add(id))
+    current.totalWeight += relation.weight
+    grouped.set(relation.type, current)
+  })
+
+  const groups = Array.from(grouped.values())
+    .map((group) => ({
+      ...group,
+      themeIds: Array.from(group.themeIds),
+      width: Math.max(72, 42 + group.people.length * 34),
+      themeCenter:
+        Array.from(group.themeIds)
+          .map((id) => themeById.get(id)?.x)
+          .filter(Number.isFinite)
+          .reduce((sum, value, index, values) => sum + value / values.length, 0) || 180,
+    }))
+    .sort((a, b) => a.themeCenter - b.themeCenter || b.totalWeight - a.totalWeight)
+  const totalWidth = groups.reduce((sum, group) => sum + group.width, 0) + Math.max(0, groups.length - 1) * 8
+  let cursor = (360 - totalWidth) / 2
+  groups.forEach((group) => {
+    group.x = cursor + group.width / 2
+    group.y = 155
+    group.people = group.people.map((person, index, source) => ({
+      ...person,
+      x: spacedPosition(index, source.length, -group.width / 2 + 23, group.width / 2 - 23),
+      y: index % 2 === 0 ? 8 : 18,
+    }))
+    cursor += group.width + 8
+  })
+
+  return {
+    root: {
+      id: root.character_id,
+      name: root.name || '核心角色',
+      trade: root.standard_trade || root.trade || root.major_trade || '未定',
+      x: 180,
+      y: 48,
+    },
+    relations,
+    groups,
+    themes,
+    themeById,
+  }
+}
+
+function treeRootCharacter(play) {
+  const characters = play?.characters || []
+  const selected = characters.find(
+    (character) => character.character_id === linkageState.selectedCharacterId,
+  )
+  if (selected) return selected
+
+  const trade = normalizeTrade(linkageState.selectedTrade)
+  const tradeCharacters = trade
+    ? characters.filter((character) =>
+        [character.standard_trade, character.trade, character.major_trade]
+          .map(normalizeTrade)
+          .includes(trade),
+      )
+    : []
+
+  return [...tradeCharacters, ...characters]
+    .filter(
+      (character, index, source) =>
+        source.findIndex((item) => item.character_id === character.character_id) === index,
+    )
+    .sort(
+      (a, b) =>
+        Number(b.importance || 0) - Number(a.importance || 0) ||
+        Number(a.network_rank || 999) - Number(b.network_rank || 999),
+    )[0] || { character_id: '', name: '核心角色' }
+}
+
+function inferredRelationThemes(root, other, relation, themeById) {
+  const rootThemes = new Set(root?.linked_theme_ids || [])
+  const otherThemes = new Set(other?.linked_theme_ids || [])
+  const result = new Set([...rootThemes].filter((id) => otherThemes.has(id)))
+  const relationType = text(relation.relation_type)
+
+  if (relationType === 'power' && themeById.has('theme_power')) result.add('theme_power')
+  if (relationType === 'command') {
+    if (themeById.has('theme_power')) result.add('theme_power')
+    if (themeById.has('theme_war')) result.add('theme_war')
+  }
+  if (relationType === 'conflict') {
+    otherThemes.forEach((id) => result.add(id))
+    rootThemes.forEach((id) => result.add(id))
+  }
+
+  if (!result.size) {
+    otherThemes.forEach((id) => result.add(id))
+    rootThemes.forEach((id) => result.add(id))
+  }
+
+  return Array.from(result).filter((id) => themeById.has(id))
+}
+
+function spacedPosition(index, count, start, end) {
+  if (count <= 1) return (start + end) / 2
+  return start + ((end - start) * index) / (count - 1)
+}
+
+function rootRelationPath(relation) {
+  return `M 180 75 C 180 105, ${relation.x} 96, ${relation.x} ${relation.y - 39}`
+}
+
+function relationThemePath(relation, theme) {
+  if (!theme) return ''
+  return `M ${relation.x} ${relation.y + 33} C ${relation.x} 224, ${theme.x} 230, ${theme.x} ${theme.y - 22}`
+}
+
+function activeTreeRelationId() {
+  return hoveredTreeRelationId.value || selectedTreeRelationId.value
+}
+
+function hasActiveTreeRelation() {
+  return Boolean(activeTreeRelationId())
+}
+
+function isActiveTreeRelation(relationId) {
+  return activeTreeRelationId() === relationId
+}
+
+function isTreeThemeActive(themeId) {
+  const activeId = activeTreeRelationId()
+  if (!activeId) return true
+  const focusedPlay = playMap.value.get(focusedPlayId.value)
+  const relation = relationThemeTree(focusedPlay).groups.find((item) => item.id === activeId)
+  return relation?.themeIds.includes(themeId) || false
+}
+
+function roleCarriers(play) {
+  const fullPlay = linkagePlay(play)
+  const characters = fullPlay?.characters || []
+  const relations = fullPlay?.relations || []
+  if (!characters.length) return []
+
+  const maxScene = Math.max(1, ...characters.map((item) => Number(item.scene_count || 0)))
+  const maxSpeech = Math.max(1, ...characters.map((item) => Number(item.speech_count || 0)))
+  const relationStrength = new Map()
+
+  relations.forEach((relation) => {
+    const weight = Number(relation.weight || 0)
+    relationStrength.set(
+      relation.source_character_id,
+      (relationStrength.get(relation.source_character_id) || 0) + weight,
+    )
+    relationStrength.set(
+      relation.target_character_id,
+      (relationStrength.get(relation.target_character_id) || 0) + weight,
+    )
+  })
+
+  const maxRelation = Math.max(1, ...relationStrength.values())
+  const selectedThemes = new Set(linkageState.selectedThemeIds)
+
+  return characters
+    .map((character) => {
+      const importance = Number(character.importance || 0)
+      const sceneRatio = Number(character.scene_count || 0) / maxScene
+      const speechRatio = Number(character.speech_count || 0) / maxSpeech
+      const relationRatio = (relationStrength.get(character.character_id) || 0) / maxRelation
+      const linkedIds = character.linked_theme_ids || []
+      const themeMatch = linkedIds.some((id) => selectedThemes.has(id))
+      const isSelected = character.character_id === linkageState.selectedCharacterId
+      return {
+        id: character.character_id,
+        name: character.name,
+        trade: character.standard_trade || character.trade || character.major_trade || '未定',
+        level: character.role_level_label || '角色',
+        themes: (character.linked_themes || []).slice(0, 2),
+        score: Math.round(
+          Math.min(1, importance * 0.55 + sceneRatio * 0.2 + speechRatio * 0.15 + relationRatio * 0.1) * 100,
+        ),
+        focusOrder: isSelected ? 2 : themeMatch ? 1 : 0,
+      }
+    })
+    .sort((a, b) => b.focusOrder - a.focusOrder || b.score - a.score)
+    .slice(0, 3)
+    .map((item, index) => ({ ...item, rank: index + 1 }))
+}
+
+function relationMechanisms(play) {
+  const fullPlay = linkagePlay(play)
+  const relations = fullPlay?.relations || []
+  const characters = fullPlay?.characters || []
+  const selectedTrade = normalizeTrade(linkageState.selectedTrade)
+  const focusedIds = new Set(
+    characters
+      .filter((character) => {
+        if (character.character_id === linkageState.selectedCharacterId) return true
+        if (!selectedTrade) return false
+        return [character.standard_trade, character.trade, character.major_trade]
+          .map(normalizeTrade)
+          .includes(selectedTrade)
+      })
+      .map((character) => character.character_id),
+  )
+
+  const focusedRelations = focusedIds.size
+    ? relations.filter(
+        (relation) =>
+          focusedIds.has(relation.source_character_id) || focusedIds.has(relation.target_character_id),
+      )
+    : []
+  const source = focusedRelations.length >= 2 ? focusedRelations : relations
+  const grouped = new Map()
+
+  source.forEach((relation) => {
+    const name = relation.relation_label || relation.relation_type || '人物互动'
+    const current = grouped.get(name) || { name, count: 0, weight: 0 }
+    current.count += 1
+    current.weight += Number(relation.weight || 0)
+    grouped.set(name, current)
+  })
+
+  const rows = Array.from(grouped.values())
+    .sort((a, b) => b.count - a.count || b.weight - a.weight)
+    .slice(0, 5)
+  const maxCount = Math.max(1, ...rows.map((item) => item.count))
+
+  return rows.map((item) => ({
+    ...item,
+    percent: Math.max(8, Math.round((item.count / maxCount) * 100)),
+  }))
+}
+
+function narrativeStages(play) {
+  const fullPlay = linkagePlay(play)
+  const scenes = fullPlay?.scenes || []
+  const order = ['开端', '发展', '高潮', '转折', '结局']
+  const grouped = new Map(order.map((name) => [name, []]))
+
+  scenes.forEach((scene) => {
+    const name = order.includes(scene.stage_type) ? scene.stage_type : '发展'
+    grouped.get(name).push(scene)
+  })
+
+  return order.map((name) => {
+    const items = grouped.get(name)
+    const average = items.length
+      ? items.reduce((sum, scene) => sum + Number(scene.metrics?.plot_strength || 0), 0) / items.length
+      : 0
+    return {
+      name,
+      count: items.length,
+      value: Math.round(average * 100),
+      percent: Math.max(items.length ? 8 : 2, Math.round(average * 100)),
+      active: items.some((scene) => scene.scene_id === linkageState.selectedSceneId),
+    }
+  })
+}
+
 function themeSummary(play) {
   return normalizedThemes(play)
     .slice()
@@ -921,6 +1275,509 @@ function toShare(value) {
   inset: auto;
   min-width: 0;
   min-height: 0;
+}
+
+.focus-tree-shell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 7%, rgba(196, 153, 83, 0.09), transparent 24%),
+    #fbf6e9;
+}
+
+.tree-hint {
+  position: absolute;
+  top: 3px;
+  left: 8px;
+  z-index: 2;
+  color: #9b8069;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+}
+
+.relation-theme-tree {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.tree-root-links path,
+.tree-theme-links path {
+  fill: none;
+  stroke: rgba(126, 94, 67, 0.24);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.15;
+  transition: opacity 0.18s ease, stroke-width 0.18s ease;
+}
+
+.tree-theme-links path {
+  stroke: #b49b7b;
+  opacity: 0.62;
+  stroke-opacity: 0.72;
+  stroke-width: 1.3;
+}
+
+.tree-root-links path.active,
+.tree-theme-links path.active {
+  opacity: 1;
+  stroke-width: 2.1;
+}
+
+.tree-root-links path.active {
+  stroke: #8f3026;
+}
+
+.tree-theme-links path.active {
+  stroke: #9a4034;
+}
+
+.tree-root-links path.dimmed,
+.tree-theme-links path.dimmed {
+  opacity: 0.16;
+}
+
+.tree-root-node circle {
+  fill: #fffaf0;
+  stroke: #9c4032;
+  stroke-width: 2.2;
+}
+
+.root-name {
+  fill: #7f2e25;
+  font-family: "STKaiti", "KaiTi", serif;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.root-meta {
+  fill: #8b715d;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 7px;
+  font-weight: 700;
+}
+
+.tree-relation-group {
+  cursor: pointer;
+  transition: opacity 0.18s ease;
+}
+
+.tree-relation-group .group-card {
+  fill: #fffdf8;
+  stroke: #d8c9b4;
+  stroke-width: 1.15;
+}
+
+.tree-relation-group .relation-label-bg {
+  fill: #8f3b30;
+  stroke: #fffaf0;
+  stroke-width: 1.5;
+}
+
+.tree-relation-group .person-core {
+  fill: #f4ead9;
+  stroke: #aa7b4a;
+  stroke-width: 1.2;
+}
+
+.tree-relation-group.active .group-card {
+  stroke: #9b4939;
+  stroke-width: 1.4;
+}
+
+.tree-relation-group.active .person-core {
+  fill: #9a4034;
+  stroke: #dcbf82;
+}
+
+.tree-relation-group.active .relation-person {
+  fill: #fffaf0;
+}
+
+.tree-relation-group.dimmed {
+  opacity: 0.34;
+}
+
+.relation-type {
+  fill: #fff9ec;
+  font-family: "STKaiti", "KaiTi", serif;
+  font-size: 9.5px;
+  font-weight: 900;
+}
+
+.relation-person {
+  fill: #52392e;
+  font-family: "Microsoft YaHei", "STKaiti", serif;
+  font-size: 8.5px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.tree-theme-node {
+  transition: opacity 0.18s ease;
+}
+
+.tree-theme-node .theme-card {
+  fill: #fffdf8;
+  stroke: #d8c9b4;
+  stroke-width: 1.1;
+}
+
+.tree-theme-node.active .theme-card {
+  fill: #fffdf7;
+  stroke: rgba(143, 62, 49, 0.58);
+  stroke-width: 1.25;
+}
+
+.tree-theme-node.dimmed {
+  opacity: 0.28;
+}
+
+.tree-theme-node .theme-name {
+  fill: #4f392f;
+  font-family: "Microsoft YaHei", "STKaiti", serif;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.tree-theme-node .theme-track {
+  fill: rgba(106, 76, 52, 0.08);
+}
+
+.tree-theme-node .theme-percent {
+  fill: #75594a;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.focus-dashboard {
+  display: grid;
+  grid-template-columns: 0.92fr 1.08fr;
+  grid-template-rows: 0.9fr 1.1fr;
+  gap: 7px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 5px 4px 3px;
+  box-sizing: border-box;
+  background:
+    linear-gradient(rgba(126, 88, 48, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(126, 88, 48, 0.035) 1px, transparent 1px),
+    #fbf6e9;
+  background-size: 20px 20px;
+}
+
+.focus-block {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 8px 9px 7px;
+  border: 1px solid rgba(115, 75, 43, 0.14);
+  border-radius: 5px;
+  background: rgba(255, 252, 244, 0.82);
+  box-shadow: 0 2px 8px rgba(78, 48, 29, 0.035);
+}
+
+.focus-block header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(115, 75, 43, 0.1);
+}
+
+.focus-block header > span {
+  color: rgba(143, 47, 36, 0.42);
+  font-family: Georgia, serif;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.focus-block header div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.focus-block header b {
+  color: #6f271f;
+  font-size: 14px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.focus-block header small {
+  overflow: hidden;
+  color: #9a806a;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 8.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theme-detail-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.theme-detail-row {
+  display: grid;
+  grid-template-columns: 7px minmax(42px, 0.8fr) minmax(45px, 1fr) 28px;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  opacity: 0.64;
+}
+
+.theme-detail-row:first-child,
+.theme-detail-row.active {
+  opacity: 1;
+}
+
+.theme-detail-row > i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.theme-detail-row b {
+  overflow: hidden;
+  color: #544035;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theme-detail-row > span,
+.role-score,
+.relation-bar-row > span {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(104, 76, 52, 0.09);
+}
+
+.theme-detail-row em,
+.role-score em,
+.relation-bar-row em {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.theme-detail-row strong {
+  color: #7b382d;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 9px;
+  text-align: right;
+}
+
+.role-carry-list {
+  display: grid;
+  gap: 2px;
+}
+
+.role-carry-row {
+  display: grid;
+  grid-template-columns: 15px minmax(52px, 0.72fr) minmax(58px, 1fr) minmax(40px, 0.7fr) 21px;
+  align-items: center;
+  gap: 4px;
+  min-height: 17px;
+  min-width: 0;
+}
+
+.role-rank {
+  color: #b28a55;
+  font-family: Georgia, serif;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.role-name {
+  min-width: 0;
+}
+
+.role-name b,
+.role-name small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-name b {
+  color: #4f382d;
+  font-size: 10.5px;
+}
+
+.role-name small {
+  color: #a08973;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 7.5px;
+}
+
+.role-theme-tags {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.role-theme-tags i {
+  overflow: hidden;
+  padding: 1px 3px;
+  border: 1px solid;
+  border-radius: 99px;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 7px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-score em {
+  background: linear-gradient(90deg, #c99b50, #8f3026);
+}
+
+.role-carry-row > strong {
+  color: #7b382d;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 8.5px;
+  text-align: right;
+}
+
+.relation-bars {
+  display: grid;
+  gap: 5px;
+}
+
+.relation-bar-row {
+  display: grid;
+  grid-template-columns: minmax(45px, 0.72fr) minmax(55px, 1fr) 26px 20px;
+  align-items: center;
+  gap: 5px;
+}
+
+.relation-bar-row b {
+  overflow: hidden;
+  color: #554036;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-bar-row em {
+  background: #9f4a38;
+}
+
+.relation-bar-row strong,
+.relation-bar-row small {
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 8px;
+  text-align: right;
+}
+
+.relation-bar-row strong {
+  color: #7b382d;
+}
+
+.relation-bar-row small {
+  color: #aa9078;
+}
+
+.focus-evidence {
+  margin: 7px 0 0;
+  padding-top: 6px;
+  overflow: hidden;
+  border-top: 1px dashed rgba(115, 75, 43, 0.15);
+  color: #796251;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 8.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.stage-columns {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: end;
+  gap: 5px;
+  height: calc(100% - 36px);
+  min-height: 74px;
+}
+
+.stage-column {
+  display: grid;
+  grid-template-rows: 14px minmax(38px, 1fr) 15px 12px;
+  align-items: end;
+  min-width: 0;
+  height: 100%;
+  text-align: center;
+}
+
+.stage-column > strong {
+  color: #9b7f67;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 8px;
+}
+
+.stage-column > span {
+  position: relative;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  width: 70%;
+  height: 100%;
+  margin: auto;
+  overflow: hidden;
+  border-radius: 3px 3px 0 0;
+  background: rgba(108, 78, 52, 0.06);
+}
+
+.stage-column em {
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  border-radius: inherit;
+  background: #c59b5b;
+}
+
+.stage-column.active em {
+  background: #8f3026;
+}
+
+.stage-column.active > b {
+  color: #8f3026;
+}
+
+.stage-column > b {
+  overflow: hidden;
+  color: #5d4638;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stage-column > small {
+  color: #a38a74;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 7.5px;
 }
 
 .theme-dashboard {

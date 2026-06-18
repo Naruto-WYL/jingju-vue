@@ -8,7 +8,7 @@
           :key="key"
           type="button"
           class="legend-item"
-          :class="{ muted: focusKey && focusKey !== key, active: selectedCompareKey === key || hoveredCompareKey === key }"
+          :class="{ muted: hasFocusedKeys && !focusedKeySet.has(key), active: focusedKeySet.has(key) }"
           :style="{ color: colorForKey(key) }"
           @mouseenter="hoveredCompareKey = key"
           @mouseleave="hoveredCompareKey = ''"
@@ -31,13 +31,13 @@
             <strong>五类叙事结构特征归纳</strong>
           </div>
           <div class="desc-block">
-            <span class="desc-title">{{ focusKey ? `${compareScripts[focusKey]?.mode || '结构类型'}：` : '宏观结构提炼：' }}</span>
+            <span class="desc-title">{{ focusTitle }}</span>
             <div class="compare-desc-list">
               <article
                 v-for="key in panelKeys"
                 :key="key"
                 class="compare-desc-card"
-                :class="{ focused: focusKey === key }"
+                :class="{ focused: focusedKeySet.has(key) }"
               >
                 <h4 :style="{ color: colorForKey(key) }">
                   ■ {{ compareScripts[key]?.mode }}
@@ -71,6 +71,8 @@ import {
   loadQiyunDataset,
 } from './qiyunData'
 import { linkageState, loadLinkageData } from '../../services/linkageStore'
+import { loopFilterState } from '../../services/loopFilterStore'
+import { loadDemoDataset } from '../services/tableImport'
 
 const canvasPanelRef = ref(null)
 const canvasRef = ref(null)
@@ -78,6 +80,7 @@ const loading = ref(true)
 const errorMessage = ref('')
 const scripts = ref({})
 const compareScripts = ref({})
+const loopFlows = ref([])
 const hoveredCompareKey = ref('')
 const selectedCompareKey = ref('')
 
@@ -87,14 +90,67 @@ let resizeHandler = null
 const layout = { paddingLeft: 42, paddingRight: 24, paddingTop: 34, paddingBottom: 27 }
 
 const activeCompareKeys = computed(() => compareKeys.filter((key) => compareScripts.value[key]))
-const focusKey = computed(() => hoveredCompareKey.value || selectedCompareKey.value)
-const panelKeys = computed(() => (focusKey.value && activeCompareKeys.value.includes(focusKey.value) ? [focusKey.value] : activeCompareKeys.value))
+const linkedCompareKeys = computed(() => {
+  const scope = loopFilterState.scope
+  const flow = loopFilterState.flow
+  if (!scope) return []
+
+  const scopedKeys = compareKeys.filter((key) =>
+    (Array.isArray(scope.narrativeTypes) ? scope.narrativeTypes : []).some(
+      (narrativeType) => narrativeTypeKey(narrativeType) === key,
+    ),
+  )
+  if (scopedKeys.length) return scopedKeys
+
+  const matchedFlows = loopFlows.value.filter((item) => {
+    if (scope.type === 'relation') return item.relationType === scope.relationType
+    if (scope.type === 'theme') {
+      return item.relationType === scope.relationType && item.themeCombo === scope.themeCombo
+    }
+    if (scope.type === 'flow') return item.id === scope.flowId
+    return flow?.id ? item.id === flow.id : false
+  })
+
+  const typeWeights = new Map()
+  matchedFlows.forEach((item) => {
+    const key = narrativeTypeKey(item.narrativeType)
+    if (!key || !activeCompareKeys.value.includes(key)) return
+    typeWeights.set(key, (typeWeights.get(key) || 0) + Math.max(1, Number(item.count) || 0))
+  })
+
+  const limit = scope.type === 'flow' ? 1 : 3
+  return Array.from(typeWeights.entries())
+    .sort((a, b) => b[1] - a[1] || compareKeys.indexOf(a[0]) - compareKeys.indexOf(b[0]))
+    .slice(0, limit)
+    .map(([key]) => key)
+})
+const focusedKeys = computed(() => {
+  if (hoveredCompareKey.value) return [hoveredCompareKey.value]
+  if (selectedCompareKey.value) return [selectedCompareKey.value]
+  return linkedCompareKeys.value
+})
+const focusedKeySet = computed(() => new Set(focusedKeys.value))
+const hasFocusedKeys = computed(() => focusedKeys.value.length > 0)
+const panelKeys = computed(() => (hasFocusedKeys.value ? focusedKeys.value : activeCompareKeys.value))
+const focusTitle = computed(() => {
+  if (!hasFocusedKeys.value) return '宏观结构提炼：'
+  if (focusedKeys.value.length === 1) return `${compareScripts.value[focusedKeys.value[0]]?.mode || '结构类型'}：`
+  return `中上联动结构（${focusedKeys.value.length}类）：`
+})
+const loopScopeSignature = computed(() => {
+  const scope = loopFilterState.scope
+  if (!scope) return ''
+  const narrativeTypes = Array.isArray(scope.narrativeTypes) ? scope.narrativeTypes.join('|') : ''
+  if (scope.type === 'relation') return `relation:${scope.relationType}:${narrativeTypes}`
+  if (scope.type === 'theme') return `theme:${scope.relationType}:${scope.themeCombo}:${narrativeTypes}`
+  return `flow:${scope.flowId || loopFilterState.flow?.id || ''}:${narrativeTypes}`
+})
 
 onMounted(async () => {
   await loadData()
   await nextTick()
   initCanvas()
-  if (isLinkageTriggerSource()) syncFromLinkage()
+  if (!loopFilterState.scope && isLinkageTriggerSource()) syncFromLinkage()
   animate()
 })
 
@@ -106,11 +162,17 @@ onBeforeUnmount(() => {
 watch(
   () => [linkageState.source, linkageState.selectedPlayId],
   () => {
-    if (isLinkageTriggerSource()) syncFromLinkage()
+    if (!loopFilterState.scope && isLinkageTriggerSource()) syncFromLinkage()
   },
 )
 
-watch([hoveredCompareKey, selectedCompareKey], () => {
+watch([hoveredCompareKey, selectedCompareKey, linkedCompareKeys], () => {
+  drawCompare()
+})
+
+watch(loopScopeSignature, () => {
+  selectedCompareKey.value = ''
+  hoveredCompareKey.value = ''
   drawCompare()
 })
 
@@ -118,9 +180,14 @@ async function loadData() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const [dataset] = await Promise.all([loadQiyunDataset(), loadLinkageData().catch(() => null)])
+    const [dataset, , loopDataset] = await Promise.all([
+      loadQiyunDataset(),
+      loadLinkageData().catch(() => null),
+      loadDemoDataset().catch(() => ({ flows: [] })),
+    ])
     scripts.value = dataset.scripts
     compareScripts.value = dataset.compareScripts
+    loopFlows.value = loopDataset.flows || []
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '叙事模式数据加载失败'
   } finally {
@@ -179,15 +246,16 @@ function drawCompare() {
   ctx.clearRect(0, 0, w, h)
   drawAxes(w, graphW, graphH, baseY)
 
-  const drawKeys = focusKey.value
-    ? activeCompareKeys.value.filter((key) => key !== focusKey.value).concat(focusKey.value)
+  const drawKeys = hasFocusedKeys.value
+    ? activeCompareKeys.value.filter((key) => !focusedKeySet.value.has(key)).concat(focusedKeys.value)
     : activeCompareKeys.value
 
   drawKeys.forEach((key) => {
     const script = compareScripts.value[key]
     if (!script?.scenes?.length) return
     const color = colorForKey(key)
-    const isFaded = focusKey.value && focusKey.value !== key
+    const isFocused = focusedKeySet.value.has(key)
+    const isFaded = hasFocusedKeys.value && !isFocused
     const smoothPoints = []
     const steps = 80
 
@@ -204,13 +272,13 @@ function drawCompare() {
     drawSmoothLine(smoothPoints)
     ctx.strokeStyle = color
     ctx.globalAlpha = isFaded ? 0.18 : 0.96
-    ctx.lineWidth = focusKey.value === key ? 2.7 : 2.1
+    ctx.lineWidth = isFocused ? 2.7 : 2.1
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
     ctx.stroke()
     ctx.restore()
 
-    if (focusKey.value === key) drawPeakAnchor(script, smoothPoints, color, w, h)
+    if (isFocused) drawPeakAnchor(script, smoothPoints, color, w, h, focusedKeys.value.length === 1)
   })
 }
 
@@ -255,7 +323,7 @@ function drawAxes(w, graphW, graphH, baseY) {
   ctx.stroke()
 }
 
-function drawPeakAnchor(script, points, color, w, h) {
+function drawPeakAnchor(script, points, color, w, h, showLabel = true) {
   let peakIndex = 0
   let minY = h
   let maxY = 0
@@ -276,22 +344,52 @@ function drawPeakAnchor(script, points, color, w, h) {
   ctx.arc(point.x, point.y, 4.2, 0, Math.PI * 2)
   ctx.fill()
 
+  if (!showLabel) return
+
+  const labelText = `【${script.name.replace(/[《》]/g, '')}】`
+  const plotWidth = Math.max(1, w - layout.paddingLeft - layout.paddingRight)
+  const horizontalRatio = (point.x - layout.paddingLeft) / plotWidth
   let align = 'center'
   let textX = point.x
-  if (point.x < layout.paddingLeft + 30) {
+  if (horizontalRatio < 0.38) {
     align = 'left'
-    textX = point.x + 8
-  } else if (point.x > w - layout.paddingRight - 30) {
+    textX = point.x + 14
+  } else if (horizontalRatio > 0.62) {
     align = 'right'
-    textX = point.x - 8
+    textX = point.x - 14
   }
 
-  let textY = point.y - 12
-  if (point.y < layout.paddingTop + 15) textY = point.y + 20
-  ctx.fillStyle = color
+  const placeAbove = point.y > layout.paddingTop + 30
+  const textY = placeAbove ? point.y - 20 : point.y + 20
+
+  ctx.save()
   ctx.font = 'bold 12px sans-serif'
   ctx.textAlign = align
-  ctx.fillText(`【${script.name.replace(/[《》]/g, '')}】`, textX, textY)
+  ctx.textBaseline = placeAbove ? 'bottom' : 'top'
+
+  const measuredWidth = ctx.measureText(labelText).width
+  if (align === 'left') textX = Math.min(textX, w - layout.paddingRight - measuredWidth)
+  if (align === 'right') textX = Math.max(textX, layout.paddingLeft + measuredWidth)
+  if (align === 'center') {
+    textX = Math.max(layout.paddingLeft + measuredWidth / 2, Math.min(textX, w - layout.paddingRight - measuredWidth / 2))
+  }
+
+  ctx.beginPath()
+  ctx.moveTo(point.x, point.y + (placeAbove ? -6 : 6))
+  ctx.lineTo(point.x, point.y + (placeAbove ? -13 : 13))
+  ctx.strokeStyle = color
+  ctx.globalAlpha = 0.55
+  ctx.lineWidth = 1
+  ctx.stroke()
+
+  ctx.globalAlpha = 1
+  ctx.lineWidth = 4
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = '#FBF6E9'
+  ctx.strokeText(labelText, textX, textY)
+  ctx.fillStyle = color
+  ctx.fillText(labelText, textX, textY)
+  ctx.restore()
 }
 
 function getCompareValue(script, progress) {
@@ -335,6 +433,16 @@ function getBezierControlPoints(points, index, a, b) {
 function colorForKey(key) {
   const index = Math.max(0, compareKeys.indexOf(key))
   return compareColorsStroke[index]
+}
+
+function narrativeTypeKey(value) {
+  const name = String(value || '').trim()
+  if (name === '平稳型') return 'flat'
+  if (name === '前锋型' || name === '前峰型') return 'frontPeak'
+  if (name === '后峰型') return 'backPeak'
+  if (name === '中峰型') return 'midPeak'
+  if (name === '多峰型') return 'multiPeak'
+  return ''
 }
 
 function toggleCompareKey(key) {

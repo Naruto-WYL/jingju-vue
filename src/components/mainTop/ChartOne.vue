@@ -167,9 +167,9 @@ interface NodeDatum {
 }
 
 type SelectionScope =
-  | { type: 'relation'; relationType: string }
-  | { type: 'theme'; relationType: string; themeCombo: string }
-  | { type: 'flow'; flowId: string };
+  | { type: 'relation'; relationType: string; narrativeTypes?: string[] }
+  | { type: 'theme'; relationType: string; themeCombo: string; narrativeTypes?: string[] }
+  | { type: 'flow'; flowId: string; narrativeTypes?: string[] };
 
 interface EdgeDetail {
   title: string;
@@ -678,6 +678,7 @@ function drawStageExplanation(svg: SVGSVGElement, left: number, top: number, rin
 
 function drawNarrativeGlyphTrack(svg: SVGSVGElement, cx: number, cy: number, innerR: number, outerR: number) {
   const span = (Math.PI * 2) / Math.max(1, props.flows.length);
+  const hasSelection = Boolean(props.selectedFlow || selectionScope.value);
   let angle = -Math.PI / 2;
   props.flows.forEach((flow) => {
     const profile = narrativeProfile(flow);
@@ -701,10 +702,14 @@ function drawNarrativeGlyphTrack(svg: SVGSVGElement, cx: number, cy: number, inn
     });
     const ribbon = element('path');
     const active = isFlowRelated(flow);
-    ribbon.setAttribute('class', `narrative-ribbon ${active ? 'active' : ''}`);
+    ribbon.setAttribute('class', `narrative-ribbon ${active ? 'active' : hasSelection ? 'muted' : ''}`);
     ribbon.setAttribute('d', [...outerPoints, ...innerPoints].map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ') + ' Z');
     ribbon.setAttribute('fill', color);
-    if (props.selectedFlow) ribbon.setAttribute('opacity', active ? '0.82' : '0.12');
+    if (hasSelection) {
+      ribbon.setAttribute('opacity', active ? '0.9' : '0.2');
+      ribbon.setAttribute('stroke', active ? 'rgba(255, 250, 235, 0.96)' : 'transparent');
+      ribbon.setAttribute('stroke-width', active ? '1.6' : '0');
+    }
     ribbon.addEventListener('mousemove', (event) => showTooltip(event, `<strong>${escapeHtml(flow.narrativeType)}</strong>剧情张力波带<br>开端-发展-高潮-转折-收束<br>${escapeHtml(flow.relationType)} -> ${escapeHtml(flow.themeCombo)}`));
     ribbon.addEventListener('mouseleave', hideTooltip);
     ribbon.addEventListener('click', () => selectAndPopup(flow));
@@ -715,12 +720,17 @@ function drawNarrativeGlyphTrack(svg: SVGSVGElement, cx: number, cy: number, inn
       const a = usableStart + (usableEnd - usableStart) * t;
       const point = polar(cx, cy, baseR + range * (0.14 + value * 0.62), a);
       const dot = element('circle');
-      dot.setAttribute('class', `narrative-dot ${active ? 'active' : ''}`);
+      dot.setAttribute('class', `narrative-dot ${active ? 'active' : hasSelection ? 'muted' : ''}`);
       dot.setAttribute('cx', String(point.x));
       dot.setAttribute('cy', String(point.y));
-      dot.setAttribute('r', String(Math.max(2.4, Math.min(4.8, span * 18))));
+      const baseDotRadius = Math.max(2.4, Math.min(4.8, span * 18));
+      dot.setAttribute('r', String(active && hasSelection ? baseDotRadius * 1.12 : baseDotRadius));
       dot.setAttribute('fill', color);
-      if (props.selectedFlow) dot.setAttribute('opacity', active ? '1' : '0.18');
+      if (hasSelection) {
+        dot.setAttribute('opacity', active ? '1' : '0.26');
+        dot.setAttribute('stroke', active ? 'rgba(255, 250, 235, 0.98)' : 'transparent');
+        dot.setAttribute('stroke-width', active ? '1.6' : '0');
+      }
       dot.addEventListener('mousemove', (event) => showTooltip(event, `<strong>${escapeHtml(flow.narrativeType)}</strong>${stageName(index, profile.length)}张力：${Math.round(value * 100)}%<br>${escapeHtml(flow.relationType)} -> ${escapeHtml(flow.themeCombo)}`));
       dot.addEventListener('mouseleave', hideTooltip);
       dot.addEventListener('click', () => selectAndPopup(flow));
@@ -730,7 +740,7 @@ function drawNarrativeGlyphTrack(svg: SVGSVGElement, cx: number, cy: number, inn
       const labelAngle = usableStart + (usableEnd - usableStart) * 0.62;
       const labelRadius = innerR + range * 0.62;
       const label = tangentialLabel(truncate(flow.narrativeType, 6), cx, cy, labelRadius, labelAngle, 'narrative-label');
-      if (props.selectedFlow && !active) label.setAttribute('opacity', '0.18');
+      if (hasSelection && !active) label.setAttribute('opacity', '0.22');
       svg.appendChild(label);
     }
     angle += span;
@@ -905,20 +915,30 @@ function drawOuterBars(svg: SVGSVGElement, cx: number, cy: number, innerR: numbe
 }
 
 function selectAndPopup(flow: LoopFlow) {
-  selectionScope.value = { type: 'flow', flowId: flow.id };
+  selectionScope.value = {
+    type: 'flow',
+    flowId: flow.id,
+    narrativeTypes: [flow.narrativeType].filter(Boolean),
+  };
   setLoopFilter(selectionScope.value, flow);
   emit('select', flow);
 }
 
 function selectNode(node: NodeDatum) {
   const representative = representativeFlow(node);
+  const narrativeTypes = Array.from(new Set(node.flows.map((flow) => flow.narrativeType).filter(Boolean)));
   if (node.depth === 1) {
-    selectionScope.value = { type: 'relation', relationType: representative.relationType };
+    selectionScope.value = {
+      type: 'relation',
+      relationType: representative.relationType,
+      narrativeTypes,
+    };
   } else {
     selectionScope.value = {
       type: 'theme',
       relationType: representative.relationType,
       themeCombo: representative.themeCombo,
+      narrativeTypes,
     };
   }
   setLoopFilter(selectionScope.value, representative);
