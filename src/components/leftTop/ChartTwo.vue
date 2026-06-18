@@ -13,7 +13,15 @@
     </div>
 
     <div class="vertical-pattern-canvas">
-      <svg ref="svgRef" class="vertical-pattern-svg" role="img" aria-label="角色行当时期对应模式竖向图" />
+      <svg
+        ref="svgRef"
+        class="vertical-pattern-svg"
+        role="img"
+        aria-label="角色行当时期对应模式竖向图"
+        @pointermove.capture="handleSvgPointerMove"
+        @pointerleave="handleSvgPointerLeave"
+        @click.capture="handleSvgClick"
+      />
       <div class="zoom-controls" aria-label="图形缩放">
         <button type="button" title="放大" @click="zoomBy(1.18)">+</button>
         <button type="button" title="缩小" @click="zoomBy(1 / 1.18)">-</button>
@@ -27,19 +35,48 @@
     </section>
 
     <div
-      v-if="tooltip.visible"
+      v-if="tooltip.visible && tooltip.kind !== 'link'"
       class="pattern-tooltip"
       :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }"
     >
       <strong>{{ tooltip.title }}</strong>
       <span v-if="tooltip.value">{{ tooltip.value }}</span>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="tooltip.visible && tooltip.kind === 'link'"
+        class="pattern-tooltip pattern-tooltip--link"
+        :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }"
+      >
+        <strong>{{ tooltip.title }}</strong>
+        <div class="tooltip-row">
+          <span>提取角色样本</span>
+          <b>{{ tooltip.sampleCount }} 名</b>
+        </div>
+        <div class="tooltip-row">
+          <span>本层流向占比</span>
+          <b>{{ tooltip.sourcePct }}%</b>
+        </div>
+        <div class="tooltip-row">
+          <span>行当构成占比</span>
+          <b>{{ tooltip.targetPct }}%</b>
+        </div>
+        <div class="tooltip-characters">
+          <span>代表角色与剧目：</span>
+          <div class="tooltip-character-list">
+            <b v-for="character in tooltip.characters" :key="character">{{ character }}</b>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import * as d3 from 'd3'
+import { representativeRoleSamples } from './representativeRoleSamples'
 
 const rawNodes = [
         { name: "神话传说", type: "period", sort: 1 }, { name: "春秋战国", type: "period", sort: 2 }, 
@@ -1218,7 +1255,19 @@ const svgRef = ref(null)
 const wrapRef = ref(null)
 const activePeriod = ref('all')
 const currentContext = computed(() => contextData[activePeriod.value] || contextData.all)
-const tooltip = reactive({ visible: false, x: 0, y: 0, title: '', value: '' })
+const tooltip = reactive({
+  visible: false,
+  pinned: false,
+  x: 0,
+  y: 0,
+  kind: '',
+  title: '',
+  value: '',
+  sampleCount: 0,
+  sourcePct: '0.0',
+  targetPct: '0.0',
+  characters: [],
+})
 const zoomTransform = ref(d3.zoomIdentity)
 let resizeObserver = null
 let zoomBehavior = null
@@ -1337,19 +1386,31 @@ function drawLinks(svg, links, nodes, valueScale) {
   const linkPaths = linkGroup.selectAll('path')
     .data(links.filter((link) => nodes.has(link.source) && nodes.has(link.target)))
     .join('path')
+    .attr('class', (link) => {
+      const sourceNode = nodes.get(link.source)
+      const targetNode = nodes.get(link.target)
+      return sourceNode?.type === 'identity' && targetNode?.type === 'role' ? 'identity-role-hit-link' : null
+    })
+    .attr('data-source', (link) => link.source)
+    .attr('data-target', (link) => link.target)
+    .attr('tabindex', (link) => {
+      const sourceNode = nodes.get(link.source)
+      const targetNode = nodes.get(link.target)
+      return sourceNode?.type === 'identity' && targetNode?.type === 'role' ? 0 : null
+    })
     .attr('d', (link) => linkPath(nodes.get(link.source), nodes.get(link.target)))
     .attr('stroke', (link) => linkColor(link))
     .attr('stroke-width', (link) => valueScale(link.value))
     .attr('data-base-width', (link) => valueScale(link.value))
     .attr('stroke-opacity', (link) => isLinkVisible(link) ? 0.46 : 0.055)
     .style('pointer-events', (link) => isLinkVisible(link) ? 'stroke' : 'none')
-    .on('mouseenter', function (event, link) {
-      if (!isLinkVisible(link)) return
 
+  function handleLinkEnter(event, link) {
+      if (!isLinkVisible(link) || tooltip.pinned) return
       linkPaths
         .attr('stroke-opacity', (item) => isLinkVisible(item) ? 0.035 : 0.012)
 
-      d3.select(this)
+      linkPaths.filter((item) => item.id === link.id)
         .raise()
         .attr('stroke', linkHighlightColor(link))
         .attr('stroke-opacity', 0.94)
@@ -1360,13 +1421,39 @@ function drawLinks(svg, links, nodes, valueScale) {
       } else {
         resetMatrixHighlight(svg)
       }
-      showTooltip(event, `${link.source} → ${link.target}`, '')
-    })
+      const sourceNode = nodes.get(link.source)
+      const targetNode = nodes.get(link.target)
+      if (sourceNode?.type === 'identity' && targetNode?.type === 'role') {
+        showLinkTooltip(event, link, links)
+      } else {
+        showTooltip(event, `${link.source} → ${link.target}`, '')
+      }
+  }
+
+  function handleLinkLeave() {
+    if (tooltip.pinned) return
+    resetLinkHighlight(linkPaths, valueScale)
+    resetMatrixHighlight(svg)
+    hideTooltip()
+  }
+
+  function handleIdentityRoleClick(event, link) {
+    event.stopPropagation()
+    tooltip.pinned = false
+    handleLinkEnter(event, link)
+    tooltip.pinned = true
+  }
+
+  linkPaths
+    .on('mouseover', handleLinkEnter)
     .on('mousemove', moveTooltip)
-    .on('mouseleave', function () {
-      resetLinkHighlight(linkPaths, valueScale)
-      resetMatrixHighlight(svg)
-      hideTooltip()
+    .on('mouseout', handleLinkLeave)
+    .on('click', function (event, link) {
+      const sourceNode = nodes.get(link.source)
+      const targetNode = nodes.get(link.target)
+      if (sourceNode?.type === 'identity' && targetNode?.type === 'role') {
+        handleIdentityRoleClick(event, link)
+      }
     })
 }
 
@@ -1627,12 +1714,68 @@ function drawMatrix(svg) {
 
 function showTooltip(event, title, value) {
   tooltip.visible = true
+  tooltip.pinned = false
+  tooltip.kind = 'text'
   tooltip.title = title
   tooltip.value = value
   moveTooltip(event)
 }
 
+function identityRoleLinkFromEvent(event) {
+  const path = event.target?.closest?.('.identity-role-hit-link')
+  if (!path) return null
+  return rawLinks.find((link) => link.source === path.dataset.source && link.target === path.dataset.target) || null
+}
+
+function handleSvgPointerMove(event) {
+  if (tooltip.pinned) return
+  const link = identityRoleLinkFromEvent(event)
+  if (!link || !isLinkVisible(link)) {
+    if (tooltip.kind === 'link') hideTooltip()
+    return
+  }
+  showLinkTooltip(event, link, rawLinks)
+}
+
+function handleSvgPointerLeave() {
+  if (!tooltip.pinned && tooltip.kind === 'link') hideTooltip()
+}
+
+function handleSvgClick(event) {
+  const link = identityRoleLinkFromEvent(event)
+  if (!link || !isLinkVisible(link)) return
+  event.stopPropagation()
+  tooltip.pinned = false
+  showLinkTooltip(event, link, rawLinks)
+  tooltip.pinned = true
+}
+
+function showLinkTooltip(event, link, links) {
+  const sourceTotal = d3.sum(links.filter((item) => item.source === link.source), (item) => item.value)
+  const targetTotal = d3.sum(links.filter((item) => item.target === link.target), (item) => item.value)
+
+  tooltip.visible = true
+  tooltip.kind = 'link'
+  tooltip.title = `映射分析：${link.source} → ${link.target}`
+  tooltip.value = ''
+  tooltip.sampleCount = link.value
+  tooltip.sourcePct = ((link.value / Math.max(1, sourceTotal)) * 100).toFixed(1)
+  tooltip.targetPct = ((link.value / Math.max(1, targetTotal)) * 100).toFixed(1)
+  tooltip.characters = representativeCharacters(link.source, link.target)
+  moveTooltip(event)
+}
+
+function representativeCharacters(source, target) {
+  return representativeRoleSamples[`${source}|${target}`] || ['暂无典型代表']
+}
+
 function moveTooltip(event) {
+  if (tooltip.kind === 'link') {
+    tooltip.x = Math.max(8, Math.min(event.clientX + 20, window.innerWidth - 330))
+    tooltip.y = Math.max(8, Math.min(event.clientY + 10, window.innerHeight - 210))
+    return
+  }
+
   const rect = wrapRef.value?.getBoundingClientRect()
   if (!rect) return
   tooltip.x = event.clientX - rect.left + 12
@@ -1641,6 +1784,7 @@ function moveTooltip(event) {
 
 function hideTooltip() {
   tooltip.visible = false
+  tooltip.pinned = false
 }
 </script>
 
@@ -1864,6 +2008,27 @@ function hideTooltip() {
   animation: tooltip-in 120ms ease-out both;
 }
 
+.pattern-tooltip--link {
+  position: fixed;
+  z-index: 1000;
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  padding: 14px;
+  border: 1px solid #dcdcdc;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.pattern-tooltip--link strong {
+  margin-bottom: 8px;
+  padding-bottom: 7px;
+  border-bottom: 2px solid #eee;
+  color: #7a241d;
+  font-size: 14px;
+  font-weight: 900;
+}
+
 .pattern-tooltip strong {
   font-size: 12px;
   line-height: 1.15;
@@ -1872,6 +2037,56 @@ function hideTooltip() {
 .pattern-tooltip span {
   font-size: 10px;
   line-height: 1.35;
+}
+
+.tooltip-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.tooltip-row b {
+  color: #7a241d;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.tooltip-characters {
+  display: grid;
+  gap: 2px;
+  margin-top: 3px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(143, 47, 36, 0.14);
+}
+
+.tooltip-characters > span {
+  color: #7a241d;
+  font-weight: 800;
+}
+
+.tooltip-characters b {
+  color: #49342b;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.tooltip-character-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tooltip-character-list b {
+  display: inline-block;
+  padding: 4px 8px;
+  border: 1px solid rgba(122, 36, 29, 0.24);
+  border-radius: 14px;
+  color: #7a241d;
+  background: rgba(122, 36, 29, 0.07);
 }
 
 .context-panel {

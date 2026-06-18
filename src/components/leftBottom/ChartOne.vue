@@ -324,7 +324,7 @@ async function render() {
       .attr('font-family', fontFamily)
       .attr('font-size', (word) => word.size)
       .attr('font-weight', 700)
-      .attr('fill', layout.role.active && layout.role.key === 'jingjue' ? '#fff8e8' : '#2b241d')
+      .attr('fill', '#2b241d')
       .attr('opacity', (word) => word.opacity)
       .text((word) => word.text)
 
