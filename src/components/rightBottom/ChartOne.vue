@@ -1886,36 +1886,30 @@ function toShare(value) {
   min-width: 0;
   padding: 0 22px 0 9px;
 
-  border: 1px solid rgba(139, 91, 52, 0.24);
-  border-radius: 999px;
+  border: 1px solid rgba(142, 47, 36, 0.38);
+  border-radius: 6px;
   outline: none;
 
-  color: #5a3928;
+  color: #50301c;
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
   font-size: 13px;
   font-weight: 900;
 
   background:
-    linear-gradient(180deg, rgba(255, 250, 238, 0.92), rgba(246, 236, 214, 0.78)),
-    #f6ecd6;
-
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.5),
-    0 2px 5px rgba(80, 43, 25, 0.06);
+    linear-gradient(180deg, rgba(255, 248, 232, 0.94), rgba(242, 224, 188, 0.94)),
+    #f4e8cf;
 
   cursor: pointer;
 }
 
 .play-picker select:hover {
-  border-color: rgba(143, 47, 36, 0.34);
-  color: #8f2f24;
+  border-color: rgba(142, 47, 36, 0.38);
+  color: #50301c;
 }
 
 .play-picker select:focus {
-  border-color: rgba(184, 147, 73, 0.62);
-  box-shadow:
-    0 0 0 2px rgba(184, 147, 73, 0.14),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+  border-color: rgba(142, 47, 36, 0.74);
+  box-shadow: 0 0 0 2px rgba(212, 166, 74, 0.24);
 }
 
 .theme-state {

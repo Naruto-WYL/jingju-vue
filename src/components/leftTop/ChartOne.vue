@@ -1167,11 +1167,25 @@ function cosineSimilarity(a, b) {
 
 .selector-field select {
   outline: none;
+  border-color: rgba(142, 47, 36, 0.38);
+  color: #50301c;
+  background:
+    linear-gradient(180deg, rgba(255, 248, 232, 0.94), rgba(242, 224, 188, 0.94)),
+    #f4e8cf;
+  cursor: pointer;
+}
+
+.period-field strong {
+  border-color: rgba(142, 47, 36, 0.38);
+  color: #50301c;
+  background:
+    linear-gradient(180deg, rgba(255, 248, 232, 0.94), rgba(242, 224, 188, 0.94)),
+    #f4e8cf;
 }
 
 .selector-field select:focus {
-  border-color: rgba(155, 47, 42, 0.55);
-  box-shadow: 0 0 0 2px rgba(155, 47, 42, 0.1);
+  border-color: rgba(142, 47, 36, 0.74);
+  box-shadow: 0 0 0 2px rgba(212, 166, 74, 0.24);
 }
 
 .trade-badge strong {
