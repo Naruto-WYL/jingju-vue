@@ -38,7 +38,6 @@
                 :key="key"
                 class="compare-desc-card"
                 :class="{ focused: focusKey === key }"
-                :style="{ borderColor: focusKey === key ? colorForKey(key) : '#E6DCD3' }"
               >
                 <h4 :style="{ color: colorForKey(key) }">
                   ■ {{ compareScripts[key]?.mode }}
@@ -147,8 +146,8 @@ function resizeCanvas() {
   if (!rect.width || !rect.height) return
 
   const ratio = window.devicePixelRatio || 1
-  canvas.width = rect.width * ratio
-  canvas.height = rect.height * ratio
+  canvas.width = Math.round(rect.width * ratio)
+  canvas.height = Math.round(rect.height * ratio)
   canvas.style.width = `${rect.width}px`
   canvas.style.height = `${rect.height}px`
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
@@ -167,7 +166,9 @@ function drawCompare() {
   const ratio = window.devicePixelRatio || 1
   const rect = panel.getBoundingClientRect()
   if (!rect.width || !rect.height) return
-  if (canvas.width !== rect.width * ratio || canvas.height !== rect.height * ratio) resizeCanvas()
+  const targetWidth = Math.round(rect.width * ratio)
+  const targetHeight = Math.round(rect.height * ratio)
+  if (canvas.width !== targetWidth || canvas.height !== targetHeight) resizeCanvas()
 
   const w = canvas.width / ratio
   const h = canvas.height / ratio
@@ -197,15 +198,17 @@ function drawCompare() {
       smoothPoints.push({ x, y: baseY - (value * graphH) / 100 })
     }
 
+    ctx.save()
     ctx.beginPath()
     ctx.moveTo(smoothPoints[0].x, smoothPoints[0].y)
     drawSmoothLine(smoothPoints)
-    ctx.strokeStyle = isFaded ? 'rgba(150, 150, 150, 0.15)' : color
-    ctx.lineWidth = isFaded ? 1.5 : 3.4
-    ctx.shadowColor = color
-    ctx.shadowBlur = focusKey.value === key ? 12 : 3
+    ctx.strokeStyle = color
+    ctx.globalAlpha = isFaded ? 0.18 : 0.96
+    ctx.lineWidth = focusKey.value === key ? 2.7 : 2.1
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
     ctx.stroke()
-    ctx.shadowBlur = 0
+    ctx.restore()
 
     if (focusKey.value === key) drawPeakAnchor(script, smoothPoints, color, w, h)
   })
@@ -214,7 +217,7 @@ function drawCompare() {
 function drawAxes(w, graphW, graphH, baseY) {
   ctx.textAlign = 'right'
   ctx.textBaseline = 'bottom'
-  ctx.fillStyle = '#A0522D'
+  ctx.fillStyle = '#7a2e27'
   ctx.font = 'bold 10px sans-serif'
   ctx.fillText('[ 张力强度 ]', layout.paddingLeft + 24, layout.paddingTop - 13)
 
@@ -222,12 +225,12 @@ function drawAxes(w, graphW, graphH, baseY) {
   ctx.font = '9px sans-serif'
   ;[25, 50, 75, 100].forEach((value) => {
     const y = baseY - (value * graphH) / 100
-    ctx.strokeStyle = 'rgba(160, 82, 45, 0.06)'
+    ctx.strokeStyle = 'rgba(95, 130, 200, 0.08)'
     ctx.beginPath()
     ctx.moveTo(layout.paddingLeft, y)
     ctx.lineTo(w - layout.paddingRight, y)
     ctx.stroke()
-    ctx.fillStyle = '#A69482'
+    ctx.fillStyle = '#806a58'
     ctx.fillText(`${value}%`, layout.paddingLeft - 5, y)
   })
 
@@ -235,17 +238,17 @@ function drawAxes(w, graphW, graphH, baseY) {
   ctx.textBaseline = 'top'
   ;['开端', '发展', '转折', '高潮', '结局'].forEach((label, index) => {
     const x = layout.paddingLeft + (index / 4) * graphW
-    ctx.strokeStyle = 'rgba(28, 28, 28, 0.15)'
+    ctx.strokeStyle = 'rgba(95, 130, 200, 0.14)'
     ctx.beginPath()
     ctx.moveTo(x, baseY)
     ctx.lineTo(x, baseY + 4)
     ctx.stroke()
-    ctx.fillStyle = '#998370'
+    ctx.fillStyle = '#806a58'
     ctx.font = '10px sans-serif'
     ctx.fillText(label, x, baseY + 6)
   })
 
-  ctx.strokeStyle = '#D9CEBF'
+  ctx.strokeStyle = 'rgba(143, 47, 36, 0.22)'
   ctx.beginPath()
   ctx.moveTo(layout.paddingLeft, baseY)
   ctx.lineTo(w - layout.paddingRight, baseY)
@@ -270,11 +273,7 @@ function drawPeakAnchor(script, points, color, w, h) {
   const point = points[peakIndex]
   ctx.fillStyle = color
   ctx.beginPath()
-  ctx.arc(point.x, point.y, 4, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.fillStyle = '#fff'
-  ctx.beginPath()
-  ctx.arc(point.x, point.y, 2, 0, Math.PI * 2)
+  ctx.arc(point.x, point.y, 4.2, 0, Math.PI * 2)
   ctx.fill()
 
   let align = 'center'
@@ -386,33 +385,33 @@ function isLinkageTriggerSource() {
   width: 100%;
   height: 100%;
   min-height: 0;
-  padding: 6px;
+  padding: 4px 5px 5px;
   overflow: hidden;
   background: #FBF6E9;
-  border: 1px solid #d9cebf;
-  border-radius: 8px;
-  box-shadow: 0 5px 14px rgba(94, 63, 42, 0.08);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .compare-legend {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex: 0 0 auto;
-  min-height: 33px;
-  margin-bottom: 6px;
-  padding: 6px 9px;
+  min-height: 26px;
+  margin-bottom: 3px;
+  padding: 0;
   overflow: hidden;
   font: 12px/1.2 "Microsoft YaHei", sans-serif;
-  background: #fdfbf7;
-  border: 1px solid #e6dcd3;
-  border-radius: 5px;
-  box-shadow: 0 1px 3px rgba(90, 60, 35, 0.06);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .legend-title {
   flex: 0 0 auto;
-  color: #998370;
+  color: #806a58;
   font-weight: 800;
 }
 
@@ -420,20 +419,22 @@ function isLinkageTriggerSource() {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 0;
-  font-size: 13px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
   cursor: pointer;
-  background: transparent;
-  border: 0;
+  background: rgba(251, 246, 233, 0.42);
+  border: 1px solid rgba(143, 47, 36, 0.18);
+  border-radius: 999px;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .legend-item i {
-  width: 12px;
+  width: 10px;
   height: 6px;
-  border-radius: 2px;
+  border-radius: 999px;
 }
 
 .legend-item.muted {
@@ -447,7 +448,7 @@ function isLinkageTriggerSource() {
 .compare-main {
   display: grid;
   grid-template-columns: minmax(0, 2.8fr) minmax(170px, 1fr);
-  gap: 8px;
+  gap: 6px;
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -458,18 +459,18 @@ function isLinkageTriggerSource() {
   min-height: 0;
   overflow: hidden;
   background: #FBF6E9;
-  border: 1px solid #e6dcd3;
-  border-radius: 7px;
+  border: 0;
+  border-radius: 0;
 }
 
 .compare-canvas-panel {
-  box-shadow: inset 0 0 12px rgba(92, 63, 36, 0.05);
+  box-shadow: none;
 }
 
 .canvas-heading {
   position: absolute;
   top: 8px;
-  left: 12px;
+  left: 76px;
   right: 12px;
   z-index: 2;
   pointer-events: none;
@@ -478,8 +479,8 @@ function isLinkageTriggerSource() {
 .canvas-heading span {
   display: block;
   overflow: hidden;
-  color: #b22222;
-  font-size: 15px;
+  color: #8f2f24;
+  font-size: 14px;
   font-weight: 900;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -496,20 +497,20 @@ function isLinkageTriggerSource() {
 .compare-panel {
   display: flex;
   flex-direction: column;
-  padding: 9px;
-  box-shadow: 0 1px 5px rgba(90, 60, 35, 0.06);
+  padding: 6px 0 0 4px;
+  box-shadow: none;
 }
 
 .panel-title-row {
-  padding-bottom: 6px;
-  margin-bottom: 6px;
-  border-bottom: 1px solid #d9cebf;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(143, 47, 36, 0.12);
 }
 
 .panel-title-row strong {
   display: block;
   overflow: hidden;
-  color: #b22222;
+  color: #8f2f24;
   font-size: 14px;
   line-height: 1.15;
   text-overflow: ellipsis;
@@ -527,7 +528,7 @@ function isLinkageTriggerSource() {
   display: block;
   flex: 0 0 auto;
   margin-bottom: 5px;
-  color: #b35c37;
+  color: #8f2f24;
   font-size: 13px;
   font-weight: 900;
 }
@@ -537,21 +538,38 @@ function isLinkageTriggerSource() {
   min-height: 0;
   padding-right: 3px;
   overflow-y: auto;
+  scrollbar-color: rgba(143, 47, 36, 0.36) #FBF6E9;
+  scrollbar-width: thin;
+}
+
+.compare-desc-list::-webkit-scrollbar {
+  width: 7px;
+}
+
+.compare-desc-list::-webkit-scrollbar-track {
+  background: #FBF6E9;
+}
+
+.compare-desc-list::-webkit-scrollbar-thumb {
+  background: rgba(143, 47, 36, 0.34);
+  border: 2px solid #FBF6E9;
+  border-radius: 999px;
 }
 
 .compare-desc-card {
-  padding: 8px;
+  padding: 0 0 6px;
   margin-bottom: 7px;
   color: #5c4636;
   font: 11px/1.5 "Microsoft YaHei", sans-serif;
-  background: #fff;
-  border: 1px solid #e6dcd3;
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(90, 60, 35, 0.06);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(143, 47, 36, 0.08);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .compare-desc-card.focused {
-  padding: 10px;
+  padding: 0 0 6px;
   font-size: 12px;
 }
 
@@ -562,7 +580,7 @@ function isLinkageTriggerSource() {
 }
 
 .compare-desc-card h4 small {
-  color: #998370;
+  color: #806a58;
   font-size: 10px;
   font-weight: 400;
 }
@@ -575,7 +593,7 @@ function isLinkageTriggerSource() {
 .compare-desc-card em {
   display: block;
   margin-top: 4px;
-  color: #998370;
+  color: #806a58;
   font-style: italic;
 }
 
@@ -585,15 +603,15 @@ function isLinkageTriggerSource() {
   z-index: 10;
   display: grid;
   place-items: center;
-  color: #8b4513;
+  color: #7a2e27;
   font-size: 13px;
   font-weight: 800;
   text-align: center;
-  background: rgba(253, 251, 247, 0.86);
+  background: rgba(251, 246, 233, 0.9);
 }
 
 .load-state.error {
-  color: #b22222;
+  color: #8f2f24;
 }
 
 @media (max-width: 900px) {

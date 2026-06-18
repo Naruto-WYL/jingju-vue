@@ -8,8 +8,53 @@
         v-for="(item, index) in displaySlots"
         :key="item.playId || index"
         class="play-chord-card"
+        :class="{ 'is-focus-card': focusedPlayId && index === 0 }"
       >
-        <div :ref="(el) => setChartRef(el, index)" class="g2-play-chord" />
+        <div v-if="focusedPlayId && index === 0 && item.play" class="focus-summary">
+          <strong>{{ item.play.title }}</strong>
+          <span>{{ focusLabel(item.play) }}</span>
+        </div>
+
+        <div class="play-visual-zone" :class="{ 'has-theme-dashboard': focusedPlayId && index === 0 }">
+          <div :ref="(el) => setChartRef(el, index)" class="g2-play-chord" />
+
+          <aside v-if="focusedPlayId && index === 0 && item.play" class="theme-dashboard">
+            <div class="focus-meta-line">
+              <span>角色：{{ focusedCharacterCount(item.play) }}人</span>
+              <span>场次：{{ focusedSceneLabel(item.play) }}</span>
+              <span>主题：{{ normalizedThemes(item.play).length }}类</span>
+            </div>
+
+            <div class="theme-stack" aria-hidden="true">
+              <i
+                v-for="theme in themeSummary(item.play)"
+                :key="theme.themeId"
+                :style="{
+                  flexGrow: Math.max(theme.share, 0.025),
+                  background: themeColor(theme.name),
+                  opacity: isFocusedTheme(theme.themeId) ? 1 : 0.55,
+                }"
+              ></i>
+            </div>
+
+            <div class="theme-rank-list">
+              <div
+                v-for="theme in themeSummary(item.play)"
+                :key="theme.themeId"
+                class="theme-rank-row"
+                :class="{ active: isFocusedTheme(theme.themeId) }"
+              >
+                <span class="theme-dot" :style="{ background: themeColor(theme.name) }"></span>
+                <b>{{ theme.name }}</b>
+                <i><em :style="{ width: `${Math.max(3, Math.round(theme.share * 100))}%`, background: themeColor(theme.name) }"></em></i>
+                <strong>{{ formatPercent(theme.share) }}</strong>
+              </div>
+            </div>
+
+            <p class="focus-scene-text">{{ focusedSceneText(item.play) }}</p>
+          </aside>
+        </div>
+
         <button
           v-if="focusedPlayId && index === 0"
           class="play-focus-close"
@@ -20,7 +65,7 @@
           ×
         </button>
 
-        <label class="play-picker">
+        <label v-if="!focusedPlayId" class="play-picker">
           <select :value="item.playId" :disabled="Boolean(focusedPlayId)" @change="handlePlayPickerChange(index, $event)">
             <option
               v-for="play in playOptions"
@@ -289,7 +334,7 @@ async function renderCharts() {
 
     if (!container || !play || !links.length) return
 
-    const chartSizing = getChordChartSizing(container)
+    const chartSizing = getChordChartSizing(container, Boolean(focusedPlayId.value && index === 0))
 
     const chart = new Chart({
       container,
@@ -355,9 +400,18 @@ async function renderCharts() {
   })
 }
 
-function getChordChartSizing(container) {
+function getChordChartSizing(container, isFocused = false) {
   const rect = container.getBoundingClientRect()
   const minSide = Math.min(rect.width || 0, rect.height || 0)
+
+  if (isFocused) {
+    return {
+      labelFontSize: minSide < 180 ? 11 : 12.5,
+      paddingX: 0,
+      paddingTop: 0,
+      paddingBottom: 0,
+    }
+  }
 
   if (minSide < 120) {
     return {
@@ -531,6 +585,69 @@ function text(value) {
 
 function isLinkageTriggerSource() {
   return linkageState.source === 'leftTopIcon' || linkageState.source === 'rightTopNode'
+}
+
+function focusLabel(play) {
+  if (linkageState.selectedTrade) return `${linkageState.selectedTrade}行当联动`
+  const character = linkagePlay(play)?.characters?.find((item) => item.character_id === linkageState.selectedCharacterId)
+  if (character?.name) return `${character.name}角色联动`
+  return '主题联动视图'
+}
+
+function focusedCharacterCount(play) {
+  const fullPlay = linkagePlay(play)
+  if (!fullPlay) return 0
+  const trade = normalizeTrade(linkageState.selectedTrade)
+  if (!trade) return linkageState.selectedCharacterId ? 1 : fullPlay.characters?.length || 0
+  return (
+    fullPlay.characters?.filter((character) => {
+      return (
+        normalizeTrade(character.standard_trade || character.trade) === trade ||
+        normalizeTrade(character.major_trade) === trade
+      )
+    }).length || 0
+  )
+}
+
+function focusedSceneLabel(play) {
+  const scene = focusedScene(play)
+  return scene?.scene_label || scene?.stage_type || '-'
+}
+
+function focusedSceneText(play) {
+  const scene = focusedScene(play)
+  if (!scene) return '当前联动暂未匹配到具体场次。'
+  const stage = scene.stage_type ? `${scene.stage_type} · ` : ''
+  const summary = scene.summary || '暂无场景摘要'
+  return `${stage}${summary}`
+}
+
+function focusedScene(play) {
+  const fullPlay = linkagePlay(play)
+  return fullPlay?.scenes?.find((scene) => scene.scene_id === linkageState.selectedSceneId) || null
+}
+
+function linkagePlay(play) {
+  return linkageState.plays.find((item) => item.play_id === play?.playId) || null
+}
+
+function themeSummary(play) {
+  return normalizedThemes(play)
+    .slice()
+    .sort((a, b) => {
+      const rankA = Number.isFinite(a.rank) && a.rank > 0 ? a.rank : 999
+      const rankB = Number.isFinite(b.rank) && b.rank > 0 ? b.rank : 999
+      return b.share - a.share || rankA - rankB
+    })
+    .slice(0, 6)
+}
+
+function formatPercent(value) {
+  return `${Math.round(Number(value || 0) * 100)}%`
+}
+
+function normalizeTrade(value) {
+  return text(value).replace(/[（(].*?[）)]/g, '')
 }
 
 function normalizedThemes(play) {
@@ -713,6 +830,63 @@ function toShare(value) {
   box-shadow: none;
 }
 
+.play-chord-card.is-focus-card {
+  display: grid;
+  grid-template-rows: 20px minmax(0, 1fr);
+  gap: 0;
+}
+
+.focus-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 1px 34px 0 4px;
+  color: #4b3328;
+  line-height: 1.15;
+}
+
+.is-focus-card .focus-summary {
+  position: relative;
+  top: auto;
+  right: auto;
+  left: auto;
+  z-index: 3;
+  padding: 0 34px 0 4px;
+  pointer-events: none;
+}
+
+.focus-summary strong {
+  overflow: hidden;
+  color: #8f2f24;
+  font-size: 16px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-summary span {
+  flex: 0 0 auto;
+  color: #806a58;
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.play-visual-zone {
+  min-width: 0;
+  min-height: 0;
+}
+
+.play-visual-zone.has-theme-dashboard {
+  position: relative;
+  inset: auto;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: auto;
+  padding: 0;
+}
+
 .play-focus-close {
   position: absolute;
   top: 6px;
@@ -740,6 +914,162 @@ function toShare(value) {
   height: 100%;
   min-height: 0;
   overflow: visible;
+}
+
+.play-chord-panel.is-focused .g2-play-chord {
+  position: relative;
+  inset: auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.theme-dashboard {
+  position: relative;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(82px, 0.8fr) minmax(110px, 1fr) minmax(150px, 1.45fr) minmax(90px, 1fr);
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 4px 1px;
+  color: #4b3328;
+  font-family: "Microsoft YaHei", sans-serif;
+  background: rgba(251, 246, 233, 0.96);
+  border-top: 1px solid rgba(143, 47, 36, 0.1);
+  scrollbar-color: rgba(143, 47, 36, 0.32) #FBF6E9;
+  scrollbar-width: thin;
+}
+
+.theme-dashboard::-webkit-scrollbar {
+  height: 6px;
+}
+
+.theme-dashboard::-webkit-scrollbar-track {
+  background: #FBF6E9;
+}
+
+.theme-dashboard::-webkit-scrollbar-thumb {
+  background: rgba(143, 47, 36, 0.3);
+  border: 2px solid #FBF6E9;
+  border-radius: 999px;
+}
+
+.focus-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  margin-bottom: 0;
+  color: #806a58;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.theme-stack {
+  display: flex;
+  width: 100%;
+  height: 12px;
+  min-height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(143, 47, 36, 0.08);
+}
+
+.theme-stack i {
+  min-width: 4px;
+  height: 100%;
+}
+
+.theme-rank-list {
+  display: flex;
+  gap: 4px;
+  margin-top: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.theme-rank-row {
+  display: grid;
+  grid-template-columns: 8px minmax(36px, 1fr) 30px;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  opacity: 0.62;
+}
+
+.theme-rank-row.active,
+.theme-rank-row:first-child {
+  opacity: 1;
+}
+
+.theme-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.theme-rank-row b {
+  overflow: hidden;
+  color: #4b3328;
+  font-size: 10.5px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theme-rank-row i {
+  display: none;
+}
+
+.theme-rank-row em {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.theme-rank-row strong {
+  color: #8f2f24;
+  font-size: 10.5px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.focus-scene-text {
+  flex: initial;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #5c4636;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.38;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  scrollbar-color: rgba(143, 47, 36, 0.34) #FBF6E9;
+  scrollbar-width: thin;
+}
+
+.focus-scene-text::-webkit-scrollbar {
+  width: 6px;
+}
+
+.focus-scene-text::-webkit-scrollbar-track {
+  background: #FBF6E9;
+}
+
+.focus-scene-text::-webkit-scrollbar-thumb {
+  background: rgba(143, 47, 36, 0.32);
+  border: 2px solid #FBF6E9;
+  border-radius: 999px;
 }
 
 .play-picker {

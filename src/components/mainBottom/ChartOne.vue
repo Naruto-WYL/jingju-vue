@@ -31,24 +31,24 @@
             {{ stage }}
           </button>
         </div>
-      </div>
 
-      <div class="qiyun-legend">
-        <span class="legend-title">图例：</span>
-        <div class="legend-list">
-          <span v-for="(name, index) in streamColorNames" :key="name" class="legend-item">
-            <i :style="{ background: streamColorsStroke[index] }"></i>{{ compactLegendName(name, index) }}
-          </span>
+        <div class="qiyun-legend">
+          <span class="legend-title">图例：</span>
+          <div class="legend-list">
+            <span v-for="(name, index) in streamColorNames" :key="name" class="legend-item">
+              <i :style="{ background: streamColorsStroke[index] }"></i>{{ compactLegendName(name, index) }}
+            </span>
+          </div>
+          <button
+            type="button"
+            class="analysis-toggle"
+            :class="{ active: analysisOpen }"
+            :aria-expanded="analysisOpen"
+            @click.stop="analysisOpen = !analysisOpen"
+          >
+            说明
+          </button>
         </div>
-        <button
-          type="button"
-          class="analysis-toggle"
-          :class="{ active: analysisOpen }"
-          :aria-expanded="analysisOpen"
-          @click.stop="analysisOpen = !analysisOpen"
-        >
-          节奏说明
-        </button>
       </div>
 
       <div class="qiyun-main">
@@ -90,7 +90,7 @@
           </div>
 
           <div v-if="!lockedScene" class="scene-loc-box">
-            <span>时间轴定位 (X轴)</span>
+            <span>时间轴定位：</span>
             <b>{{ panelSceneText }}</b>
           </div>
 
@@ -98,12 +98,10 @@
             <span class="desc-title">{{ lockedScene ? `锁定锚点：【${lockedScene.theme}】` : '本场剧作动力学分析：' }}</span>
 
             <template v-if="lockedScene">
-              <div class="locked-meta">
+              <div class="locked-inline-summary">
                 <span><small>场次</small><b>{{ lockedScene.label }}</b></span>
                 <span><small>阶段</small><b>{{ lockedScene.stage }}</b></span>
                 <span><small>主题</small><b>{{ lockedScene.theme }}</b></span>
-              </div>
-              <div class="locked-metric-grid">
                 <span v-for="row in lockedMetricRows" :key="row.label">
                   <small>{{ row.label }}</small>
                   <b :style="{ color: row.color }">{{ row.value }}%</b>
@@ -146,7 +144,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { findScriptKeyByPlay, loadQiyunDataset, sceneNoFromSceneId, stageCountLabel } from './qiyunData'
-import { streamColorNames, streamColorsFill, streamColorsStroke } from './qiyunData'
+import { streamColorNames, streamColorsStroke } from './qiyunData'
 import { linkageState, loadLinkageData } from '../../services/linkageStore'
 
 const canvasPanelRef = ref(null)
@@ -409,29 +407,17 @@ function drawChart() {
     if (points.length < 2) continue
 
     ctx.beginPath()
-    ctx.moveTo(layout.paddingLeft, baseY)
-    ctx.lineTo(points[0].x, points[0].y)
-    drawSmoothLine(points)
-    ctx.lineTo(points[points.length - 1].x, baseY)
-    ctx.closePath()
-    ctx.fillStyle = streamColorsFill[lineIndex]
-    ctx.fill()
-
-    ctx.beginPath()
     ctx.moveTo(points[0].x, points[0].y)
     drawSmoothLine(points)
     ctx.strokeStyle = streamColorsStroke[lineIndex]
-    ctx.lineWidth = 2.2
-    ctx.shadowColor = streamColorsStroke[lineIndex]
-    ctx.shadowBlur = 4
+    ctx.lineWidth = lineIndex === 5 ? 2.4 : 1.9
     ctx.stroke()
-    ctx.shadowBlur = 0
 
     if (lineIndex === 5) drawSceneAnchors(graphW, graphH, baseY, visibleRatio)
   }
 
-  ctx.strokeStyle = isHovering.value ? 'rgba(160, 82, 45, 0.9)' : 'rgba(160, 82, 45, 0.3)'
-  ctx.lineWidth = 1.3
+  ctx.strokeStyle = isHovering.value ? 'rgba(143, 47, 36, 0.82)' : 'rgba(95, 130, 200, 0.28)'
+  ctx.lineWidth = 1
   ctx.setLineDash(isHovering.value ? [] : [4, 4])
   ctx.beginPath()
   ctx.moveTo(currentTrackerX, layout.paddingTop - 5)
@@ -443,7 +429,7 @@ function drawChart() {
 function drawAxes(w, graphW, graphH, baseY) {
   ctx.textAlign = 'right'
   ctx.textBaseline = 'bottom'
-  ctx.fillStyle = '#A0522D'
+  ctx.fillStyle = '#7a2e27'
   ctx.font = 'bold 10px sans-serif'
   ctx.fillText('[ 张力强度 ]', layout.paddingLeft + 24, layout.paddingTop - 13)
 
@@ -451,12 +437,12 @@ function drawAxes(w, graphW, graphH, baseY) {
   ctx.font = '9px sans-serif'
   ;[25, 50, 75, 100].forEach((value) => {
     const y = baseY - (value * graphH) / 100
-    ctx.strokeStyle = 'rgba(160, 82, 45, 0.06)'
+    ctx.strokeStyle = 'rgba(95, 130, 200, 0.08)'
     ctx.beginPath()
     ctx.moveTo(layout.paddingLeft, y)
     ctx.lineTo(w - layout.paddingRight, y)
     ctx.stroke()
-    ctx.fillStyle = '#A69482'
+    ctx.fillStyle = '#9a7350'
     ctx.fillText(`${value}%`, layout.paddingLeft - 5, y)
   })
 
@@ -469,18 +455,18 @@ function drawAxes(w, graphW, graphH, baseY) {
       const x = layout.paddingLeft + (ratio / Math.max(0.01, physics.visibleRatio)) * graphW
       const activeWindow = 0.5 / Math.max(1, script.axisXLabels.length)
       const isActive = Math.abs(ratio - globalProgress.value) <= activeWindow
-      ctx.strokeStyle = 'rgba(28, 28, 28, 0.15)'
+      ctx.strokeStyle = 'rgba(95, 130, 200, 0.12)'
       ctx.beginPath()
       ctx.moveTo(x, baseY)
       ctx.lineTo(x, baseY + 4)
       ctx.stroke()
-      ctx.fillStyle = isActive ? '#B22222' : '#998370'
+      ctx.fillStyle = isActive ? '#8f2f24' : '#806a58'
       ctx.font = isActive ? 'bold 10px sans-serif' : '9px sans-serif'
       ctx.fillText(shortLabel(label), x, baseY + 6)
     }
   })
 
-  ctx.strokeStyle = '#D9CEBF'
+  ctx.strokeStyle = 'rgba(143, 47, 36, 0.2)'
   ctx.beginPath()
   ctx.moveTo(layout.paddingLeft, baseY)
   ctx.lineTo(w - layout.paddingRight, baseY)
@@ -499,15 +485,11 @@ function drawSceneAnchors(graphW, graphH, baseY, visibleRatio) {
     const isLocked = lockedScene.value?.sceneId === scene.sceneId
 
     activeAnchors.push({ x, y, scene })
-    ctx.fillStyle = isLocked ? '#B22222' : streamColorsStroke[5]
+    ctx.fillStyle = isLocked ? '#8f2f24' : streamColorsStroke[5]
     ctx.beginPath()
-    ctx.arc(x, y, isLocked ? 6 : 4, 0, Math.PI * 2)
+    ctx.arc(x, y, isLocked ? 5.8 : 4.2, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = '#fff'
-    ctx.beginPath()
-    ctx.arc(x, y, 2, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = isLocked ? '#B22222' : '#4A4A4A'
+    ctx.fillStyle = isLocked ? '#8f2f24' : '#4A4A4A'
     ctx.font = isLocked ? 'bold 11px sans-serif' : 'bold 10px sans-serif'
     ctx.textAlign = 'center'
     ctx.fillText(`【${shortLabel(scene.theme, 5)}】`, x, y - 12)
@@ -734,56 +716,57 @@ function makeEmptyState() {
   width: 100%;
   height: 100%;
   min-height: 0;
-  padding: 6px;
+  padding: 4px 5px 5px;
   overflow: hidden;
   background: #FBF6E9;
-  border: 1px solid #d9cebf;
-  border-radius: 8px;
-  box-shadow: 0 5px 14px rgba(94, 63, 42, 0.08);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .qiyun-topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 28px;
-  margin-bottom: 5px;
+  justify-content: flex-start;
+  gap: 6px;
+  min-height: 26px;
+  margin-bottom: 3px;
   flex: 0 0 auto;
+  overflow: hidden;
 }
 
 .selector-group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 1 330px;
 }
 
 .select-box {
   display: flex;
   align-items: center;
-  height: 26px;
+  height: 24px;
   min-width: 0;
-  padding: 0 8px;
-  background: #fdfbf7;
-  border: 1px solid #cfc0b0;
+  padding: 0 6px;
+  background: rgba(251, 246, 233, 0.72);
+  border: 1px solid rgba(143, 47, 36, 0.26);
   border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(90, 60, 35, 0.08);
+  box-shadow: none;
 }
 
 .stage-count-box {
-  flex: 0 0 138px;
+  flex: 0 0 122px;
 }
 
 .script-box {
-  flex: 0 1 196px;
+  flex: 1 1 170px;
 }
 
 .select-box select {
   width: 100%;
   min-width: 0;
-  color: #8b4513;
+  color: #7a2e27;
   font: 800 12px/1.2 "Microsoft YaHei", sans-serif;
   background: transparent;
   border: 0;
@@ -792,70 +775,72 @@ function makeEmptyState() {
 }
 
 .script-box select {
-  color: #b22222;
+  color: #8f2f24;
   font-size: 12px;
 }
 
 .stage-container {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 3px;
+  justify-content: flex-start;
+  gap: 2px;
   min-width: 0;
   flex: 0 0 auto;
-  max-width: 178px;
-  padding: 3px;
+  max-width: none;
+  padding: 0;
   overflow-x: auto;
-  background: #fff;
-  border: 1px solid #e6dcd3;
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(90, 60, 35, 0.08);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .stage-btn {
-  height: 20px;
-  min-width: 30px;
-  padding: 0 5px;
+  height: 22px;
+  min-width: 34px;
+  padding: 0 6px;
   white-space: nowrap;
-  color: #b35c37;
+  color: #8f2f24;
   font-size: 11px;
   font-weight: 800;
-  background: transparent;
-  border: 0;
-  border-radius: 4px;
+  background: rgba(251, 246, 233, 0.44);
+  border: 1px solid rgba(143, 47, 36, 0.26);
+  border-radius: 999px;
   cursor: pointer;
 }
 
 .stage-btn.active {
   color: #fff;
-  background: #b22222;
+  background: #8f2f24;
+  border-color: #8f2f24;
 }
 
 .qiyun-legend {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 28px;
-  margin-bottom: 6px;
-  padding: 4px 8px;
+  gap: 5px;
+  min-height: 24px;
+  margin-bottom: 0;
+  padding: 0;
   overflow: hidden;
-  font: 12px/1.2 "Microsoft YaHei", sans-serif;
-  background: #fdfbf7;
-  border: 1px solid #e6dcd3;
-  border-radius: 5px;
-  box-shadow: 0 1px 3px rgba(90, 60, 35, 0.06);
+  font: 11px/1.2 "Microsoft YaHei", sans-serif;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  flex: 1 1 270px;
 }
 
 .legend-title {
   flex: 0 0 auto;
-  color: #998370;
+  color: #806a58;
   font-weight: 800;
 }
 
 .legend-list {
   display: flex;
   flex-wrap: nowrap;
-  gap: 5px 10px;
+  gap: 4px 7px;
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -865,14 +850,15 @@ function makeEmptyState() {
   display: inline-flex;
   align-items: center;
   white-space: nowrap;
-  color: #4a3b32;
+  color: #4b3328;
+  font-weight: 700;
 }
 
 .legend-item i {
-  width: 11px;
-  height: 11px;
-  margin-right: 4px;
-  border-radius: 2px;
+  width: 8px;
+  height: 8px;
+  margin-right: 3px;
+  border-radius: 50%;
 }
 
 .qiyun-main {
@@ -888,14 +874,14 @@ function makeEmptyState() {
   min-height: 0;
   overflow: hidden;
   background: #FBF6E9;
-  border: 1px solid #e6dcd3;
-  border-radius: 7px;
+  border: 0;
+  border-radius: 0;
 }
 
 .canvas-panel {
   width: 100%;
   height: 100%;
-  box-shadow: inset 0 0 12px rgba(92, 63, 36, 0.05);
+  box-shadow: none;
 }
 
 .canvas-heading {
@@ -910,8 +896,8 @@ function makeEmptyState() {
 .canvas-heading span {
   display: block;
   overflow: hidden;
-  color: #b22222;
-  font-size: 15px;
+  color: #8f2f24;
+  font-size: 14px;
   font-weight: 900;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -934,13 +920,13 @@ function makeEmptyState() {
   position: absolute;
   z-index: 5;
   width: 190px;
-  padding: 8px;
+  padding: 7px 8px;
   pointer-events: none;
   opacity: 0;
-  background: #fff;
-  border: 1px solid #d9cebf;
+  background: rgba(251, 246, 233, 0.95);
+  border: 1px solid rgba(143, 47, 36, 0.16);
   border-radius: 6px;
-  box-shadow: 0 8px 20px rgba(70, 45, 30, 0.18);
+  box-shadow: none;
   transition: opacity 0.15s ease-out;
 }
 
@@ -954,7 +940,7 @@ function makeEmptyState() {
   color: #4a3b32;
   font-size: 11px;
   font-weight: 800;
-  border-bottom: 1px solid #e6dcd3;
+  border-bottom: 1px solid rgba(143, 47, 36, 0.13);
 }
 
 .tooltip-grid {
@@ -972,19 +958,22 @@ function makeEmptyState() {
 
 .analysis-panel {
   position: absolute;
-  top: -84px;
-  right: 28px;
-  bottom: -52px;
-  left: 28px;
+  top: 8px;
+  right: 16px;
+  bottom: 8px;
+  left: 16px;
   z-index: 9;
   display: flex;
   flex-direction: column;
-  padding: 9px;
+  padding: 8px 10px;
   overflow: hidden;
   pointer-events: none;
   opacity: 0;
+  background: rgba(251, 246, 233, 0.96);
+  border: 1px solid rgba(143, 47, 36, 0.18);
+  border-radius: 6px;
   transform: translateY(8px);
-  box-shadow: 0 1px 5px rgba(90, 60, 35, 0.06);
+  box-shadow: none;
   transition: opacity 0.16s ease, transform 0.16s ease;
 }
 
@@ -992,15 +981,15 @@ function makeEmptyState() {
   pointer-events: auto;
   opacity: 1;
   transform: translateY(0);
-  box-shadow: 0 10px 24px rgba(70, 45, 30, 0.18);
+  box-shadow: none;
 }
 
 .analysis-backdrop {
   position: absolute;
-  inset: -90px 0 -58px;
+  inset: 0;
   z-index: 8;
-  background: rgba(253, 251, 247, 0.44);
-  backdrop-filter: blur(1px);
+  background: transparent;
+  backdrop-filter: none;
 }
 
 .analysis-toggle {
@@ -1008,37 +997,37 @@ function makeEmptyState() {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  height: 24px;
-  padding: 0 12px;
-  color: #8b4513;
+  height: 22px;
+  padding: 0 8px;
+  color: #8f2f24;
   font: 900 12px/1 "Microsoft YaHei", sans-serif;
   white-space: nowrap;
-  background: linear-gradient(180deg, #fffdfa 0%, #f6eadb 100%);
-  border: 1px solid #caa98a;
+  background: transparent;
+  border: 1px solid rgba(143, 47, 36, 0.32);
   border-radius: 999px;
-  box-shadow: 0 2px 7px rgba(114, 73, 38, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  box-shadow: none;
   cursor: pointer;
 }
 
 .analysis-toggle::before {
-  width: 6px;
-  height: 6px;
-  margin-right: 6px;
+  width: 5px;
+  height: 5px;
+  margin-right: 4px;
   content: "";
-  background: #b35c37;
+  background: #8f2f24;
   border-radius: 50%;
-  box-shadow: 0 0 0 3px rgba(179, 92, 55, 0.12);
+  box-shadow: none;
 }
 
 .analysis-toggle.active {
   color: #fff;
-  background: #b35c37;
-  border-color: #b35c37;
+  background: #8f2f24;
+  border-color: #8f2f24;
 }
 
 .analysis-toggle.active::before {
   background: #fff8ed;
-  box-shadow: 0 0 0 3px rgba(255, 248, 237, 0.18);
+  box-shadow: none;
 }
 
 .panel-title-row {
@@ -1048,14 +1037,14 @@ function makeEmptyState() {
   gap: 6px;
   padding-bottom: 6px;
   margin-bottom: 6px;
-  border-bottom: 1px solid #d9cebf;
+  border-bottom: 1px solid rgba(143, 47, 36, 0.14);
 }
 
 .panel-title-row > strong {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  color: #b22222;
+  color: #8f2f24;
   font-size: 14px;
   line-height: 1.15;
   text-overflow: ellipsis;
@@ -1068,10 +1057,10 @@ function makeEmptyState() {
   width: 16px;
   height: 16px;
   place-items: center;
-  color: #998370;
+  color: #806a58;
   font: 800 11px/1 "Microsoft YaHei", sans-serif;
-  background: #fff;
-  border: 1px solid #d9cebf;
+  background: transparent;
+  border: 1px solid rgba(143, 47, 36, 0.22);
   border-radius: 50%;
   cursor: pointer;
 }
@@ -1080,11 +1069,11 @@ function makeEmptyState() {
   flex: 0 0 auto;
   height: 18px;
   padding: 0 6px;
-  color: #998370;
+  color: #806a58;
   font: 800 10px/1 "Microsoft YaHei", sans-serif;
-  background: #fff;
-  border: 1px solid #d9cebf;
-  border-radius: 4px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   cursor: pointer;
 }
 
@@ -1102,10 +1091,10 @@ function makeEmptyState() {
   font: 11px/1.45 "Microsoft YaHei", sans-serif;
   pointer-events: none;
   opacity: 0;
-  background: #fff;
-  border: 1px solid #b35c37;
+  background: rgba(251, 246, 233, 0.97);
+  border: 1px solid rgba(143, 47, 36, 0.2);
   border-radius: 6px;
-  box-shadow: 0 8px 20px rgba(70, 45, 30, 0.18);
+  box-shadow: none;
   transition: opacity 0.18s ease;
 }
 
@@ -1115,26 +1104,36 @@ function makeEmptyState() {
 }
 
 .info-tooltip b {
-  color: #b35c37;
+  color: #8f2f24;
 }
 
 .scene-loc-box {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  min-width: 0;
   padding: 0 0 4px;
-  margin-bottom: 6px;
-  border-bottom: 1px solid #e6dcd3;
+  margin-bottom: 5px;
+  border-bottom: 1px solid rgba(143, 47, 36, 0.12);
 }
 
 .scene-loc-box span {
-  display: block;
-  margin-bottom: 3px;
-  color: #b35c37;
+  display: inline;
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  color: #8f2f24;
   font: 900 12px/1.2 "Microsoft YaHei", sans-serif;
 }
 
 .scene-loc-box b {
   display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   color: #4a3b32;
   font: 800 12px/1.45 "Microsoft YaHei", sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .desc-block {
@@ -1150,7 +1149,7 @@ function makeEmptyState() {
   display: block;
   flex: 0 0 auto;
   margin-bottom: 5px;
-  color: #b35c37;
+  color: #8f2f24;
   font-size: 13px;
   font-weight: 900;
 }
@@ -1168,87 +1167,64 @@ function makeEmptyState() {
 }
 
 .normal-desc small {
-  display: block;
-  padding-bottom: 5px;
-  margin-bottom: 7px;
-  color: #998370;
-  border-bottom: 1px solid #e6dcd3;
+  display: inline;
+  padding-bottom: 0;
+  margin: 0 6px 0 0;
+  color: #806a58;
+  border-bottom: 0;
 }
 
-.locked-meta {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 5px;
+.locked-inline-summary {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 3px 12px;
   flex: 0 0 auto;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
-.locked-meta span {
+.locked-inline-summary span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
   min-width: 0;
-  padding: 5px 6px;
-  background: #fff;
-  border: 1px solid #e6dcd3;
-  border-radius: 5px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
-.locked-meta small {
-  display: block;
-  margin-bottom: 2px;
+.locked-inline-summary small {
+  display: inline;
+  margin-bottom: 0;
   overflow: hidden;
-  color: #998370;
-  font: 10px/1.1 "Microsoft YaHei", sans-serif;
+  color: #806a58;
+  font: 800 11px/1.25 "Microsoft YaHei", sans-serif;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.locked-meta b {
-  display: block;
+.locked-inline-summary small::after {
+  content: "：";
+}
+
+.locked-inline-summary b {
+  display: inline;
+  max-width: 96px;
   overflow: hidden;
   color: #4a3b32;
-  font: 900 12px/1.2 "Microsoft YaHei", sans-serif;
+  font: 900 12px/1.25 "Microsoft YaHei", sans-serif;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.locked-metric-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
-  flex: 0 0 auto;
-  margin-bottom: 6px;
-}
-
-.locked-metric-grid span {
-  min-width: 0;
-  padding: 4px 5px;
-  background: #fff;
-  border: 1px solid #e6dcd3;
-  border-radius: 5px;
-}
-
-.locked-metric-grid small {
-  display: block;
-  overflow: hidden;
-  color: #998370;
-  font: 10px/1.1 "Microsoft YaHei", sans-serif;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.locked-metric-grid b {
-  display: block;
-  margin-top: 2px;
-  color: #b35c37;
-  font: 900 12px/1.1 "Microsoft YaHei", sans-serif;
 }
 
 .metric-card {
   flex: 0 0 auto;
-  padding: 6px 7px;
+  padding: 4px 0;
   margin-bottom: 6px;
-  background: #fff;
-  border: 1px solid #e6dcd3;
-  border-radius: 5px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 .metric-row {
@@ -1262,14 +1238,14 @@ function makeEmptyState() {
   padding: 2px 0;
   color: #5c4636;
   font: 11px/1.2 "Microsoft YaHei", sans-serif;
-  border-bottom: 1px solid #f1e8de;
+  border-bottom: 1px solid rgba(143, 47, 36, 0.08);
 }
 
 .metric-row i {
   flex: 1 1 auto;
   height: 5px;
   overflow: hidden;
-  background: #e6dcd3;
+  background: rgba(95, 130, 200, 0.15);
   border-radius: 999px;
 }
 
@@ -1295,48 +1271,48 @@ function makeEmptyState() {
   display: grid;
   gap: 2px;
   place-items: center;
-  padding: 4px 2px;
-  background: #fdfbf7;
-  border: 1px solid #e6dcd3;
-  border-radius: 4px;
+  padding: 2px 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 .metric-cells small {
-  color: #998370;
+  color: #806a58;
   font-size: 10px;
 }
 
 .metric-cells b {
-  color: #b35c37;
+  color: #8f2f24;
   font-size: 11px;
 }
 
 .locked-insight {
   flex: 1 1 auto;
   max-height: 50px;
-  padding: 6px 7px;
+  padding: 4px 0 0;
   overflow-y: auto;
-  background: #f5efe6;
-  border: 1px solid #e6dcd3;
-  border-radius: 5px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   font-size: 11px;
   line-height: 1.45;
 }
 
 .locked-insight b {
-  color: #b35c37;
+  color: #8f2f24;
 }
 
 .hover-hint {
   flex: 0 0 auto;
-  padding: 5px;
-  margin-top: 7px;
-  color: #b35c37;
+  padding: 3px 0 0;
+  margin-top: 5px;
+  color: #8f2f24;
   font: 800 11px/1.2 "Microsoft YaHei", sans-serif;
   text-align: center;
-  background: #fff;
-  border: 1px solid #e6dcd3;
-  border-radius: 5px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 .load-state {
@@ -1345,15 +1321,15 @@ function makeEmptyState() {
   z-index: 10;
   display: grid;
   place-items: center;
-  color: #8b4513;
+  color: #7a2e27;
   font-size: 13px;
   font-weight: 800;
   text-align: center;
-  background: rgba(253, 251, 247, 0.86);
+  background: rgba(251, 246, 233, 0.9);
 }
 
 .load-state.error {
-  color: #b22222;
+  color: #8f2f24;
 }
 
 @media (max-width: 900px) {
