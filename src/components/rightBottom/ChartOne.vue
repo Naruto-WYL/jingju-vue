@@ -416,6 +416,10 @@ async function renderCharts() {
         labelFontSize: chartSizing.labelFontSize,
         labelFill: (datum) => (hasThemeFocus && isFocusedChordDatum(datum, play) ? '#8b1f1b' : '#4f3a2b'),
         labelFontWeight: (datum) => (hasThemeFocus && isFocusedChordDatum(datum, play) ? 1000 : 800),
+        labelConnector: true,
+        labelConnectorLength: 5,
+        labelConnectorLength2: 5,
+        labelConnectorDistance: 0,
 
         nodeStroke: (datum) => (hasThemeFocus && isFocusedChordDatum(datum, play) ? '#8b1f1b' : 'rgba(255, 248, 235, 0.88)'),
         nodeLineWidth: (datum) => (hasThemeFocus && isFocusedChordDatum(datum, play) ? 2.4 : 0.8),

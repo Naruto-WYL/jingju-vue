@@ -32,7 +32,7 @@
       :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }"
     >
       <strong>{{ tooltip.title }}</strong>
-      <span>{{ tooltip.value }}</span>
+      <span v-if="tooltip.value">{{ tooltip.value }}</span>
     </div>
   </div>
 </template>
@@ -1334,22 +1334,123 @@ function layoutRow(items, y, left, right, sums) {
 function drawLinks(svg, links, nodes, valueScale) {
   const linkGroup = svg.append('g').attr('class', 'vertical-links')
 
-  linkGroup.selectAll('path')
+  const linkPaths = linkGroup.selectAll('path')
     .data(links.filter((link) => nodes.has(link.source) && nodes.has(link.target)))
     .join('path')
     .attr('d', (link) => linkPath(nodes.get(link.source), nodes.get(link.target)))
     .attr('stroke', (link) => linkColor(link))
     .attr('stroke-width', (link) => valueScale(link.value))
+    .attr('data-base-width', (link) => valueScale(link.value))
     .attr('stroke-opacity', (link) => isLinkVisible(link) ? 0.46 : 0.055)
+    .style('pointer-events', (link) => isLinkVisible(link) ? 'stroke' : 'none')
     .on('mouseenter', function (event, link) {
-      d3.select(this).raise().attr('stroke-opacity', 0.86).attr('stroke-width', Math.max(2.4, valueScale(link.value) + 1.2))
-      showTooltip(event, `${link.source} → ${link.target}`, `样本数：${link.value}`)
+      if (!isLinkVisible(link)) return
+
+      linkPaths
+        .attr('stroke-opacity', (item) => isLinkVisible(item) ? 0.035 : 0.012)
+
+      d3.select(this)
+        .raise()
+        .attr('stroke', linkHighlightColor(link))
+        .attr('stroke-opacity', 0.94)
+        .attr('stroke-width', Math.max(2.4, valueScale(link.value) + 1.2))
+
+      if (roleProfiles[link.target]) {
+        highlightMatrixRole(svg, link.target, linkHighlightColor(link))
+      } else {
+        resetMatrixHighlight(svg)
+      }
+      showTooltip(event, `${link.source} → ${link.target}`, '')
     })
     .on('mousemove', moveTooltip)
-    .on('mouseleave', function (event, link) {
-      d3.select(this).attr('stroke-opacity', isLinkVisible(link) ? 0.46 : 0.055).attr('stroke-width', valueScale(link.value))
+    .on('mouseleave', function () {
+      resetLinkHighlight(linkPaths, valueScale)
+      resetMatrixHighlight(svg)
       hideTooltip()
     })
+}
+
+function linkHighlightColor(link) {
+  const baseName = allPeriods.includes(link.source) ? link.target : link.source
+  return colors[baseName] || '#7a241d'
+}
+
+function highlightMatrixRole(svg, role, highlightColor) {
+  const profile = roleProfiles[role]
+  const profiles = svg.selectAll('.matrix-profiles path')
+
+  if (!profile) {
+    resetMatrixHighlight(svg)
+    return
+  }
+
+  profiles
+    .style('stroke-opacity', (profile) => profile.role === role ? 0.92 : 0.025)
+    .style('stroke-width', (profile) => profile.role === role ? 2.8 : 1.15)
+    .style('stroke', (profile) => profile.role === role ? highlightColor : null)
+
+  svg.selectAll('.matrix-highlight-profile').remove()
+  const selectedPath = profiles.filter((item) => item.role === role)
+
+  svg.select('.trait-matrix')
+    .append('path')
+    .attr('class', 'matrix-highlight-profile')
+    .attr('d', selectedPath.attr('d'))
+    .attr('fill', 'none')
+    .attr('stroke', highlightColor)
+    .attr('stroke-width', 3)
+    .attr('stroke-opacity', 0.96)
+    .attr('pointer-events', 'none')
+
+  svg.selectAll('.matrix-dot')
+    .style('fill', (dot) => profile[dot.traitId - 1] === dot.category ? highlightColor : null)
+    .attr('r', (dot) => profile[dot.traitId - 1] === dot.category ? 4.1 : 2.6)
+}
+
+function resetMatrixHighlight(svg) {
+  svg.selectAll('.matrix-highlight-profile').remove()
+
+  svg.selectAll('.matrix-profiles path')
+    .style('stroke', null)
+    .style('stroke-opacity', null)
+    .style('stroke-width', null)
+
+  svg.selectAll('.matrix-dot')
+    .style('fill', null)
+    .attr('r', 2.6)
+}
+
+function resetLinkHighlight(linkPaths, valueScale) {
+  linkPaths
+    .attr('stroke', (link) => linkColor(link))
+    .attr('stroke-opacity', (link) => isLinkVisible(link) ? 0.46 : 0.055)
+    .attr('stroke-width', (link) => valueScale(link.value))
+    .style('pointer-events', (link) => isLinkVisible(link) ? 'stroke' : 'none')
+}
+
+function highlightLinksForRole(svg, role) {
+  const linkPaths = svg.selectAll('.vertical-links path')
+  const identities = new Set(
+    rawLinks
+      .filter((link) => link.target === role)
+      .map((link) => link.source),
+  )
+
+  linkPaths
+    .attr('stroke-opacity', (link) => {
+      if (!isLinkVisible(link)) return 0.012
+      if (link.target === role) return 0.94
+      if (allPeriods.includes(link.source) && identities.has(link.target)) return 0.72
+      return 0.035
+    })
+    .attr('stroke-width', function (link) {
+      const originalWidth = Number(d3.select(this).attr('data-base-width'))
+      return link.target === role ? Math.max(2.4, originalWidth + 1.2) : originalWidth
+    })
+    .attr('stroke', (link) => link.target === role ? (colors[role] || '#7a241d') : linkColor(link))
+    .style('pointer-events', (link) => isLinkVisible(link) ? 'stroke' : 'none')
+
+  linkPaths.filter((link) => link.target === role).raise()
 }
 
 function isLinkVisible(link) {
@@ -1364,6 +1465,18 @@ function getLinkPeriods(link) {
     const periodLinks = rawLinks.filter((item) => item.source === period && item.target === link.source)
     return periodLinks.length && rawLinks.some((item) => item.source === link.source && item.target === link.target)
   })
+}
+
+function isRoleVisible(role) {
+  if (activePeriod.value === 'all') return true
+
+  const periodIdentities = new Set(
+    rawLinks
+      .filter((link) => link.source === activePeriod.value)
+      .map((link) => link.target),
+  )
+
+  return rawLinks.some((link) => periodIdentities.has(link.source) && link.target === role)
 }
 
 function linkPath(source, target) {
@@ -1478,13 +1591,36 @@ function drawMatrix(svg) {
     .data(profiles)
     .join('path')
     .attr('d', (d) => profileLine(d.points))
+    .style('pointer-events', (d) => isRoleVisible(d.role) ? 'stroke' : 'none')
     .on('mouseenter', function (event, d) {
-      d3.select(this).raise().attr('stroke-opacity', 0.78).attr('stroke-width', 1.8)
+      if (!isRoleVisible(d.role)) return
+
+      const profilePaths = matrix.selectAll('.matrix-profiles path')
+
+      profilePaths
+        .style('stroke-opacity', (profile) => profile.role === d.role ? 0.92 : 0.025)
+        .style('stroke-width', (profile) => profile.role === d.role ? 2.8 : 1.15)
+        .style('stroke', (profile) => profile.role === d.role ? '#7a241d' : null)
+
+      d3.select(this).raise()
+      const selectedProfile = roleProfiles[d.role]
+      matrix.selectAll('.matrix-dot')
+        .style('fill', (dot) => selectedProfile[dot.traitId - 1] === dot.category ? '#7a241d' : null)
+        .attr('r', (dot) => selectedProfile[dot.traitId - 1] === dot.category ? 4.1 : 2.6)
+      highlightLinksForRole(svg, d.role)
       showTooltip(event, `${d.role}典型特征`, roleProfiles[d.role].join(' / '))
     })
     .on('mousemove', moveTooltip)
     .on('mouseleave', function () {
-      d3.select(this).attr('stroke-opacity', 0.34).attr('stroke-width', 1.15)
+      resetMatrixHighlight(svg)
+      const linkPaths = svg.selectAll('.vertical-links path')
+      linkPaths
+        .attr('stroke', (link) => linkColor(link))
+        .attr('stroke-opacity', (link) => isLinkVisible(link) ? 0.46 : 0.055)
+        .attr('stroke-width', function () {
+          return Number(d3.select(this).attr('data-base-width'))
+        })
+        .style('pointer-events', (link) => isLinkVisible(link) ? 'stroke' : 'none')
       hideTooltip()
     })
 }

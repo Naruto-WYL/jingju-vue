@@ -63,14 +63,10 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
-  classifyFiveStageCurve,
   compareColorsStroke,
   compareKeys,
-  findScriptKeyByPlay,
-  getFiveStageValues,
   loadQiyunDataset,
 } from './qiyunData'
-import { linkageState, loadLinkageData } from '../../services/linkageStore'
 import { loopFilterState } from '../../services/loopFilterStore'
 import { loadDemoDataset } from '../services/tableImport'
 
@@ -150,7 +146,6 @@ onMounted(async () => {
   await loadData()
   await nextTick()
   initCanvas()
-  if (!loopFilterState.scope && isLinkageTriggerSource()) syncFromLinkage()
   animate()
 })
 
@@ -158,13 +153,6 @@ onBeforeUnmount(() => {
   if (animationFrameId) cancelAnimationFrame(animationFrameId)
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
 })
-
-watch(
-  () => [linkageState.source, linkageState.selectedPlayId],
-  () => {
-    if (!loopFilterState.scope && isLinkageTriggerSource()) syncFromLinkage()
-  },
-)
 
 watch([hoveredCompareKey, selectedCompareKey, linkedCompareKeys], () => {
   drawCompare()
@@ -180,9 +168,8 @@ async function loadData() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const [dataset, , loopDataset] = await Promise.all([
+    const [dataset, loopDataset] = await Promise.all([
       loadQiyunDataset(),
-      loadLinkageData().catch(() => null),
       loadDemoDataset().catch(() => ({ flows: [] })),
     ])
     scripts.value = dataset.scripts
@@ -461,18 +448,6 @@ function representativeText(script) {
   return script?.reps?.length ? script.reps.join('、') : '当前样本不足，暂无代表剧本'
 }
 
-function syncFromLinkage() {
-  if (!Object.keys(scripts.value).length || !linkageState.selectedPlayId) return
-  const play = linkageState.plays.find((item) => item.play_id === linkageState.selectedPlayId)
-  const key = findScriptKeyByPlay(scripts.value, linkageState.selectedPlayId, play?.title)
-  const values = getFiveStageValues(scripts.value[key])
-  const typeKey = classifyFiveStageCurve(values)
-  if (typeKey && compareScripts.value[typeKey]) selectedCompareKey.value = typeKey
-}
-
-function isLinkageTriggerSource() {
-  return linkageState.source === 'leftTopIcon' || linkageState.source === 'rightTopNode'
-}
 </script>
 
 <style scoped>

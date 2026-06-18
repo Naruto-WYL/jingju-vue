@@ -3,7 +3,7 @@
     class="main-bottom-card"
     :class="{ 'main-bottom-card--river': view === 'a', 'main-bottom-card--summary': view === 'b' }"
   >
-    <ChartToggle v-model="view" label-a="气韵推演" label-b="模式对比" />
+    <ChartToggle v-model="view" />
 
     <div class="main-bottom-content">
       <div class="river-rhythm-heading">剧情阶段识别与叙事节奏模式分析</div>
@@ -75,7 +75,7 @@ const view = ref('a')
   top: 0;
   right: 0;
   z-index: 4;
-  width: 164px;
+  width: 78px;
   height: 28px;
   border-color: rgba(143, 47, 36, 0.48);
   color: #7a241d;
@@ -87,7 +87,7 @@ const view = ref('a')
   height: 22px;
   color: #7a241d;
   font-family: "STKaiti", "KaiTi", serif;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -110,7 +110,7 @@ const view = ref('a')
   position: absolute;
   top: 0;
   left: 0;
-  right: 178px;
+  right: 84px;
   z-index: 3;
   overflow: hidden;
   color: #7a241d;
