@@ -58,13 +58,17 @@
           <header>
             <div>
               <strong>京剧剧本问答助手</strong>
-              <p>可询问角色关系、主题、叙事结构与当前闭环路径。</p>
+              <p>可解释当前选中路径和当前数据中的叙事结构。</p>
             </div>
             <button type="button" @click="isOpen = false">×</button>
           </header>
     
-          <div class="pet-messages">
-            <article v-for="message in messages" :key="message.id" :class="message.role">
+          <div ref="messagesRef" class="pet-messages">
+            <article
+              v-for="message in messages"
+              :key="message.id"
+              :class="[message.role, { loading: message.loading }]"
+            >
               <span>{{ message.text }}</span>
             </article>
           </div>
@@ -76,7 +80,7 @@
           </div>
     
           <form class="pet-input" @submit.prevent="ask(input)">
-            <input v-model="input" placeholder="问我：这个路径说明什么？" />
+            <input v-model="input" placeholder="也可以输入你的问题" />
             <button type="submit">发送</button>
           </form>
         </section>
@@ -1741,14 +1745,18 @@ interface Message {
   id: number;
   role: 'assistant' | 'user';
   text: string;
+  loading?: boolean;
 }
 
 const isOpen = ref(false);
 const input = ref('');
+const messagesRef = ref<HTMLDivElement | null>(null);
 const position = ref({ x: Math.max(window.innerWidth - 128, 24), y: Math.max(window.innerHeight - 128, 24) });
 const isDragging = ref(false);
 const movedDuringDrag = ref(false);
 const dragOffset = ref({ x: 0, y: 0 });
+const responseTimers = new Set<number>();
+let messageId = 1;
 const messages = ref<Message[]>([
   {
     id: 1,
@@ -1758,10 +1766,10 @@ const messages = ref<Message[]>([
 ]);
 
 const prompts = computed(() => [
-  '当前路径说明什么？',
-  '最多的角色关系是什么？',
-  '有哪些叙事结构？',
-  '主题和关系结果怎么联系？',
+  '主题表达如何影响人物关系的演化结局？',
+  '五类叙事结构有什么区别？',
+  '不同角色关系如何推动剧情发展？',
+  '叙事结构如何强化主题表达？',
 ]);
 
 const petStyle = computed(() => ({
@@ -1772,6 +1780,8 @@ const petStyle = computed(() => ({
 onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onDrag);
   window.removeEventListener('pointerup', stopDrag);
+  responseTimers.forEach((timer) => window.clearTimeout(timer));
+  responseTimers.clear();
 });
 
 function togglePanel() {
@@ -1815,14 +1825,69 @@ function stopDrag() {
 function ask(rawQuestion: string) {
   const question = rawQuestion.trim();
   if (!question) return;
-  messages.value.push({ id: Date.now(), role: 'user', text: question });
-  messages.value.push({ id: Date.now() + 1, role: 'assistant', text: answer(question) });
+  const userId = ++messageId;
+  const assistantId = ++messageId;
+  messages.value.push({ id: userId, role: 'user', text: question });
+  messages.value.push({ id: assistantId, role: 'assistant', text: '正在分析', loading: true });
   input.value = '';
+  scrollMessagesToBottom();
+
+  const timer = window.setTimeout(() => {
+    const message = messages.value.find((item) => item.id === assistantId);
+    if (message) {
+      message.text = answer(question);
+      message.loading = false;
+    }
+    scrollMessagesToBottom();
+    responseTimers.delete(timer);
+  }, responseDelay(question));
+  responseTimers.add(timer);
+}
+
+async function scrollMessagesToBottom() {
+  await nextTick();
+  const container = messagesRef.value;
+  if (!container) return;
+  container.scrollTo({
+    top: container.scrollHeight,
+    behavior: 'smooth',
+  });
+}
+
+function responseDelay(question: string) {
+  const normalized = question.replace(/[？?。！!\s]/g, '');
+  const presetDelays: Record<string, number> = {
+    主题表达如何影响人物关系的演化结局: 8400,
+    五类叙事结构有什么区别: 8000,
+    不同角色关系如何推动剧情发展: 9100,
+    叙事结构如何强化主题表达: 9800,
+    京剧叙事分析通常关注哪些方面: 8800,
+  };
+  if (presetDelays[normalized]) return presetDelays[normalized];
+
+  const seed = Array.from(normalized).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return 8000 + (seed % 2001);
 }
 
 function answer(question: string) {
   const normalized = question.toLowerCase();
   if (!props.flows.length) return '当前还没有读取到剧本数据。请先确认 CSV 表格已经加载。';
+
+  if (question.replace(/[？?。！!\s]/g, '') === '京剧叙事分析通常关注哪些方面') {
+    return '京剧叙事分析通常关注四个方面：一是角色关系，包括亲属、权力、同盟和冲突等人物联系；二是主题表达，如忠义家国、婚恋姻缘、战争武略和公案冤狱；三是叙事结构，即剧情张力在开端、中段、后段或多个节点中的分布；四是关系演化结局，如和解、破裂、归顺、复仇和秩序恢复。结合这四个方面，可以更完整地理解剧情如何展开及其价值意义。';
+  }
+
+  if (question.includes('角色关系') && question.includes('剧情发展')) {
+    return describeRelationDrive();
+  }
+
+  if (question.includes('叙事结构') && question.includes('主题表达')) {
+    return describeNarrativeTheme();
+  }
+
+  if (question.includes('主题表达') || (question.includes('主题') && question.includes('演化结局'))) {
+    return describeThemeInfluence();
+  }
 
   if (question.includes('当前') || question.includes('路径') || question.includes('选中')) {
     return describeActiveFlow();
@@ -1844,13 +1909,33 @@ function answer(question: string) {
     return `当前可视化读取到 ${props.scripts.length || totalCount()} 条剧本/记录，形成 ${props.flows.length} 种“关系-主题-叙事-结果”闭环模式。`;
   }
 
-  return '可以从三个角度问我：1. 当前路径说明什么；2. 哪类角色关系最多；3. 某种叙事结构如何影响关系结果。';
+  return '你可以点击上面的两个问题，或在输入框中询问角色关系、主题、叙事结构、剧本数量和关系演化结局。';
+}
+
+function describeThemeInfluence() {
+  return '主题表达决定人物关系变化所遵循的价值方向。同一种亲属、权力、同盟或冲突关系，在忠义家国主题中常走向牺牲、归顺或名节确认；在婚恋姻缘主题中更可能走向离合与重圆；在公案冤狱或恩怨报偿主题中则常以审判、复仇和善恶清算收束。因此，主题并不直接等于结局，而是为关系演化提供价值判断和合理性。';
+}
+
+function describeRelationDrive() {
+  return '角色关系为剧情提供行动动机和矛盾来源。亲属关系常围绕责任、伦理与团聚展开；权力关系通过命令、争夺和反抗制造压力；同盟关系依靠合作与背离推动局势变化；冲突关系直接形成对抗、追逐和决战；审判与恩怨关系则通过申冤、追偿和惩恶推进情节。关系类型不同，人物采取行动的原因和剧情发展的方向也随之改变。';
+}
+
+function describeNarrativeTheme() {
+  return '叙事结构通过安排张力峰值的位置和频率，使主题获得不同的表达效果。前锋型突出危机的突然性，中峰型强化关键抉择与转折，后峰型让价值判断在结局集中显现，多峰型通过反复冲突深化恩怨或战争主题，平稳型则以持续铺陈突出伦理、生活和人物情感。结构决定主题何时被强调、如何积累以及最终怎样被观众感知。';
 }
 
 function describeActiveFlow() {
-  const flow = activeFlow.value || topFlow();
-  if (!flow) return '当前还没有选中路径。你可以先点击图中的某个扇区、波带或外柱。';
-  return `当前代表路径是“${flow.relationType} -> ${flow.themeCombo} -> ${flow.narrativeType} -> ${flow.evolutionType}”。它表示：这类剧本以“${flow.relationType}”作为关系起点，通过“${flow.themeCombo}”组织主题，并采用“${flow.narrativeType}”推进剧情，最后形成“${flow.evolutionType}”的关系变化。`;
+  if (viewMode.value === 'detail' && selectedEdgeDetail.value) {
+    const detailFlows = selectedEdgeDetail.value.flows;
+    const scriptCount = detailScripts(detailFlows).length;
+    const narratives = aggregateFlows(detailFlows, 'narrativeType').slice(0, 3);
+    const narrativeText = narratives.map((item) => `${item.name}（${item.count}）`).join('、');
+    return `当前选中的是“${selectedEdgeDetail.value.subtitle}”协同路径，共关联 ${scriptCount} 个剧本。其主要叙事结构为${narrativeText || '暂无明确分类'}，说明这条连线表示关系、主题或叙事环节之间在这些剧本中的共同出现与组织联系。`;
+  }
+
+  const flow = props.selectedFlow;
+  if (!flow) return '当前尚未选中具体路径。请先点击闭环图中的扇区、剧情波带、外柱或下钻网络连线。';
+  return `当前路径为“${flow.relationType} → ${flow.themeCombo} → ${flow.narrativeType} → ${relationOutcome(flow)}”，覆盖 ${flow.count} 个剧本。它表示：剧本以“${flow.relationType}”为关系基础，由“${flow.themeCombo}”赋予主题语境，通过“${flow.narrativeType}”组织剧情张力，最终形成“${relationOutcome(flow)}”的关系演化结果。`;
 }
 
 function describeTopRelations() {
@@ -1859,8 +1944,7 @@ function describeTopRelations() {
 }
 
 function describeNarratives() {
-  const top = aggregate('narrativeType').slice(0, 4);
-  return `当前主要叙事结构包括：${top.map((item) => `${item.name}（${item.count}）`).join('、')}。它们不是主题本身，而是剧情的组织方式，例如渐强、反转、多峰或平缓推进。`;
+  return '五类结构的区别在于剧情张力峰值出现的位置和次数：前锋型在开端迅速进入主要冲突；中峰型在中段形成核心转折或高潮；后峰型把主要矛盾和情绪释放留到后半段；多峰型反复制造危机与转折，出现多个张力峰值；平稳型各阶段强度接近，更重视铺陈、唱念与人物关系的持续展开。';
 }
 
 function describeThemeOutcome() {
@@ -1870,8 +1954,12 @@ function describeThemeOutcome() {
 }
 
 function aggregate(key: 'relationType' | 'narrativeType') {
+  return aggregateFlows(props.flows, key);
+}
+
+function aggregateFlows(sourceFlows: LoopFlow[], key: 'relationType' | 'narrativeType') {
   const map = new Map<string, number>();
-  props.flows.forEach((flow) => {
+  sourceFlows.forEach((flow) => {
     map.set(flow[key], (map.get(flow[key]) || 0) + flow.count);
   });
   return [...map.entries()]

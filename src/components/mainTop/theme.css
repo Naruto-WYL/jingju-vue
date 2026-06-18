@@ -1660,6 +1660,29 @@
   border: 1px solid rgba(228, 184, 74, 0.14);
 }
 
+.pet-messages .assistant.loading span::after {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+  background:
+    radial-gradient(circle, var(--gold) 1.8px, transparent 2px) 0 50% / 5px 4px repeat-x;
+  animation: pet-thinking 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes pet-thinking {
+  from {
+    opacity: 0.28;
+    transform: translateY(1px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-1px);
+  }
+}
+
 .pet-messages .user {
   justify-content: flex-end;
 }
