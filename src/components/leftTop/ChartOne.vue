@@ -59,6 +59,7 @@ import {
   linkageState,
   loadLinkageData,
   selectCharacter,
+  selectTrade,
   STANDARD_TRADES,
   standardizeTrade,
 } from '../../services/linkageStore'
@@ -198,10 +199,10 @@ const tradeMeta = {
     desc: '常承担辅助叙事、传递关系或推动情节的角色功能。',
     mode: '末类角色通常表现为“男性辅助身份 + 关系传递 + 叙事推进”的组合特征。',
   },
-  武将: {
-    tags: ['武职', '勇武', '行动'],
-    desc: '偏武职身份和行动功能，常与战斗、出场和冲突相关。',
-    mode: '武将类角色通常表现为“武职身份 + 勇武行动 + 冲突或战斗场面”的组合特征。',
+  武净: {
+    tags: ['武功', '刚烈', '做打'],
+    desc: '净行中的武戏类型，突出刚烈气质、武打程式和强冲突表现。',
+    mode: '武净类角色通常表现为“净角声腔与脸谱 + 武打做功 + 强烈冲突”的组合特征。',
   },
   老旦: {
     tags: ['老年女性', '伦理', '唱段'],
@@ -447,7 +448,12 @@ function normalizeRoleRow(row) {
 }
 
 function normalizeHeatmapRow(row) {
-  return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, key === 'clean_trade' ? text(value) : Number(value) || 0]))
+  return Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [
+      key,
+      key === 'clean_trade' ? standardizeTrade(text(value)) : Number(value) || 0,
+    ]),
+  )
 }
 
 function normalizeLinkageRoleRow(row) {
@@ -553,11 +559,16 @@ function handleTradePick(trade) {
 
   const pickedTrade = standardizeTrade(trade)
   const currentRole = selectedRoleRow.value
+  const currentRoleTrade = standardizeTrade(currentRole?.trade)
 
-  if (!currentRole?.character_id || standardizeTrade(currentRole.trade) !== pickedTrade) return
+  if (currentRole?.character_id && currentRoleTrade === pickedTrade) {
+    selectedRole.value = currentRole.role_name
+    selectCharacter(currentRole.character_id, 'leftTopIcon')
+    return
+  }
 
-  selectedRole.value = currentRole.role_name
-  selectCharacter(currentRole.character_id, 'leftTopIcon')
+  const playId = currentRole?.play_id || findPlayById(linkageState.selectedPlayId)?.play_id
+  if (playId) selectTrade(playId, pickedTrade, 'leftTopTrade')
 }
 
 function representativeRoleForTrade(rows, trade, play) {
@@ -844,7 +855,9 @@ function drawDotplot() {
 }
 
 function getTradeIconUrl(trade) {
-  return `/HD-svg/${encodeURIComponent(standardizeTrade(trade))}.png`
+  const standard = standardizeTrade(trade)
+  const iconName = standard === '武净' ? '武将' : standard
+  return `/HD-svg/${encodeURIComponent(iconName)}.png`
 }
 
 function unique(values) {
@@ -883,8 +896,8 @@ function hasAny(values, candidates) {
 function majorTradeFromStandard(trade) {
   const standard = standardizeTrade(trade)
   if (['旦', '正旦', '青衣', '花旦', '老旦'].includes(standard)) return '旦'
-  if (['老生', '小生', '武生', '末', '外', '武将'].includes(standard)) return '生'
-  if (standard === '净') return '净'
+  if (['老生', '小生', '武生', '末', '外'].includes(standard)) return '生'
+  if (['净', '武净'].includes(standard)) return '净'
   if (standard === '丑') return '丑'
   return standard
 }
@@ -919,7 +932,7 @@ function inferIdentity(trade) {
     外: '长辈',
     正旦: '女性',
     末: '辅助',
-    武将: '武职',
+    武净: '武职',
     老旦: '长辈',
     花旦: '女性',
     青衣: '女性',
@@ -945,7 +958,7 @@ function profileMetrics(trade, majorTrade) {
     middle_age_ratio: ['老生', '老旦', '外'].includes(standard) ? 0 : 0.7,
     old_age_ratio: ['老生', '老旦', '外'].includes(standard) ? 1 : 0,
     scholar_ratio: standard === '小生' ? 1 : 0.12,
-    general_ratio: ['武生', '武将', '净'].includes(standard) ? 0.9 : 0.12,
+    general_ratio: ['武生', '武净', '净'].includes(standard) ? 0.9 : 0.12,
     official_ratio: ['老生', '净', '外'].includes(standard) ? 0.82 : 0.18,
     servant_ratio: standard === '丑' || standard === '末' ? 0.55 : 0.08,
     commoner_ratio: standard === '丑' ? 0.78 : 0.22,

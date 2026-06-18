@@ -20,7 +20,7 @@ const view = ref('a')
 
 <style scoped>
 .left-bottom-card.panel-card {
-  padding: 11px 10px 9px;
+  padding: 7px 6px 5px;
 }
 
 .left-bottom-card :deep(.panel-card__header) {
@@ -42,7 +42,7 @@ const view = ref('a')
   width: 100%;
   height: 100%;
   min-height: 0;
-  padding-top: 32px;
+  padding-top: 25px;
   box-sizing: border-box;
 }
 

@@ -8,155 +8,193 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as d3 from 'd3'
 
-import chouImage from '../../assets/词云2/chou3.png'
-import danImage from '../../assets/词云2/dan3.png'
-import jingImage from '../../assets/词云2/jing3.png'
-import shengImage from '../../assets/词云2/sheng3.png'
+import choumowaiImage from '../../assets/词云/choumowai.png'
+import hualaodanImage from '../../assets/词云/hualaodan.png'
+import jingjueImage from '../../assets/词云/jingjue.png'
+import laoshengImage from '../../assets/词云/laosheng.png'
+import xiaowushengImage from '../../assets/词云/xiaowusheng.png'
+import zhengqingdanImage from '../../assets/词云/zhengqingdan.png'
+import { characterWordProfiles } from './characterWordProfiles'
 import { findCharacterById, findPlayById, linkageState, loadLinkageData } from '../../services/linkageStore'
 
 const svgRef = ref(null)
 
-const W = 600
+const W = 528
 const H = 288
 const fontFamily = '"SimHei", "Microsoft YaHei", sans-serif'
-const V_GAP = 12
-const CENTER_GAP = 132
-const CELL_W = (W - CENTER_GAP) / 2
-const CELL_H = (H - V_GAP) / 2
-const RIGHT_X = CELL_W + CENTER_GAP
-const MIN_WORD_SIZE = 7
-const MAX_WORD_SIZE = 22
-const WORD_DENSITY = 1.45
+const COL_GAP = 3
+const ROW_GAP = 3
+const CELL_W = (W - COL_GAP * 2) / 3
+const CELL_H = (H - ROW_GAP) / 2
+const MIN_WORD_SIZE = 5.5
+const MAX_WORD_SIZE = 20
+const WORD_DENSITY = 1.35
 const WORD_GAP = 0
 const CENTER_STEP = 2
 const MAX_WORD_LAYOUT_CACHE = 80
+const roleTypeMap = {
+  laosheng: ['老生'],
+  xiaowusheng: ['小生', '武生'],
+  zhengqingdan: ['旦', '正旦', '青衣'],
+  hualaodan: ['花旦', '老旦'],
+  jingjue: ['净', '武净'],
+  choumowai: ['丑', '末', '外'],
+}
 const ROLE_ORDER = [
   {
-    key: 'sheng',
-    major: '生',
-    src: shengImage,
-    imageScale: 1.08,
+    key: 'laosheng',
+    major: '老生类',
+    src: laoshengImage,
+    imageScale: 1,
     bgColor: '#D1B25B',
     box: { x: 0, y: 0, w: CELL_W, h: CELL_H },
     baseWords: [
+      ['老生', 10],
       ['忠义', 10],
       ['家国', 9],
       ['正气', 8],
-      ['唱念', 8],
-      ['儒雅', 7],
-      ['担纲', 7],
+      ['儒雅', 8],
       ['稳健', 7],
-      ['叙事', 6],
-      ['气度', 6],
+      ['担当', 7],
+      ['道白', 7],
+      ['唱念', 6],
+      ['父子', 6],
+      ['君臣', 6],
+      ['忠孝', 5],
       ['护国', 5],
-      ['将帅', 5],
-      ['道白', 5],
-      ['父子', 4],
-      ['关目', 4],
-      ['沉着', 4],
-      ['抒怀', 4],
+      ['沉着', 5],
+      ['叙事核心', 4],
+      ['伦理秩序', 4],
     ],
   },
   {
-    key: 'dan',
-    major: '旦',
-    src: danImage,
-    imageScale: 1.08,
-    bgColor: '#D98AA8',
-    box: { x: 0, y: CELL_H + V_GAP, w: CELL_W, h: CELL_H },
+    key: 'xiaowusheng',
+    major: '小武生类',
+    src: xiaowushengImage,
+    imageScale: 1,
+    bgColor: '#C96B3C',
+    box: { x: CELL_W + COL_GAP, y: 0, w: CELL_W, h: CELL_H },
     baseWords: [
-      ['婉转', 10],
-      ['水袖', 9],
-      ['青衣', 8],
-      ['花旦', 8],
-      ['柔情', 8],
-      ['闺阁', 7],
-      ['唱腔', 7],
+      ['小生', 10],
+      ['武生', 10],
+      ['英气', 9],
+      ['少年', 8],
+      ['武艺', 8],
       ['身段', 7],
-      ['离合', 6],
-      ['团圆', 6],
-      ['清丽', 6],
-      ['抒情', 5],
-      ['含蓄', 5],
-      ['念白', 5],
-      ['流转', 5],
-      ['才情', 4],
-      ['绣阁', 4],
-      ['情义', 4],
-      ['婉约', 4],
-      ['端庄', 4],
-      ['思念', 3],
-      ['明眸', 3],
-      ['顾盼', 3],
-      ['轻盈', 3],
+      ['冲突', 7],
+      ['出征', 7],
+      ['侠义', 6],
+      ['成长', 6],
+      ['情义', 6],
+      ['行动推进', 5],
+      ['英雄气', 5],
+      ['战斗', 5],
+      ['勇武', 4],
+      ['转折角色', 4],
     ],
   },
   {
-    key: 'jing',
-    major: '净',
-    src: jingImage,
-    imageScale: 1.12,
-    bgColor: '#71AFC3',
-    box: { x: RIGHT_X, y: 0, w: CELL_W, h: CELL_H },
+    key: 'zhengqingdan',
+    major: '正青旦类',
+    src: zhengqingdanImage,
+    imageScale: 1,
+    bgColor: '#D98BA2',
+    box: { x: (CELL_W + COL_GAP) * 2, y: 0, w: CELL_W, h: CELL_H },
     baseWords: [
-      ['威武', 10],
+      ['正旦', 10],
+      ['青衣', 10],
+      ['旦', 9],
+      ['端庄', 9],
+      ['贞烈', 8],
+      ['情感', 8],
+      ['水袖', 7],
+      ['抒情', 7],
+      ['命运', 7],
+      ['伦理', 6],
+      ['哀怨', 6],
+      ['家庭', 6],
+      ['忠贞', 5],
+      ['内心独白', 5],
+      ['情节牵引', 4],
+      ['女性叙事', 4],
+    ],
+  },
+  {
+    key: 'hualaodan',
+    major: '花老旦类',
+    src: hualaodanImage,
+    imageScale: 1,
+    bgColor: '#B76C8E',
+    box: { x: 0, y: CELL_H + ROW_GAP, w: CELL_W, h: CELL_H },
+    baseWords: [
+      ['花旦', 10],
+      ['老旦', 10],
+      ['灵动', 9],
+      ['生活气', 8],
+      ['机敏', 8],
+      ['活泼', 7],
+      ['世情', 7],
+      ['母性', 7],
+      ['家族', 6],
+      ['情趣', 6],
+      ['对白', 6],
+      ['人物反差', 5],
+      ['日常叙事', 5],
+      ['亲情', 5],
+      ['喜剧色彩', 4],
+      ['关系调节', 4],
+    ],
+  },
+  {
+    key: 'jingjue',
+    major: '净角类',
+    src: jingjueImage,
+    imageScale: 1,
+    bgColor: '#8F3B2E',
+    box: { x: CELL_W + COL_GAP, y: CELL_H + ROW_GAP, w: CELL_W, h: CELL_H },
+    baseWords: [
+      ['净', 10],
+      ['武净', 10],
       ['脸谱', 9],
-      ['忠勇', 8],
-      ['豪迈', 8],
-      ['锣鼓', 8],
-      ['靠旗', 7],
-      ['武净', 7],
-      ['亮相', 7],
-      ['刚烈', 6],
+      ['威严', 9],
+      ['权力', 8],
+      ['刚烈', 8],
+      ['冲突核心', 7],
+      ['忠奸', 7],
+      ['豪气', 7],
+      ['武力', 6],
+      ['对抗', 6],
       ['气势', 6],
-      ['冲突', 6],
-      ['战阵', 5],
-      ['义胆', 5],
-      ['雄浑', 5],
-      ['开打', 5],
-      ['高亢', 4],
-      ['肃杀', 4],
-      ['对峙', 4],
-      ['震慑', 4],
-      ['秩序', 4],
-      ['阵前', 3],
-      ['金鼓', 3],
-      ['激昂', 3],
-      ['厚重', 3],
+      ['阵营', 5],
+      ['惩恶', 5],
+      ['强关系', 4],
+      ['戏剧张力', 4],
     ],
   },
   {
-    key: 'chou',
-    major: '丑',
-    src: chouImage,
-    imageScale: 1.0,
-    bgColor: '#96B86D',
-    box: { x: RIGHT_X, y: CELL_H + V_GAP, w: CELL_W, h: CELL_H },
+    key: 'choumowai',
+    major: '丑末外类',
+    src: choumowaiImage,
+    imageScale: 1,
+    bgColor: '#7C9A6D',
+    box: { x: (CELL_W + COL_GAP) * 2, y: CELL_H + ROW_GAP, w: CELL_W, h: CELL_H },
     baseWords: [
-      ['机敏', 10],
-      ['诙谐', 9],
-      ['市井', 8],
-      ['差役', 8],
-      ['滑稽', 8],
-      ['念白', 7],
-      ['插科', 7],
-      ['打诨', 7],
-      ['幽默', 6],
-      ['灵动', 6],
-      ['小花脸', 6],
-      ['圆场', 5],
-      ['节奏', 5],
-      ['俏皮', 5],
-      ['身段', 5],
-      ['节外生枝', 4],
-      ['市井烟火', 4],
-      ['调笑', 4],
-      ['机锋', 4],
-      ['点破', 4],
-      ['变通', 3],
-      ['轻快', 3],
-      ['逗趣', 3],
-      ['俐落', 3],
+      ['丑', 10],
+      ['末', 9],
+      ['外', 9],
+      ['诙谐', 8],
+      ['辅助角色', 8],
+      ['过场', 7],
+      ['插科打诨', 7],
+      ['民间气', 7],
+      ['旁观者', 6],
+      ['信息传递', 6],
+      ['关系补充', 6],
+      ['节奏调节', 5],
+      ['社会侧面', 5],
+      ['人物衬托', 5],
+      ['情节连接', 4],
+      ['叙事缓冲', 4],
     ],
   },
 ]
@@ -168,6 +206,7 @@ const maskCache = new Map()
 const wordLayoutCache = new Map()
 let destroyed = false
 let renderToken = 0
+let tradeProfileSeed = 0
 
 onMounted(async () => {
   await loadLinkageData().catch(() => null)
@@ -183,8 +222,12 @@ watch(
     linkageState.selectedTrade,
     linkageState.selectedSceneId,
     linkageState.selectedThemeIds.join('|'),
+    linkageState.source,
   ],
   () => {
+    if (linkageState.source === 'leftTopTrade') {
+      tradeProfileSeed += 1
+    }
     void render()
   },
 )
@@ -281,7 +324,7 @@ async function render() {
       .attr('font-family', fontFamily)
       .attr('font-size', (word) => word.size)
       .attr('font-weight', 700)
-      .attr('fill', layout.role.active ? '#101010' : '#2b241d')
+      .attr('fill', layout.role.active && layout.role.key === 'jingjue' ? '#fff8e8' : '#2b241d')
       .attr('opacity', (word) => word.opacity)
       .text((word) => word.text)
 
@@ -291,60 +334,60 @@ async function render() {
 function buildRoleDefinitions() {
   const selectedCharacter = findCharacterById(linkageState.selectedCharacterId)
   const selectedPlay = selectedCharacter?.play || findPlayById(linkageState.selectedPlayId)
+  const usesTradeProfile = linkageState.source === 'leftTopTrade'
+  const characterForWords = usesTradeProfile ? null : selectedCharacter
   const activeMajor = getMajorTrade(
-    selectedCharacter?.major_trade ||
-      selectedCharacter?.standard_trade ||
-      selectedCharacter?.trade ||
-      linkageState.selectedTrade,
+    characterForWords?.standard_trade ||
+      linkageState.selectedTrade ||
+      characterForWords?.trade ||
+      characterForWords?.major_trade,
   )
 
   return ROLE_ORDER.map((role) => {
-    const activeCharacter =
-      selectedCharacter && activeMajor === role.major ? selectedCharacter : null
-    const representative = activeCharacter || pickRepresentativeCharacter(selectedPlay, role.major)
-    const words = representative
-      ? buildCharacterWords(representative, selectedPlay || representative.play, role.baseWords)
-      : role.baseWords
+    const activeCharacter = characterForWords && activeMajor === role.key ? characterForWords : null
+    const words = activeCharacter
+      ? buildCharacterWords(activeCharacter, selectedPlay || activeCharacter.play, role.baseWords)
+      : buildProfileWords(role.baseWords, role.key, usesTradeProfile && activeMajor === role.key)
 
     return {
       ...role,
-      active: activeMajor === role.major,
-      dimmed: Boolean(activeMajor && activeMajor !== role.major),
+      active: activeMajor === role.key,
+      dimmed: Boolean(activeMajor && activeMajor !== role.key),
       words,
     }
   })
 }
 
-function pickRepresentativeCharacter(play, major) {
-  const characters = play?.characters || []
-  return characters
-    .filter((character) =>
-      getMajorTrade(character.major_trade || character.standard_trade || character.trade) === major
-    )
-    .sort((a, b) => characterScore(b) - characterScore(a))[0]
-}
+function buildProfileWords(baseWords, roleKey, shouldVary) {
+  if (!shouldVary) return baseWords
 
-function characterScore(character) {
-  return (
-    Number(character.importance || 0) * 100 +
-    Number(character.network_rank ? 10 / character.network_rank : 0) +
-    Number(character.scene_count || 0) * 3 +
-    Number(character.speech_count || 0) * 0.08
-  )
+  return baseWords
+    .map(([text, weight], index) => {
+      const jitter = deterministicRandom(`${tradeProfileSeed}-${roleKey}-${text}-${index}`) * 1.4
+      return [text, Math.max(3, Number(weight) + jitter)]
+    })
+    .sort(
+      (a, b) =>
+        b[1] - a[1] ||
+        deterministicRandom(`${tradeProfileSeed}-${roleKey}-${a[0]}`) -
+          deterministicRandom(`${tradeProfileSeed}-${roleKey}-${b[0]}`),
+    )
 }
 
 function buildCharacterWords(character, play, baseWords) {
+  const generatedProfile = characterWordProfiles[character.character_id]?.words || []
   const pairs = [
-    [character.name, 13],
+    ...generatedProfile,
+    [character.name, 15],
     [character.role_level_label, levelWeight(character.role_level)],
     ...buildMetricWords(character),
     ...buildThemeWords(character, play),
     ...buildRelationWords(character, play),
     ...buildSceneWords(character, play),
-    ...baseWords.slice(0, 10).map(([text, weight]) => [text, Math.max(3, weight - 3)]),
+    ...baseWords.slice(0, 6).map(([text, weight]) => [text, Math.max(3, weight - 4)]),
   ]
 
-  return mergeWordPairs(pairs).slice(0, 24)
+  return mergeWordPairs(pairs).slice(0, 28)
 }
 
 function levelWeight(level) {
@@ -455,10 +498,17 @@ function uniqueText(values) {
 function getMajorTrade(trade) {
   const text = String(trade || '').trim()
   if (!text) return ''
-  if (text.includes('旦') || text.includes('青衣')) return '旦'
-  if (text.includes('净')) return '净'
-  if (text.includes('丑') || text.includes('付')) return '丑'
-  if (text.includes('生') || ['末', '外', '武将'].includes(text)) return '生'
+  const cleanTrade = text.replace(/[（(].*?[）)]/g, '')
+
+  for (const [key, trades] of Object.entries(roleTypeMap)) {
+    if (trades.includes(cleanTrade)) return key
+  }
+
+  for (const [key, trades] of Object.entries(roleTypeMap)) {
+    if (trades.some((candidate) => candidate !== '旦' && cleanTrade.includes(candidate))) return key
+  }
+
+  if (cleanTrade.includes('付') || cleanTrade.includes('副')) return 'choumowai'
   return ''
 }
 
@@ -485,7 +535,7 @@ async function prepareRoleMask(role) {
   if (maskCache.has(maskKey)) return maskCache.get(maskKey)
 
   const image = await loadImage(role.src)
-  const imageBox = fitImage(image, role.box, 0, role.imageScale || 1)
+  const imageBox = fitImage(image, role.box, 1, role.imageScale || 1)
   const { mask, maskUrl } = createAlphaMask(image, role.box, imageBox)
   const centers = buildCenters(mask, role.box.w, role.box.h, CENTER_STEP)
   const value = { imageBox, mask, maskUrl, centers }
@@ -535,16 +585,53 @@ function loadImage(src) {
 }
 
 function fitImage(image, box, padding = 0, multiplier = 1) {
-  const scale = Math.min((box.w - padding * 2) / image.width, (box.h - padding * 2) / image.height) * multiplier
+  const bounds = getImageAlphaBounds(image)
+  const scale =
+    Math.min(
+      (box.w - padding * 2) / bounds.width,
+      (box.h - padding * 2) / bounds.height,
+    ) * multiplier
   const w = image.width * scale
   const h = image.height * scale
 
   return {
-    x: box.x + (box.w - w) / 2,
-    y: box.y + (box.h - h) / 2,
+    x: box.x + (box.w - bounds.width * scale) / 2 - bounds.x * scale,
+    y: box.y + (box.h - bounds.height * scale) / 2 - bounds.y * scale,
     w,
     h,
   }
+}
+
+function getImageAlphaBounds(image) {
+  if (image.__alphaBounds) return image.__alphaBounds
+
+  const canvas = document.createElement('canvas')
+  canvas.width = image.width
+  canvas.height = image.height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx.drawImage(image, 0, 0)
+  const data = ctx.getImageData(0, 0, image.width, image.height).data
+  let minX = image.width
+  let minY = image.height
+  let maxX = -1
+  let maxY = -1
+
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      if (data[(y * image.width + x) * 4 + 3] <= 28) continue
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x)
+      maxY = Math.max(maxY, y)
+    }
+  }
+
+  image.__alphaBounds =
+    maxX >= minX && maxY >= minY
+      ? { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 }
+      : { x: 0, y: 0, width: image.width, height: image.height }
+
+  return image.__alphaBounds
 }
 
 function createAlphaMask(image, box, imageBox) {
@@ -682,8 +769,8 @@ function layoutWords(sourceWords, mask, width, height, cachedCenters = null) {
 
       for (const rotate of rotations) {
         const textBox = getRotatedBounds(
-          measured.width + 3,
-          size * 1.06 + 3,
+          measured.width + 0.8,
+          size * 1.02 + 0.8,
           rotate
         )
 
@@ -935,17 +1022,15 @@ function isInside(mask, width, height, x, y) {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  place-items: center;
+  place-items: stretch;
   border-radius: 2px;
   background: #FBF6E9;
 }
 
 .poster-svg {
   display: block;
-  width: min(100%, 540px);
+  width: 100%;
   height: 100%;
-  max-height: 100%;
-  aspect-ratio: 16 / 9;
 }
 
 .poster-svg :deep(.role-figure) {
@@ -958,17 +1043,17 @@ function isInside(mask, width, height, x, y) {
 }
 
 .poster-svg :deep(.role-cloud.is-active) {
-  filter: drop-shadow(0 0 9px rgba(98, 38, 24, 0.22));
+  filter: drop-shadow(0 0 7px rgba(98, 38, 24, 0.18));
 }
 
 .poster-svg :deep(.role-cloud.is-dimmed) {
-  opacity: 0.18;
+  opacity: 0.46;
 }
 
 .poster-svg :deep(.word-layer text) {
   paint-order: stroke;
-  stroke: rgba(255, 250, 238, 0.24);
+  stroke: rgba(255, 250, 238, 0.34);
   stroke-linejoin: round;
-  stroke-width: 0.8px;
+  stroke-width: 0.65px;
 }
 </style>

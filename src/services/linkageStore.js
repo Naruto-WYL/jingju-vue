@@ -1,7 +1,7 @@
 import { computed, reactive } from 'vue'
 
 const LINKAGE_URL = '/data/linkage_plays.json'
-export const STANDARD_TRADES = ['老生', '丑', '武生', '小生', '净', '旦', '外', '正旦', '末', '武将', '老旦', '花旦', '青衣']
+export const STANDARD_TRADES = ['老生', '丑', '武生', '小生', '净', '旦', '外', '正旦', '末', '武净', '老旦', '花旦', '青衣']
 
 export const linkageState = reactive({
   ready: false,
@@ -259,6 +259,7 @@ export function standardizeTrade(trade) {
   const value = String(trade || '').trim().replace(/[（(].*?[）)]/g, '')
   if (!value) return ''
   if (STANDARD_TRADES.includes(value)) return value
+  if (value === '武将') return '武净'
   if (value === '生') return '老生'
   if (value === '娃娃生') return '小生'
   if (value === '武旦') return '旦'
