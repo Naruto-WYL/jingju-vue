@@ -3,7 +3,7 @@
     <ChartToggle v-model="view" />
 
     <div class="right-bottom-content">
-      <div class="right-bottom-heading">核心主题、剧本组合与共现强度</div>
+      <div class="right-bottom-heading">剧本核心主题与组合模式分析</div>
       <ThemeRingChartOne v-if="view === 'a'" />
       <ThemeRingChartTwo v-else />
     </div>

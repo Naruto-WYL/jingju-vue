@@ -1,7 +1,7 @@
 <template>
   <PanelCard class="left-bottom-card">
     <div class="left-bottom-content">
-      <div class="pattern-mode-heading">词云</div>
+      <div class="pattern-mode-heading">行当云笺</div>
       <ChartOne v-if="view === 'a'" />
       <ChartTwo v-else />
     </div>

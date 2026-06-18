@@ -17,7 +17,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as d3 from 'd3'
-import { clearLoopFilter, loopFilterState } from '../../services/loopFilterStore'
+import { loopFilterState } from '../../services/loopFilterStore'
 
 const DATA_URL = '/数据表合集/2/京剧剧本_网络指标总表_已补核心字段_过滤密度中心度1.csv'
 const width = 760
@@ -48,6 +48,7 @@ const tooltipRef = ref(null)
 const rows = ref([])
 const loading = ref(false)
 const errorMessage = ref('')
+const localFilterDismissed = ref(false)
 let resizeObserver = null
 let drawFrame = 0
 let lastPanelWidth = 0
@@ -88,6 +89,7 @@ const categories = computed(() =>
 )
 
 const activeFilterLabel = computed(() => {
+  if (localFilterDismissed.value) return ''
   const scope = loopFilterState.scope
   const flow = loopFilterState.flow
   if (!scope) return ''
@@ -96,6 +98,13 @@ const activeFilterLabel = computed(() => {
   if (scope.type === 'flow' && flow) return `${flow.relationType} / ${flow.themeCombo}`
   return ''
 })
+
+watch(
+  () => [loopFilterState.scope, loopFilterState.flow],
+  () => {
+    localFilterDismissed.value = false
+  },
+)
 
 onMounted(async () => {
   resizeObserver = new ResizeObserver((entries) => {
@@ -160,6 +169,7 @@ function toNumber(value, fallback = 0) {
 }
 
 function pointMatchesFilter(point) {
+  if (localFilterDismissed.value) return true
   const scope = loopFilterState.scope
   const flow = loopFilterState.flow
   if (!scope) return true
@@ -380,7 +390,7 @@ function updateScatterFilter(animate = true) {
 }
 
 function returnToFullScatter() {
-  clearLoopFilter()
+  localFilterDismissed.value = true
   if (tooltipRef.value) hideTooltip(tooltipRef.value)
   updateScatterFilter()
 }
@@ -588,23 +598,24 @@ function hideTooltip(tooltipElement) {
   top: 12px;
   right: 14px;
   z-index: 4;
-  min-width: 82px;
-  height: 28px;
+  min-width: 0;
+  height: 26px;
   padding: 0 12px;
-  border: 1px solid rgba(143, 47, 36, 0.36);
-  border-radius: 999px;
-  color: #fff8ed;
-  background: linear-gradient(135deg, #8f2f24, #3d1d17);
-  box-shadow: 0 10px 22px rgba(82, 31, 18, 0.22);
+  border: 1px solid rgba(143, 47, 36, 0.46);
+  border-radius: 6px;
+  color: #7a241d;
+  background: rgba(255, 249, 237, 0.92);
+  box-shadow: 0 4px 10px rgba(80, 35, 12, 0.12);
   cursor: pointer;
-  font-family: 'STKaiti', 'KaiTi', 'Microsoft YaHei', sans-serif;
-  font-size: 13px;
-  font-weight: 900;
-  line-height: 26px;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 24px;
 }
 
 .scatter-return-btn:hover {
-  filter: brightness(1.08) saturate(1.18);
+  border-color: rgba(143, 47, 36, 0.72);
+  background: #fff4dc;
 }
 
 .scatter-tooltip {

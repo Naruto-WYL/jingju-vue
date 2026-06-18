@@ -286,11 +286,11 @@ function drawAxes(w, graphW, graphH, baseY) {
   ctx.textAlign = 'right'
   ctx.textBaseline = 'bottom'
   ctx.fillStyle = '#7a2e27'
-  ctx.font = 'bold 10px sans-serif'
+  ctx.font = 'bold 10px KaiTi, STKaiti, serif'
   ctx.fillText('[ 张力强度 ]', layout.paddingLeft + 24, layout.paddingTop - 13)
 
   ctx.textBaseline = 'middle'
-  ctx.font = '9px sans-serif'
+  ctx.font = '9px KaiTi, STKaiti, serif'
   ;[25, 50, 75, 100].forEach((value) => {
     const y = baseY - (value * graphH) / 100
     ctx.strokeStyle = 'rgba(95, 130, 200, 0.08)'
@@ -312,7 +312,7 @@ function drawAxes(w, graphW, graphH, baseY) {
     ctx.lineTo(x, baseY + 4)
     ctx.stroke()
     ctx.fillStyle = '#806a58'
-    ctx.font = '10px sans-serif'
+    ctx.font = '10px KaiTi, STKaiti, serif'
     ctx.fillText(label, x, baseY + 6)
   })
 
@@ -363,7 +363,7 @@ function drawPeakAnchor(script, points, color, w, h, showLabel = true) {
   const textY = placeAbove ? point.y - 20 : point.y + 20
 
   ctx.save()
-  ctx.font = 'bold 12px sans-serif'
+  ctx.font = 'bold 12px KaiTi, STKaiti, serif'
   ctx.textAlign = align
   ctx.textBaseline = placeAbove ? 'bottom' : 'top'
 
@@ -482,7 +482,7 @@ function isLinkageTriggerSource() {
   min-height: 0;
   color: #4a3b32;
   background: #FBF6E9;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+  font-family: "STKaiti", "KaiTi", serif;
 }
 
 .compare-card {
@@ -510,7 +510,7 @@ function isLinkageTriggerSource() {
   margin-bottom: 3px;
   padding: 0;
   overflow: hidden;
-  font: 12px/1.2 "Microsoft YaHei", sans-serif;
+  font: 12px/1.2 "STKaiti", "KaiTi", serif;
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -668,7 +668,7 @@ function isLinkageTriggerSource() {
   padding: 0 0 6px;
   margin-bottom: 7px;
   color: #5c4636;
-  font: 11px/1.5 "Microsoft YaHei", sans-serif;
+  font: 11px/1.5 "STKaiti", "KaiTi", serif;
   background: transparent;
   border: 0;
   border-bottom: 1px solid rgba(143, 47, 36, 0.08);

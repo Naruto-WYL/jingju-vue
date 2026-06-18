@@ -6,7 +6,7 @@
     <ChartToggle v-model="view" label-a="气韵推演" label-b="模式对比" />
 
     <div class="main-bottom-content">
-      <div class="river-rhythm-heading">多维度叙事结构演进图</div>
+      <div class="river-rhythm-heading">剧情阶段识别与叙事节奏模式分析</div>
       <ChartOne v-if="view === 'a'" />
       <ChartTwo v-else />
     </div>
@@ -33,6 +33,11 @@ const view = ref('a')
 <style scoped>
 .main-bottom-card.panel-card {
   padding: 10px 15px 11px;
+  font-family: "STKaiti", "KaiTi", serif;
+}
+
+.main-bottom-card :deep(*) {
+  font-family: "STKaiti", "KaiTi", serif;
 }
 
 .main-bottom-card :deep(.panel-card__header) {
@@ -81,7 +86,7 @@ const view = ref('a')
 .main-bottom-card :deep(.chart-toggle span) {
   height: 22px;
   color: #7a241d;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+  font-family: "STKaiti", "KaiTi", serif;
   font-size: 13px;
   font-weight: 800;
 }
@@ -109,7 +114,7 @@ const view = ref('a')
   z-index: 3;
   overflow: hidden;
   color: #7a241d;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+  font-family: "STKaiti", "KaiTi", serif;
   font-size: 18px;
   font-weight: 800;
   line-height: 1.1;

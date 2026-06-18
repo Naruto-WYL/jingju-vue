@@ -6,7 +6,7 @@
     <ChartToggle v-model="view" />
 
     <div class="right-top-content">
-      <div class="right-top-heading">角色关系网络与结构特征分析</div>
+      <div class="right-top-heading">角色互动关系与网络结构分析</div>
       <div v-show="view === 'a'" id="right-top-script-select-anchor" class="right-top-script-select-anchor" />
       <ChartOne v-if="view === 'a'" :arc-relations="arcRelations" select-target="#right-top-script-select-anchor" />
       <ChartTwo v-else :plays="plays" />

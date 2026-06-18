@@ -15,7 +15,7 @@
 <script setup>
 import * as d3 from 'd3'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { clearLoopFilter, loopFilterState } from '../../services/loopFilterStore'
+import { loopFilterState } from '../../services/loopFilterStore'
 
 const PLAY_URL = '/data/theme_matrix_play_full.csv'
 const AGGREGATE_URL = '/data/theme_matrix_combo_full.csv'
@@ -98,9 +98,11 @@ const highlightRows = ref([])
 const coreBarRows = ref([])
 const loading = ref(false)
 const error = ref('')
+const localFilterDismissed = ref(false)
 let resizeObserver = null
 
 const activeFilterLabel = computed(() => {
+  if (localFilterDismissed.value) return ''
   const scope = loopFilterState.scope
   const flow = loopFilterState.flow
   if (!scope) return ''
@@ -109,6 +111,13 @@ const activeFilterLabel = computed(() => {
   if (scope.type === 'flow' && flow) return `${flow.relationType} / ${flow.themeCombo}`
   return ''
 })
+
+watch(
+  () => [loopFilterState.scope, loopFilterState.flow],
+  () => {
+    localFilterDismissed.value = false
+  },
+)
 
 const highlightThemesByCombo = computed(() => {
   const map = new Map()
@@ -569,6 +578,7 @@ function relationThemeFocus(relation, matchedPlays) {
 }
 
 function normalizeScope() {
+  if (localFilterDismissed.value) return { type: 'none' }
   const scope = loopFilterState.scope
   const flow = loopFilterState.flow
   if (!scope) return { type: 'none' }
@@ -741,7 +751,7 @@ function hideTooltip() {
 }
 
 function returnToFullThemeCombos() {
-  clearLoopFilter()
+  localFilterDismissed.value = true
   hideTooltip()
 }
 
@@ -877,23 +887,24 @@ function escapeHtml(value) {
   right: 12px;
   top: 4px;
   z-index: 4;
-  min-width: 82px;
-  height: 27px;
+  min-width: 0;
+  height: 26px;
   padding: 0 12px;
-  border: 1px solid rgba(143, 47, 36, 0.36);
-  border-radius: 999px;
-  color: #fff8ed;
-  background: linear-gradient(135deg, #8f2f24, #3d1d17);
-  box-shadow: 0 10px 22px rgba(82, 31, 18, 0.2);
+  border: 1px solid rgba(143, 47, 36, 0.46);
+  border-radius: 6px;
+  color: #7a241d;
+  background: rgba(255, 249, 237, 0.92);
+  box-shadow: 0 4px 10px rgba(80, 35, 12, 0.12);
   cursor: pointer;
-  font-family: "STKaiti", "KaiTi", "Microsoft YaHei", sans-serif;
-  font-size: 13px;
-  font-weight: 900;
-  line-height: 25px;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 24px;
 }
 
 .upset-return-btn:hover {
-  filter: brightness(1.08) saturate(1.18);
+  border-color: rgba(143, 47, 36, 0.72);
+  background: #fff4dc;
 }
 
 .upset-tooltip {

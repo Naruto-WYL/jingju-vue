@@ -6,7 +6,7 @@
             <span><b></b>内圈：角色关系</span>
             <span><b></b>主环：主题组合</span>
             <span><b></b>剧情起伏环带：叙事结构</span>
-            <span><b></b>外柱：关系演化结局/规模</span>
+            <span><b></b>外柱：关系演化结局</span>
           </div>
       
           <button v-if="viewMode === 'detail'" class="view-toggle" type="button" @click="toggleViewMode">

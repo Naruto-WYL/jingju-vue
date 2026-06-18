@@ -430,11 +430,11 @@ function drawAxes(w, graphW, graphH, baseY) {
   ctx.textAlign = 'right'
   ctx.textBaseline = 'bottom'
   ctx.fillStyle = '#7a2e27'
-  ctx.font = 'bold 10px sans-serif'
+  ctx.font = 'bold 10px KaiTi, STKaiti, serif'
   ctx.fillText('[ 张力强度 ]', layout.paddingLeft + 24, layout.paddingTop - 13)
 
   ctx.textBaseline = 'middle'
-  ctx.font = '9px sans-serif'
+  ctx.font = '9px KaiTi, STKaiti, serif'
   ;[25, 50, 75, 100].forEach((value) => {
     const y = baseY - (value * graphH) / 100
     ctx.strokeStyle = 'rgba(95, 130, 200, 0.08)'
@@ -461,7 +461,7 @@ function drawAxes(w, graphW, graphH, baseY) {
       ctx.lineTo(x, baseY + 4)
       ctx.stroke()
       ctx.fillStyle = isActive ? '#8f2f24' : '#806a58'
-      ctx.font = isActive ? 'bold 10px sans-serif' : '9px sans-serif'
+      ctx.font = isActive ? 'bold 10px KaiTi, STKaiti, serif' : '9px KaiTi, STKaiti, serif'
       ctx.fillText(shortLabel(label), x, baseY + 6)
     }
   })
@@ -490,7 +490,7 @@ function drawSceneAnchors(graphW, graphH, baseY, visibleRatio) {
     ctx.arc(x, y, isLocked ? 5.8 : 4.2, 0, Math.PI * 2)
     ctx.fill()
     ctx.fillStyle = isLocked ? '#8f2f24' : '#4A4A4A'
-    ctx.font = isLocked ? 'bold 11px sans-serif' : 'bold 10px sans-serif'
+    ctx.font = isLocked ? 'bold 11px KaiTi, STKaiti, serif' : 'bold 10px KaiTi, STKaiti, serif'
     ctx.textAlign = 'center'
     ctx.fillText(`【${shortLabel(scene.theme, 5)}】`, x, y - 12)
   })
@@ -618,7 +618,7 @@ function drawRadar() {
   }
 
   radarCtx.fillStyle = '#998370'
-  radarCtx.font = '13px sans-serif'
+  radarCtx.font = '13px KaiTi, STKaiti, serif'
   radarCtx.textAlign = 'center'
   radarCtx.textBaseline = 'middle'
   roleLabels.forEach((label, index) => {
@@ -705,7 +705,7 @@ function makeEmptyState() {
   min-height: 0;
   color: #4a3b32;
   background: #FBF6E9;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+  font-family: "STKaiti", "KaiTi", serif;
 }
 
 .qiyun-card {
@@ -767,7 +767,7 @@ function makeEmptyState() {
   width: 100%;
   min-width: 0;
   color: #7a2e27;
-  font: 800 12px/1.2 "Microsoft YaHei", sans-serif;
+  font: 800 12px/1.2 "STKaiti", "KaiTi", serif;
   background: transparent;
   border: 0;
   outline: 0;
@@ -823,7 +823,7 @@ function makeEmptyState() {
   margin-bottom: 0;
   padding: 0;
   overflow: hidden;
-  font: 11px/1.2 "Microsoft YaHei", sans-serif;
+  font: 11px/1.2 "STKaiti", "KaiTi", serif;
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -947,7 +947,7 @@ function makeEmptyState() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 4px 7px;
-  font: 10px/1.2 "Microsoft YaHei", sans-serif;
+  font: 10px/1.2 "STKaiti", "KaiTi", serif;
 }
 
 .tooltip-row {
@@ -1000,7 +1000,7 @@ function makeEmptyState() {
   height: 22px;
   padding: 0 8px;
   color: #8f2f24;
-  font: 900 12px/1 "Microsoft YaHei", sans-serif;
+  font: 900 12px/1 "STKaiti", "KaiTi", serif;
   white-space: nowrap;
   background: transparent;
   border: 1px solid rgba(143, 47, 36, 0.32);
@@ -1058,7 +1058,7 @@ function makeEmptyState() {
   height: 16px;
   place-items: center;
   color: #806a58;
-  font: 800 11px/1 "Microsoft YaHei", sans-serif;
+  font: 800 11px/1 "STKaiti", "KaiTi", serif;
   background: transparent;
   border: 1px solid rgba(143, 47, 36, 0.22);
   border-radius: 50%;
@@ -1070,7 +1070,7 @@ function makeEmptyState() {
   height: 18px;
   padding: 0 6px;
   color: #806a58;
-  font: 800 10px/1 "Microsoft YaHei", sans-serif;
+  font: 800 10px/1 "STKaiti", "KaiTi", serif;
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -1088,7 +1088,7 @@ function makeEmptyState() {
   width: min(280px, 90vw);
   padding: 9px;
   color: #5c4636;
-  font: 11px/1.45 "Microsoft YaHei", sans-serif;
+  font: 11px/1.45 "STKaiti", "KaiTi", serif;
   pointer-events: none;
   opacity: 0;
   background: rgba(251, 246, 233, 0.97);
@@ -1122,7 +1122,7 @@ function makeEmptyState() {
   flex: 0 0 auto;
   margin-bottom: 0;
   color: #8f2f24;
-  font: 900 12px/1.2 "Microsoft YaHei", sans-serif;
+  font: 900 12px/1.2 "STKaiti", "KaiTi", serif;
 }
 
 .scene-loc-box b {
@@ -1131,7 +1131,7 @@ function makeEmptyState() {
   min-width: 0;
   overflow: hidden;
   color: #4a3b32;
-  font: 800 12px/1.45 "Microsoft YaHei", sans-serif;
+  font: 800 12px/1.45 "STKaiti", "KaiTi", serif;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1162,7 +1162,7 @@ function makeEmptyState() {
   margin: 0;
   overflow-y: auto;
   color: #5c4636;
-  font: 12px/1.7 "Microsoft YaHei", sans-serif;
+  font: 12px/1.7 "STKaiti", "KaiTi", serif;
   text-align: justify;
 }
 
@@ -1199,7 +1199,7 @@ function makeEmptyState() {
   margin-bottom: 0;
   overflow: hidden;
   color: #806a58;
-  font: 800 11px/1.25 "Microsoft YaHei", sans-serif;
+  font: 800 11px/1.25 "STKaiti", "KaiTi", serif;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1213,7 +1213,7 @@ function makeEmptyState() {
   max-width: 96px;
   overflow: hidden;
   color: #4a3b32;
-  font: 900 12px/1.25 "Microsoft YaHei", sans-serif;
+  font: 900 12px/1.25 "STKaiti", "KaiTi", serif;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1237,7 +1237,7 @@ function makeEmptyState() {
 .metric-row {
   padding: 2px 0;
   color: #5c4636;
-  font: 11px/1.2 "Microsoft YaHei", sans-serif;
+  font: 11px/1.2 "STKaiti", "KaiTi", serif;
   border-bottom: 1px solid rgba(143, 47, 36, 0.08);
 }
 
@@ -1308,7 +1308,7 @@ function makeEmptyState() {
   padding: 3px 0 0;
   margin-top: 5px;
   color: #8f2f24;
-  font: 800 11px/1.2 "Microsoft YaHei", sans-serif;
+  font: 800 11px/1.2 "STKaiti", "KaiTi", serif;
   text-align: center;
   background: transparent;
   border: 0;

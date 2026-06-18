@@ -127,50 +127,44 @@ const DEEP_GOLD = '#7a4b19'
 
 const EDGE_THEMES = {
   kinship: {
-    label: '亲缘婚恋',
+    label: '亲属关系',
     color: '#a65f8f',
     glow: '#ead0e3',
     dash: '',
   },
-  command: {
-    label: '命令权力',
+  romance: {
+    label: '婚恋关系',
+    color: '#cf6f88',
+    glow: '#f2c7d4',
+    dash: '5 4',
+  },
+  power: {
+    label: '权力关系',
     color: '#b33a2b',
     glow: '#f1c88a',
     dash: '',
   },
   alliance: {
-    label: '同盟协作',
+    label: '同盟关系',
     color: '#2f6f8f',
     glow: '#b9d7e6',
     dash: '',
   },
-  support: {
-    label: '扶助照应',
-    color: '#668a3d',
-    glow: '#d5e3b5',
-    dash: '12 8',
-  },
   conflict: {
-    label: '对立冲突',
+    label: '冲突关系',
     color: '#7a2323',
     glow: '#dfa18e',
     dash: '16 7',
   },
-  info: {
-    label: '信息谋略',
+  grievance: {
+    label: '审判与恩怨',
     color: '#b87924',
     glow: '#efd08a',
     dash: '7 7',
   },
-  other: {
-    label: '其他复合',
-    color: '#9a5a2f',
-    glow: '#dfb866',
-    dash: '4 6',
-  },
 }
 
-const RELATION_TYPES = ['kinship', 'command', 'alliance', 'support', 'conflict', 'info', 'other']
+const RELATION_TYPES = ['kinship', 'romance', 'power', 'alliance', 'conflict', 'grievance']
 
 const chartRef = ref(null)
 const svgRef = ref(null)
@@ -374,8 +368,9 @@ function inferNodeLevel(play, characterId) {
 
 function mapRelationType(type) {
   const value = text(type)
-  if (value === 'power') return 'command'
-  if (value === 'romance') return 'kinship'
+  if (value === 'command' || value === 'power') return 'power'
+  if (value === 'support') return 'alliance'
+  if (value === 'info') return 'grievance'
   return value || 'alliance'
 }
 
@@ -699,7 +694,7 @@ function createFallbackCoreLink(nodes, focusNode, existingLinks) {
     sourceTrade: focusNode.trade || '',
     targetTrade: targetCore.trade || '',
     relation: '\u6838\u5fc3\u5173\u8054',
-    relationType: 'support',
+    relationType: 'alliance',
     description: '\u4eba\u7269\u7f3a\u5c11\u76f4\u63a5\u6838\u5fc3\u8fb9\u65f6\u7684\u8054\u52a8\u8865\u5145',
     weight: 1,
     sceneIds: [],
@@ -895,57 +890,55 @@ function getRelationType(edge) {
   const type = String(edge.relationType || edge.relation || '').trim().toLowerCase()
   const content = `${edge.relation || ''}${edge.description || ''}`
 
-  if (['kinship', 'love', 'family'].includes(type)) return 'kinship'
-  if (type === 'command') return 'command'
+  if (['kinship', 'family'].includes(type)) return 'kinship'
+  if (['romance', 'love'].includes(type)) return 'romance'
+  if (['command', 'power'].includes(type)) return 'power'
   if (type === 'alliance') return 'alliance'
-  if (type === 'support') return 'support'
+  if (type === 'support') return 'alliance'
   if (type === 'conflict') return 'conflict'
-  if (type === 'info') return 'info'
-  if (type === 'other' || type === 'normal') return 'other'
+  if (['info', 'grievance', 'other', 'normal'].includes(type)) return 'grievance'
 
-  if (/父子|母子|父女|母女|兄弟|姐妹|夫妻|恋人|婚约|姻亲|亲属|家人|血缘|祖孙|叔侄|婚恋|情感/.test(content)) {
+  if (/夫妻|恋人|婚约|婚姻|姻缘|婚恋|情缘|爱慕/.test(content)) {
+    return 'romance'
+  }
+
+  if (/父子|母子|父女|母女|兄弟|姐妹|姻亲|亲属|家人|血缘|祖孙|叔侄|亲缘/.test(content)) {
     return 'kinship'
   }
 
-  if (/君臣|主仆|上下|上级|下级|统领|命令|指挥|差遣|率领|调度|主导|掌控|将帅|官民/.test(content)) {
-    return 'command'
+  if (/权力牵制|差遣统属|君臣|主仆|上下|上级|下级|统领|命令|指挥|差遣|率领|调度|主导|掌控|将帅|官民|权力/.test(content)) {
+    return 'power'
   }
 
-  if (/同盟|合作|协作|盟友|朋友|同僚|结盟|共同|相助|共同作战|共同谋事/.test(content)) {
+  if (/同场协作|扶助照应|同盟|合作|协作|盟友|朋友|同僚|结盟|共同|相助|共同作战|共同谋事|师徒|帮助|助力|支援|辅佐|照应|保护|救助|托付|引导|指点|扶助/.test(content)) {
     return 'alliance'
   }
 
-  if (/师徒|帮助|助力|支援|辅佐|协助|照应|保护|救助|托付|报恩|引导|指点|扶助/.test(content)) {
-    return 'support'
-  }
-
-  if (/对立|冲突|矛盾|敌对|争斗|抗衡|陷害|欺骗|仇恨|追杀|攻打|反叛|审判|误会/.test(content)) {
+  if (/冲突对峙|对立|冲突|矛盾|敌对|争斗|抗衡|追杀|攻打|反叛|交战/.test(content)) {
     return 'conflict'
   }
 
-  if (/传递|传信|通报|消息|情报|计策|献计|谋划|密谋|告密|试探|劝说|信息|间接/.test(content)) {
-    return 'info'
+  if (/传信谋划|审判|恩怨|报恩|复仇|冤|仇|陷害|欺骗|误会|传递|传信|通报|消息|情报|计策|献计|谋划|密谋|告密|试探|劝说|信息|间接/.test(content)) {
+    return 'grievance'
   }
 
-  return 'other'
+  return 'grievance'
 }
 
 function getEdgeTheme(edge) {
   const relationType = getRelationType(edge)
-  return EDGE_THEMES[relationType] || EDGE_THEMES.other
+  return EDGE_THEMES[relationType] || EDGE_THEMES.grievance
 }
 
 function getEdgeMarkerId(edge) {
   const relationType = getRelationType(edge)
 
   if (relationType === 'kinship') return 'relationArrowKinship'
-  if (relationType === 'command') return 'relationArrowCommand'
+  if (relationType === 'romance') return 'relationArrowRomance'
+  if (relationType === 'power') return 'relationArrowPower'
   if (relationType === 'alliance') return 'relationArrowAlliance'
-  if (relationType === 'support') return 'relationArrowSupport'
   if (relationType === 'conflict') return 'relationArrowConflict'
-  if (relationType === 'info') return 'relationArrowInfo'
-
-  return 'relationArrowOther'
+  return 'relationArrowGrievance'
 }
 function drawDefs(defs) {
   defs
@@ -962,13 +955,12 @@ function drawDefs(defs) {
     .attr('flood-color', '#3f180f')
     .attr('flood-opacity', 0.24)
 
- createArrowMarker(defs, 'relationArrowKinship', EDGE_THEMES.kinship.color)
-createArrowMarker(defs, 'relationArrowCommand', EDGE_THEMES.command.color)
+createArrowMarker(defs, 'relationArrowKinship', EDGE_THEMES.kinship.color)
+createArrowMarker(defs, 'relationArrowRomance', EDGE_THEMES.romance.color)
+createArrowMarker(defs, 'relationArrowPower', EDGE_THEMES.power.color)
 createArrowMarker(defs, 'relationArrowAlliance', EDGE_THEMES.alliance.color)
-createArrowMarker(defs, 'relationArrowSupport', EDGE_THEMES.support.color)
 createArrowMarker(defs, 'relationArrowConflict', EDGE_THEMES.conflict.color)
-createArrowMarker(defs, 'relationArrowInfo', EDGE_THEMES.info.color)
-createArrowMarker(defs, 'relationArrowOther', EDGE_THEMES.other.color)
+createArrowMarker(defs, 'relationArrowGrievance', EDGE_THEMES.grievance.color)
 
   const gradient = defs
     .append('linearGradient')
@@ -1971,7 +1963,7 @@ function showEdgeTooltip(event, edge, nodeById) {
   const source = nodeById.get(edge.source)
   const target = nodeById.get(edge.target)
   const relationType = getRelationType(edge)
-  const themeLabel = EDGE_THEMES[relationType]?.label || '其他复合'
+  const themeLabel = EDGE_THEMES[relationType]?.label || '审判与恩怨'
 
   tooltip.title = edge.relation || themeLabel
   tooltip.sub = `${themeLabel}｜${source?.name || edge.source} → ${target?.name || edge.target}`
@@ -2122,7 +2114,7 @@ function clamp(value, min, max) {
 
 .focus-return-btn {
   position: absolute;
-  top: 34px;
+  top: 62px;
   left: 12px;
   z-index: 6;
   height: 26px;
@@ -2239,7 +2231,7 @@ function clamp(value, min, max) {
   justify-self: center;
   border-radius: 50%;
   background:
-    linear-gradient(135deg, #b33a2b 0 20%, #2f6f8f 20% 40%, #668a3d 40% 60%, #7a2323 60% 80%, #b87924 80% 100%);
+    conic-gradient(#a65f8f 0 16.6%, #cf6f88 16.6% 33.2%, #b33a2b 33.2% 49.8%, #2f6f8f 49.8% 66.4%, #7a2323 66.4% 83%, #b87924 83% 100%);
   box-shadow: none;
 }
 

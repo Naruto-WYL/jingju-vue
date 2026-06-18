@@ -3,7 +3,7 @@
     <ChartToggle v-model="view" />
 
     <div ref="scaleHost" class="left-top-scale-host">
-      <div class="pattern-mode-heading">角色-行当-时期对应模式</div>
+      <div class="pattern-mode-heading">角色特征与行当对应关系分析</div>
       <ChartOne v-if="view === 'a'" :stats="stats" />
       <ChartTwo v-else />
     </div>

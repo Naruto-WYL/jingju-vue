@@ -1,7 +1,7 @@
 <template>
   <PanelCard class="main-top-card">
     <div class="main-top-content">
-      <div class="main-top-heading">戏脉相生、戏曲角色关系、主题与叙事结构关联分析</div>
+      <div class="main-top-heading">角色关系—主题表达—叙事走向协同机制分析</div>
       <ChartOne v-if="view === 'a'" :graph="graph" />
       <ChartTwo v-else :graph="graph" />
     </div>
