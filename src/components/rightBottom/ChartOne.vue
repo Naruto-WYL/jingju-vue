@@ -10,13 +10,7 @@
         class="play-chord-card"
         :class="{ 'is-focus-card': focusedPlayId && index === 0 }"
       >
-        <div v-if="focusedPlayId && index === 0 && item.play" class="focus-summary">
-          <strong>{{ item.play.title }}</strong>
-          <span>{{ focusLabel(item.play) }}</span>
-        </div>
-
         <div v-if="focusedPlayId && index === 0 && item.play" class="focus-tree-shell">
-          <div class="tree-hint">角色 → 人物关系 → 关联主题</div>
           <svg class="relation-theme-tree" viewBox="0 0 360 330" role="img" aria-label="角色关系主题树状图">
             <g class="tree-root-links">
               <path v-for="group in relationThemeTree(item.play).groups" :key="`root-${group.id}`" :d="rootRelationPath(group)" />
@@ -36,7 +30,6 @@
             <g class="tree-root-node" :transform="`translate(${relationThemeTree(item.play).root.x},${relationThemeTree(item.play).root.y})`">
               <circle r="27" />
               <text class="root-name" text-anchor="middle" y="3">{{ relationThemeTree(item.play).root.name }}</text>
-              <text class="root-meta" text-anchor="middle" y="39">{{ relationThemeTree(item.play).root.trade }} · 核心角色</text>
             </g>
 
             <g
@@ -99,7 +92,7 @@
           aria-label="关闭联动主题图"
           @click="clearFocusedPlay"
         >
-          ×
+          <span aria-hidden="true">×</span>
         </button>
 
         <label v-if="!focusedPlayId" class="play-picker">
@@ -637,13 +630,6 @@ function text(value) {
 
 function isLinkageTriggerSource() {
   return linkageState.source === 'leftTopIcon' || linkageState.source === 'rightTopNode'
-}
-
-function focusLabel(play) {
-  if (linkageState.selectedTrade) return `${linkageState.selectedTrade}行当联动`
-  const character = linkagePlay(play)?.characters?.find((item) => item.character_id === linkageState.selectedCharacterId)
-  if (character?.name) return `${character.name}角色联动`
-  return '主题联动视图'
 }
 
 function focusedCharacterCount(play) {
@@ -1190,45 +1176,8 @@ function toShare(value) {
 
 .play-chord-card.is-focus-card {
   display: grid;
-  grid-template-rows: 20px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 0;
-}
-
-.focus-summary {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  padding: 1px 34px 0 4px;
-  color: #4b3328;
-  line-height: 1.15;
-}
-
-.is-focus-card .focus-summary {
-  position: relative;
-  top: auto;
-  right: auto;
-  left: auto;
-  z-index: 3;
-  padding: 0 34px 0 4px;
-  pointer-events: none;
-}
-
-.focus-summary strong {
-  overflow: hidden;
-  color: #8f2f24;
-  font-size: 16px;
-  font-weight: 900;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.focus-summary span {
-  flex: 0 0 auto;
-  color: #806a58;
-  font-family: "Microsoft YaHei", sans-serif;
-  font-size: 11px;
-  font-weight: 800;
 }
 
 .play-visual-zone {
@@ -1250,16 +1199,27 @@ function toShare(value) {
   top: 6px;
   right: 8px;
   z-index: 2;
+  display: grid;
+  place-items: center;
   width: 24px;
   height: 24px;
+  padding: 0;
   border: 1px solid rgba(139, 42, 37, 0.3);
   border-radius: 50%;
   background: rgba(255, 252, 244, 0.9);
   color: #8b2a25;
-  font-size: 16px;
-  font-weight: 900;
-  line-height: 20px;
   cursor: pointer;
+}
+
+.play-focus-close span {
+  display: block;
+  width: 14px;
+  height: 14px;
+  font-family: Arial, sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
 }
 
 .play-chord-panel.is-focused {
@@ -1290,19 +1250,6 @@ function toShare(value) {
   background:
     radial-gradient(circle at 50% 7%, rgba(196, 153, 83, 0.09), transparent 24%),
     #fbf6e9;
-}
-
-.tree-hint {
-  position: absolute;
-  top: 3px;
-  left: 8px;
-  z-index: 2;
-  color: #9b8069;
-  font-family: "Microsoft YaHei", sans-serif;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  pointer-events: none;
 }
 
 .relation-theme-tree {
@@ -1359,13 +1306,6 @@ function toShare(value) {
   font-family: "STKaiti", "KaiTi", serif;
   font-size: 15px;
   font-weight: 900;
-}
-
-.root-meta {
-  fill: #8b715d;
-  font-family: "Microsoft YaHei", sans-serif;
-  font-size: 7px;
-  font-weight: 700;
 }
 
 .tree-relation-group {

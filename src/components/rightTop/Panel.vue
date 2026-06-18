@@ -8,8 +8,18 @@
     <div class="right-top-content">
       <div class="right-top-heading">角色互动关系与网络结构分析</div>
       <div v-show="view === 'a'" id="right-top-script-select-anchor" class="right-top-script-select-anchor" />
-      <ChartOne v-if="view === 'a'" :arc-relations="arcRelations" select-target="#right-top-script-select-anchor" />
-      <ChartTwo v-else :plays="plays" />
+      <ChartOne
+        v-if="view === 'a'"
+        :arc-relations="arcRelations"
+        select-target="#right-top-script-select-anchor"
+        @script-select="selectedScript = $event"
+      />
+      <ChartTwo
+        v-else
+        :plays="plays"
+        :selected-script-id="selectedScript.id"
+        :selected-script-title="selectedScript.title"
+      />
     </div>
   </PanelCard>
 </template>
@@ -33,6 +43,7 @@ defineProps({
 })
 
 const view = ref('a')
+const selectedScript = ref({ id: '', title: '' })
 </script>
 
 <style scoped>

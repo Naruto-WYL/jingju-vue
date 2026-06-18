@@ -54,10 +54,18 @@ let drawFrame = 0
 let lastPanelWidth = 0
 let lastPanelHeight = 0
 
-defineProps({
+const props = defineProps({
   plays: {
     type: Array,
     default: () => [],
+  },
+  selectedScriptTitle: {
+    type: String,
+    default: '',
+  },
+  selectedScriptId: {
+    type: String,
+    default: '',
   },
 })
 
@@ -141,6 +149,14 @@ watch(activeFilterLabel, async () => {
   await nextTick()
   updateScatterFilter()
 })
+
+watch(
+  () => [props.selectedScriptId, props.selectedScriptTitle],
+  async () => {
+    await nextTick()
+    updateScatterFilter()
+  },
+)
 
 async function loadRows() {
   loading.value = true
@@ -359,6 +375,11 @@ function drawChart() {
 
   dotGroups
     .append('circle')
+    .attr('class', 'selected-script-halo')
+    .attr('r', (d) => radius(d.nodeCount) + 8)
+
+  dotGroups
+    .append('circle')
     .attr('class', 'scatter-circle')
     .attr('r', (d) => radius(d.nodeCount))
     .attr('fill', (d) => getCategoryColor(d.category))
@@ -373,16 +394,24 @@ function updateScatterFilter(animate = true) {
 
   const dots = d3.select(svgElement).selectAll('.scatter-dot')
   if (dots.empty()) return
+  const hasLinkage = Boolean(loopFilterState.scope)
+  const selectedId = normalizeText(props.selectedScriptId)
+  const selectedTitle = normalizeText(props.selectedScriptTitle)
+  const isScriptHighlighted = (point) =>
+    !hasLinkage && (selectedId ? point.id === selectedId : Boolean(selectedTitle) && point.title === selectedTitle)
 
   dots
     .interrupt()
     .classed('is-muted', (d) => !pointMatchesFilter(d))
     .classed('is-matched', (d) => pointMatchesFilter(d))
+    .classed('is-script-highlighted', isScriptHighlighted)
     .style('pointer-events', (d) => (pointMatchesFilter(d) ? 'auto' : 'none'))
     .transition()
     .duration(animate ? 900 : 0)
     .ease(d3.easeCubicOut)
     .style('opacity', (d) => (pointMatchesFilter(d) ? 1 : 0.06))
+
+  dots.filter(isScriptHighlighted).raise().style('opacity', 1)
 
   d3.select(svgElement)
     .select('.filter-label')
@@ -457,9 +486,24 @@ function showTooltip(event, point, tooltipElement) {
     <span>核心关系：${point.coreRelation || '未标注'}</span>
     <span>核心主题：${point.coreTheme || '未标注'}</span>
   `
-  tooltipElement.style.left = `${event.offsetX + 14}px`
-  tooltipElement.style.top = `${event.offsetY + 14}px`
   tooltipElement.classList.add('is-visible')
+
+  const viewportPadding = 12
+  const pointerGap = 16
+  const tooltipRect = tooltipElement.getBoundingClientRect()
+  let left = event.clientX + pointerGap
+  let top = event.clientY + pointerGap
+
+  if (left + tooltipRect.width > window.innerWidth - viewportPadding) {
+    left = event.clientX - tooltipRect.width - pointerGap
+  }
+
+  if (top + tooltipRect.height > window.innerHeight - viewportPadding) {
+    top = event.clientY - tooltipRect.height - pointerGap
+  }
+
+  tooltipElement.style.left = `${Math.max(viewportPadding, left)}px`
+  tooltipElement.style.top = `${Math.max(viewportPadding, top)}px`
 }
 
 function hideTooltip(tooltipElement) {
@@ -557,6 +601,27 @@ function hideTooltip(tooltipElement) {
   transition: fill-opacity 0.15s ease;
 }
 
+.scatter-chart :deep(.selected-script-halo) {
+  fill: #fff1b8;
+  fill-opacity: 1;
+  stroke: #8f1516;
+  stroke-width: 5;
+  opacity: 0;
+  pointer-events: none;
+  filter: drop-shadow(0 0 10px rgba(143, 21, 22, 0.95));
+  transition: opacity 0.2s ease;
+}
+
+.scatter-chart :deep(.scatter-dot.is-script-highlighted .selected-script-halo) {
+  opacity: 1;
+}
+
+.scatter-chart :deep(.scatter-dot.is-script-highlighted .scatter-circle) {
+  fill-opacity: 1;
+  stroke: #8f1516;
+  stroke-width: 3;
+}
+
 .scatter-chart :deep(.scatter-dot.is-active .scatter-circle) {
   fill-opacity: 0.94;
 }
@@ -619,8 +684,8 @@ function hideTooltip(tooltipElement) {
 }
 
 .scatter-tooltip {
-  position: absolute;
-  z-index: 3;
+  position: fixed;
+  z-index: 9999;
   display: grid;
   gap: 3px;
   max-width: 230px;

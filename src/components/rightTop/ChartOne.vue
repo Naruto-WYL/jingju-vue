@@ -117,6 +117,8 @@ const props = defineProps({
   },
 })
 
+const emit = defineEmits(['script-select'])
+
 const DATA_URL = '/数据表合集/2/两剧本人物关系_简化版.csv'
 const VIEW_WIDTH = 1600
 const VIEW_HEIGHT = 1360
@@ -200,6 +202,10 @@ function setRelationFilter(type) {
 
 function handleScriptSelectChange() {
   if (syncingFromLinkage) return
+  emit('script-select', {
+    id: currentRows.value[0]?.playId || findPlayByTitle(selectedScript.value)?.play_id || '',
+    title: selectedScript.value,
+  })
   focusSuppressed.value = true
   previousNodePositions = new Map()
   scheduleDraw()
