@@ -22,7 +22,10 @@
 
       <div class="trade-badge" :class="{ 'is-inferred': isInferredTrade, 'is-known': isKnownTrade }">
         <span>行当</span>
-        <strong>{{ currentTrade || '暂无' }}</strong>
+        <strong>
+          <b>{{ currentTradeName || '暂无' }}</b>
+          <small v-if="currentTradeStatusLabel">{{ currentTradeStatusLabel }}</small>
+        </strong>
       </div>
     </div>
 
@@ -66,6 +69,7 @@ import {
 
 const ROLE_URL = '/数据表合集/1/Table1_Role_Inference.csv'
 const HEATMAP_URL = '/数据表合集/1/Table2_Trade_Vector_Patterns.csv'
+const TRADE_STATUS_URL = '/data/trade_annotation_status.json'
 const minChartWidth = 467
 const chartHeight = 470
 const chartLayout = {
@@ -230,6 +234,7 @@ const selectedScript = ref('')
 const selectedRole = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
+const tradeStatusData = ref({ plays: {} })
 
 defineProps({
   stats: {
@@ -256,8 +261,10 @@ const selectedRoleRow = computed(
 const currentPeriod = computed(() => selectedRoleRow.value?.historical_period || currentScriptRows.value[0]?.historical_period || '')
 const currentTrade = computed(() => selectedRoleRow.value?.trade || '')
 const currentTradeName = computed(() => cleanTradeName(currentTrade.value))
-const isInferredTrade = computed(() => currentTrade.value.includes('推断'))
-const isKnownTrade = computed(() => currentTrade.value.includes('已知'))
+const currentTradeStatus = computed(() => selectedRoleRow.value?.trade_status || '')
+const currentTradeStatusLabel = computed(() => (currentTradeStatus.value === 'known' ? '已知' : currentTradeStatus.value === 'inferred' ? '推断' : ''))
+const isInferredTrade = computed(() => currentTradeStatus.value === 'inferred')
+const isKnownTrade = computed(() => currentTradeStatus.value === 'known')
 
 const tradeNames = computed(() => {
   const available = new Set(heatmapRows.value.map((row) => row.clean_trade).filter(Boolean))
@@ -344,6 +351,10 @@ const tradeScores = computed(() => {
 const inferenceNote = computed(() => {
   const role = selectedRoleRow.value
   const trade = currentTradeName.value || '该行当'
+  if (role?.trade_status === 'known') {
+    const sourceTrade = role.source_trade || trade
+    return `标注说明：原始剧本“主要角色”清单已明确标注${selectedRole.value || '当前角色'}的行当为${sourceTrade}，规范化后归入${trade}。`
+  }
   const base = [role?.sex, role?.age, role?.identity, role?.character_label].filter(Boolean).join('、')
   const highFeatures = currentRoleFeatures.value
     .filter((feature) => ![role?.sex, role?.age, role?.identity, role?.character_label].includes(feature))
@@ -397,7 +408,12 @@ async function loadData() {
   errorMessage.value = ''
 
   try {
-    const linkageData = await loadLinkageData()
+    const [linkageData, statusResponse] = await Promise.all([
+      loadLinkageData(),
+      fetch(`${TRADE_STATUS_URL}?t=${Date.now()}`, { cache: 'no-store' }),
+    ])
+    if (!statusResponse.ok) throw new Error(`行当标注状态数据读取失败：${statusResponse.status}`)
+    tradeStatusData.value = await statusResponse.json()
     if (linkageData.roleRows?.length) {
       roleRows.value = linkageData.roleRows.map(normalizeLinkageRoleRow)
       const standardHeatmapRows = await d3.csv(encodeURI(HEATMAP_URL), normalizeHeatmapRow).catch(() => [])
@@ -420,6 +436,7 @@ async function loadData() {
 }
 
 function normalizeRoleRow(row) {
+  const rawTrade = text(csvValue(row, 'trade'))
   return {
     play_id: text(csvValue(row, 'play_id')),
     character_id: text(csvValue(row, 'character_id')),
@@ -427,7 +444,9 @@ function normalizeRoleRow(row) {
     script_name: text(csvValue(row, 'script_name')),
     historical_period: text(csvValue(row, 'historical_period')),
     role_name: text(csvValue(row, 'role_name')),
-    trade: text(csvValue(row, 'trade')),
+    trade: rawTrade,
+    source_trade: cleanTradeName(rawTrade),
+    trade_status: rawTrade.includes('已知') ? 'known' : rawTrade.includes('推断') ? 'inferred' : '',
     sex: cleanListLike(csvValue(row, 'sex')),
     age: cleanListLike(csvValue(row, 'age')),
     identity: cleanListLike(csvValue(row, 'identity')),
@@ -461,6 +480,7 @@ function normalizeLinkageRoleRow(row) {
   const trade = text(row.standard_trade) || standardizeTrade(rawTrade)
   const majorTrade = majorTradeFromStandard(trade)
   const themeIds = parseThemeIds(row.linked_theme_ids)
+  const statusEntry = tradeStatusData.value?.plays?.[text(row.play_id)]?.roles?.[text(row.role_name)] || []
 
   return {
     play_id: text(row.play_id),
@@ -470,7 +490,8 @@ function normalizeLinkageRoleRow(row) {
     historical_period: '传统京剧',
     role_name: text(row.role_name),
     trade,
-    source_trade: rawTrade,
+    source_trade: text(statusEntry[1]) || rawTrade,
+    trade_status: text(statusEntry[0]) || 'inferred',
     sex: inferSex(majorTrade || trade),
     age: inferAge(trade),
     identity: inferIdentity(trade),
@@ -1155,12 +1176,32 @@ function cosineSimilarity(a, b) {
 
 .trade-badge strong {
   justify-content: center;
+  gap: 6px;
   border-color: rgba(111, 20, 24, 0.34);
   color: #fff7ea;
   background:
     linear-gradient(135deg, rgba(111, 20, 24, 0.92), rgba(185, 91, 41, 0.9)),
     #8b2a25;
   box-shadow: inset 0 0 0 1px rgba(255, 247, 234, 0.26);
+}
+
+.trade-badge strong b {
+  overflow: hidden;
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trade-badge strong small {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border: 1px solid rgba(255, 248, 235, 0.42);
+  border-radius: 999px;
+  color: #fff8ed;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .trade-badge.is-known strong {
