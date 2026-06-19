@@ -63,20 +63,20 @@
               :class="{ active: isTreeThemeActive(theme.id), dimmed: hasActiveTreeRelation() && !isTreeThemeActive(theme.id) }"
               :transform="`translate(${theme.x},${theme.y})`"
             >
-              <rect class="theme-card" x="-41" y="-24" width="82" height="48" rx="10" />
-              <circle class="theme-marker" cx="-30" cy="-10" r="3.5" :fill="themeColor(theme.name)" />
-              <text class="theme-name" text-anchor="start" x="-22" y="-6.5">{{ theme.name }}</text>
-              <rect class="theme-track" x="-30" y="5" width="60" height="5" rx="2.5" />
+              <rect class="theme-card" :x="-theme.width / 2" y="-24" :width="theme.width" height="48" rx="10" />
+              <circle class="theme-marker" :cx="theme.trackX" cy="-10" r="3.5" :fill="themeColor(theme.name)" />
+              <text class="theme-name" text-anchor="start" :x="theme.labelX" y="-6.5">{{ theme.name }}</text>
+              <rect class="theme-track" :x="theme.trackX" y="5" :width="theme.trackWidth" height="5" rx="2.5" />
               <rect
                 class="theme-progress"
-                x="-30"
+                :x="theme.trackX"
                 y="5"
-                :width="Math.max(4, 60 * theme.share)"
+                :width="Math.max(4, theme.trackWidth * theme.share)"
                 height="5"
                 rx="2.5"
                 :fill="themeColor(theme.name)"
               />
-              <text class="theme-percent" text-anchor="end" x="30" y="20">{{ formatPercent(theme.share) }}</text>
+              <text class="theme-percent" text-anchor="end" :x="theme.percentX" y="20">{{ formatPercent(theme.share) }}</text>
             </g>
           </svg>
         </div>
@@ -674,14 +674,21 @@ function relationThemeTree(play) {
   const characters = fullPlay?.characters || []
   const allRelations = fullPlay?.relations || []
   const root = treeRootCharacter(fullPlay)
-  const themes = normalizedThemes(play)
-    .slice(0, 5)
+  const visibleThemes = normalizedThemes(play).slice(0, 6)
+  const compactThemes = visibleThemes.length > 5
+  const themes = visibleThemes
     .map((theme, index, source) => ({
       id: theme.themeId,
       name: theme.name,
       share: theme.share,
-      x: spacedPosition(index, source.length, 43, 317),
-      y: 286,
+      x: spacedPosition(index, source.length, compactThemes ? 30 : 43, compactThemes ? 330 : 317),
+      // 同层主题上下错排，给相邻主题卡片留出文字空间。
+      y: index % 2 === 0 ? 246 : 300,
+      width: compactThemes ? 60 : 82,
+      trackX: compactThemes ? -20 : -30,
+      trackWidth: compactThemes ? 40 : 60,
+      labelX: compactThemes ? -12 : -22,
+      percentX: compactThemes ? 20 : 30,
     }))
   const themeById = new Map(themes.map((theme) => [theme.id, theme]))
   const characterById = new Map(characters.map((character) => [character.character_id, character]))
@@ -743,11 +750,11 @@ function relationThemeTree(play) {
   let cursor = (360 - totalWidth) / 2
   groups.forEach((group) => {
     group.x = cursor + group.width / 2
-    group.y = 155
+    group.y = 140
     group.people = group.people.map((person, index, source) => ({
       ...person,
       x: spacedPosition(index, source.length, -group.width / 2 + 23, group.width / 2 - 23),
-      y: index % 2 === 0 ? 8 : 18,
+      y: index % 2 === 0 ? 3 : 19,
     }))
     cursor += group.width + 8
   })
@@ -758,7 +765,7 @@ function relationThemeTree(play) {
       name: root.name || '核心角色',
       trade: root.standard_trade || root.trade || root.major_trade || '未定',
       x: 180,
-      y: 48,
+      y: 42,
     },
     relations,
     groups,
@@ -825,12 +832,15 @@ function spacedPosition(index, count, start, end) {
 }
 
 function rootRelationPath(relation) {
-  return `M 180 75 C 180 105, ${relation.x} 96, ${relation.x} ${relation.y - 39}`
+  return `M 180 69 C 180 92, ${relation.x} 88, ${relation.x} ${relation.y - 39}`
 }
 
 function relationThemePath(relation, theme) {
   if (!theme) return ''
-  return `M ${relation.x} ${relation.y + 33} C ${relation.x} 224, ${theme.x} 230, ${theme.x} ${theme.y - 22}`
+  const startY = relation.y + 33
+  const endY = theme.y - 24
+  const middleY = startY + (endY - startY) * 0.56
+  return `M ${relation.x} ${startY} C ${relation.x} ${middleY}, ${theme.x} ${middleY}, ${theme.x} ${endY}`
 }
 
 function activeTreeRelationId() {

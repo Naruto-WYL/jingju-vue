@@ -1,19 +1,19 @@
 {
-  "version": "2026-06-16",
-  "source": "PDF auto extraction with manually seeded theme taxonomy",
+  "version": "2026-06-19",
+  "source": "PDF extraction with manually reviewed theme taxonomy and character-theme linkage",
   "plays": [
     {
       "play_id": "01004001",
       "title": "逍遥津",
       "source_file": "D:\\jingju\\数据\\01004001_逍遥津.pdf",
-      "summary": "《逍遥津》以权谋斗争、忠义家国、战争征伐为主要组合，围绕曹操、穆顺、华歆等人物推进剧情。",
+      "summary": "《逍遥津》以权谋斗争、忠义家国、战争征伐、女性命运与家庭伦理为主题组合，围绕曹操、汉献帝、伏后与穆顺等人物推进宫廷冲突和宗室悲剧。",
       "flow_id": "flow_15181663be",
       "themes": [
         {
           "theme_id": "theme_power",
           "theme": "权谋斗争",
           "score": 379.0,
-          "share": 0.4752,
+          "share": 0.4297,
           "rank": 1,
           "evidence": "权"
         },
@@ -21,7 +21,7 @@
           "theme_id": "theme_loyalty",
           "theme": "忠义家国",
           "score": 191.5,
-          "share": 0.2401,
+          "share": 0.2171,
           "rank": 2,
           "evidence": "忠"
         },
@@ -29,7 +29,7 @@
           "theme_id": "theme_war",
           "theme": "战争征伐",
           "score": 110.0,
-          "share": 0.1379,
+          "share": 0.1247,
           "rank": 3,
           "evidence": "兵"
         },
@@ -37,9 +37,17 @@
           "theme_id": "theme_women",
           "theme": "女性命运",
           "score": 117.0,
-          "share": 0.1467,
+          "share": 0.1327,
           "rank": 4,
           "evidence": "女"
+        },
+        {
+          "theme_id": "theme_family",
+          "theme": "家庭伦理",
+          "score": 84.5,
+          "share": 0.0958,
+          "rank": 5,
+          "evidence": "父子、母子与宗室亲缘"
         }
       ],
       "characters": [
@@ -66,11 +74,13 @@
           "primary_scene_id": "01004001_scene_03",
           "linked_theme_ids": [
             "theme_loyalty",
-            "theme_power"
+            "theme_power",
+            "theme_family"
           ],
           "linked_themes": [
             "权谋斗争",
-            "忠义家国"
+            "忠义家国",
+            "家庭伦理"
           ],
           "role_level": "major",
           "role_level_label": "主要人物",
@@ -134,10 +144,12 @@
           ],
           "primary_scene_id": "01004001_scene_04",
           "linked_theme_ids": [
-            "theme_women"
+            "theme_women",
+            "theme_family"
           ],
           "linked_themes": [
-            "女性命运"
+            "女性命运",
+            "家庭伦理"
           ],
           "role_level": "major",
           "role_level_label": "主要人物",
@@ -164,10 +176,12 @@
           ],
           "primary_scene_id": "01004001_scene_04",
           "linked_theme_ids": [
-            "theme_women"
+            "theme_women",
+            "theme_family"
           ],
           "linked_themes": [
-            "女性命运"
+            "女性命运",
+            "家庭伦理"
           ],
           "role_level": "minor",
           "role_level_label": "次要人物",
@@ -229,11 +243,13 @@
           "primary_scene_id": "01004001_scene_08",
           "linked_theme_ids": [
             "theme_loyalty",
-            "theme_power"
+            "theme_power",
+            "theme_family"
           ],
           "linked_themes": [
             "权谋斗争",
-            "忠义家国"
+            "忠义家国",
+            "家庭伦理"
           ],
           "role_level": "minor",
           "role_level_label": "次要人物",
@@ -259,11 +275,13 @@
           "primary_scene_id": "01004001_scene_05",
           "linked_theme_ids": [
             "theme_loyalty",
-            "theme_power"
+            "theme_power",
+            "theme_family"
           ],
           "linked_themes": [
             "权谋斗争",
-            "忠义家国"
+            "忠义家国",
+            "家庭伦理"
           ],
           "role_level": "minor",
           "role_level_label": "次要人物",
@@ -4990,14 +5008,14 @@
       "play_id": "02008006",
       "title": "北汉王",
       "source_file": "D:\\jingju\\数据\\02008006_北汉王.pdf",
-      "summary": "《北汉王》以权谋斗争、忠义家国、战争征伐为主要组合，围绕刘承佑、刘瑞莲、苏妃等人物推进剧情。",
+      "summary": "《北汉王》以权谋斗争、女性命运、战争征伐、忠义家国、复仇侠义与家庭伦理为主题组合，围绕刘承佑、史彦超、刘瑞莲和苏妃等人物展开宫廷倾轧、举兵复仇与亲缘悲剧。",
       "flow_id": "flow_15181663be",
       "themes": [
         {
           "theme_id": "theme_power",
           "theme": "权谋斗争",
           "score": 476.5,
-          "share": 0.3557,
+          "share": 0.296,
           "rank": 1,
           "evidence": "权"
         },
@@ -5005,7 +5023,7 @@
           "theme_id": "theme_loyalty",
           "theme": "忠义家国",
           "score": 222.0,
-          "share": 0.1657,
+          "share": 0.1379,
           "rank": 2,
           "evidence": "忠"
         },
@@ -5013,7 +5031,7 @@
           "theme_id": "theme_war",
           "theme": "战争征伐",
           "score": 267.0,
-          "share": 0.1993,
+          "share": 0.1658,
           "rank": 3,
           "evidence": "兵"
         },
@@ -5021,9 +5039,25 @@
           "theme_id": "theme_women",
           "theme": "女性命运",
           "score": 374.0,
-          "share": 0.2792,
+          "share": 0.2323,
           "rank": 4,
           "evidence": "女"
+        },
+        {
+          "theme_id": "theme_chivalry",
+          "theme": "复仇侠义",
+          "score": 152.0,
+          "share": 0.0944,
+          "rank": 5,
+          "evidence": "举家被害、兴兵报仇"
+        },
+        {
+          "theme_id": "theme_family",
+          "theme": "家庭伦理",
+          "score": 118.5,
+          "share": 0.0736,
+          "rank": 6,
+          "evidence": "母子、兄弟与宫廷亲缘"
         }
       ],
       "characters": [
@@ -5058,11 +5092,13 @@
           "primary_scene_id": "02008006_scene_01",
           "linked_theme_ids": [
             "theme_loyalty",
-            "theme_power"
+            "theme_power",
+            "theme_family"
           ],
           "linked_themes": [
             "权谋斗争",
-            "忠义家国"
+            "忠义家国",
+            "家庭伦理"
           ],
           "role_level": "core",
           "role_level_label": "核心人物",
@@ -5093,10 +5129,12 @@
           ],
           "primary_scene_id": "02008006_scene_06",
           "linked_theme_ids": [
-            "theme_women"
+            "theme_women",
+            "theme_family"
           ],
           "linked_themes": [
-            "女性命运"
+            "女性命运",
+            "家庭伦理"
           ],
           "role_level": "core",
           "role_level_label": "核心人物",
@@ -5126,10 +5164,12 @@
           ],
           "primary_scene_id": "02008006_scene_04",
           "linked_theme_ids": [
-            "theme_women"
+            "theme_women",
+            "theme_family"
           ],
           "linked_themes": [
-            "女性命运"
+            "女性命运",
+            "家庭伦理"
           ],
           "role_level": "major",
           "role_level_label": "主要人物",
@@ -5168,11 +5208,13 @@
           "primary_scene_id": "02008006_scene_01",
           "linked_theme_ids": [
             "theme_power",
-            "theme_war"
+            "theme_war",
+            "theme_chivalry"
           ],
           "linked_themes": [
             "权谋斗争",
-            "战争征伐"
+            "战争征伐",
+            "复仇侠义"
           ],
           "role_level": "major",
           "role_level_label": "主要人物",
@@ -5270,11 +5312,13 @@
           "primary_scene_id": "02008006_scene_02",
           "linked_theme_ids": [
             "theme_loyalty",
-            "theme_power"
+            "theme_power",
+            "theme_chivalry"
           ],
           "linked_themes": [
             "权谋斗争",
-            "忠义家国"
+            "忠义家国",
+            "复仇侠义"
           ],
           "role_level": "minor",
           "role_level_label": "次要人物",
@@ -5330,11 +5374,13 @@
           "primary_scene_id": "02008006_scene_03",
           "linked_theme_ids": [
             "theme_power",
-            "theme_war"
+            "theme_war",
+            "theme_chivalry"
           ],
           "linked_themes": [
             "权谋斗争",
-            "战争征伐"
+            "战争征伐",
+            "复仇侠义"
           ],
           "role_level": "minor",
           "role_level_label": "次要人物",
@@ -5453,10 +5499,12 @@
           ],
           "primary_scene_id": "02008006_scene_05",
           "linked_theme_ids": [
-            "theme_women"
+            "theme_women",
+            "theme_family"
           ],
           "linked_themes": [
-            "女性命运"
+            "女性命运",
+            "家庭伦理"
           ],
           "role_level": "minor",
           "role_level_label": "次要人物",
@@ -8974,7 +9022,7 @@
       "action_intensity": 0.5769,
       "relation_strength": 0.5562,
       "primary_scene_id": "01004001_scene_03",
-      "linked_theme_ids": "theme_loyalty|theme_power"
+      "linked_theme_ids": "theme_loyalty|theme_power|theme_family"
     },
     {
       "play_id": "01004001",
@@ -9024,7 +9072,7 @@
       "action_intensity": 0.593,
       "relation_strength": 0.8214,
       "primary_scene_id": "01004001_scene_04",
-      "linked_theme_ids": "theme_women"
+      "linked_theme_ids": "theme_women|theme_family"
     },
     {
       "play_id": "01004001",
@@ -9049,7 +9097,7 @@
       "action_intensity": 0.349,
       "relation_strength": 0.2224,
       "primary_scene_id": "01004001_scene_04",
-      "linked_theme_ids": "theme_women"
+      "linked_theme_ids": "theme_women|theme_family"
     },
     {
       "play_id": "01004001",
@@ -9099,7 +9147,7 @@
       "action_intensity": 0.2277,
       "relation_strength": 0.1302,
       "primary_scene_id": "01004001_scene_08",
-      "linked_theme_ids": "theme_loyalty|theme_power"
+      "linked_theme_ids": "theme_loyalty|theme_power|theme_family"
     },
     {
       "play_id": "01004001",
@@ -9124,7 +9172,7 @@
       "action_intensity": 0.1272,
       "relation_strength": 0.0984,
       "primary_scene_id": "01004001_scene_05",
-      "linked_theme_ids": "theme_loyalty|theme_power"
+      "linked_theme_ids": "theme_loyalty|theme_power|theme_family"
     },
     {
       "play_id": "01004001",
@@ -10074,7 +10122,7 @@
       "action_intensity": 0.9214,
       "relation_strength": 1,
       "primary_scene_id": "02008006_scene_01",
-      "linked_theme_ids": "theme_loyalty|theme_power"
+      "linked_theme_ids": "theme_loyalty|theme_power|theme_family"
     },
     {
       "play_id": "02008006",
@@ -10099,7 +10147,7 @@
       "action_intensity": 0.6147,
       "relation_strength": 0.3823,
       "primary_scene_id": "02008006_scene_06",
-      "linked_theme_ids": "theme_women"
+      "linked_theme_ids": "theme_women|theme_family"
     },
     {
       "play_id": "02008006",
@@ -10124,7 +10172,7 @@
       "action_intensity": 0.4625,
       "relation_strength": 0.3552,
       "primary_scene_id": "02008006_scene_04",
-      "linked_theme_ids": "theme_women"
+      "linked_theme_ids": "theme_women|theme_family"
     },
     {
       "play_id": "02008006",
@@ -10149,7 +10197,7 @@
       "action_intensity": 0.775,
       "relation_strength": 0.7578,
       "primary_scene_id": "02008006_scene_01",
-      "linked_theme_ids": "theme_power|theme_war"
+      "linked_theme_ids": "theme_power|theme_war|theme_chivalry"
     },
     {
       "play_id": "02008006",
@@ -10224,7 +10272,7 @@
       "action_intensity": 0.189,
       "relation_strength": 0.2687,
       "primary_scene_id": "02008006_scene_02",
-      "linked_theme_ids": "theme_loyalty|theme_power"
+      "linked_theme_ids": "theme_loyalty|theme_power|theme_chivalry"
     },
     {
       "play_id": "02008006",
@@ -10274,7 +10322,7 @@
       "action_intensity": 0.0909,
       "relation_strength": 0.1026,
       "primary_scene_id": "02008006_scene_03",
-      "linked_theme_ids": "theme_power|theme_war"
+      "linked_theme_ids": "theme_power|theme_war|theme_chivalry"
     },
     {
       "play_id": "02008006",
@@ -10374,7 +10422,7 @@
       "action_intensity": 0.0651,
       "relation_strength": 0.0828,
       "primary_scene_id": "02008006_scene_05",
-      "linked_theme_ids": "theme_women"
+      "linked_theme_ids": "theme_women|theme_family"
     },
     {
       "play_id": "02008006",

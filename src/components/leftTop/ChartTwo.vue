@@ -20,7 +20,7 @@
         aria-label="角色行当时期对应模式竖向图"
         @pointermove.capture="handleSvgPointerMove"
         @pointerleave="handleSvgPointerLeave"
-        @click.capture="handleSvgClick"
+        
       />
       <div class="zoom-controls" aria-label="图形缩放">
         <button type="button" title="放大" @click="zoomBy(1.18)">+</button>
@@ -1392,13 +1392,8 @@ function drawLinks(svg, links, nodes, valueScale) {
       return sourceNode?.type === 'identity' && targetNode?.type === 'role' ? 'identity-role-hit-link' : null
     })
     .attr('data-source', (link) => link.source)
-    .attr('data-target', (link) => link.target)
-    .attr('tabindex', (link) => {
-      const sourceNode = nodes.get(link.source)
-      const targetNode = nodes.get(link.target)
-      return sourceNode?.type === 'identity' && targetNode?.type === 'role' ? 0 : null
-    })
-    .attr('d', (link) => linkPath(nodes.get(link.source), nodes.get(link.target)))
+.attr('data-target', (link) => link.target)
+.attr('d', (link) => linkPath(nodes.get(link.source), nodes.get(link.target)))
     .attr('stroke', (link) => linkColor(link))
     .attr('stroke-width', (link) => valueScale(link.value))
     .attr('data-base-width', (link) => valueScale(link.value))
@@ -1406,7 +1401,7 @@ function drawLinks(svg, links, nodes, valueScale) {
     .style('pointer-events', (link) => isLinkVisible(link) ? 'stroke' : 'none')
 
   function handleLinkEnter(event, link) {
-      if (!isLinkVisible(link) || tooltip.pinned) return
+      if (!isLinkVisible(link)) return
       linkPaths
         .attr('stroke-opacity', (item) => isLinkVisible(item) ? 0.035 : 0.012)
 
@@ -1431,30 +1426,18 @@ function drawLinks(svg, links, nodes, valueScale) {
   }
 
   function handleLinkLeave() {
-    if (tooltip.pinned) return
+    
     resetLinkHighlight(linkPaths, valueScale)
     resetMatrixHighlight(svg)
     hideTooltip()
   }
 
-  function handleIdentityRoleClick(event, link) {
-    event.stopPropagation()
-    tooltip.pinned = false
-    handleLinkEnter(event, link)
-    tooltip.pinned = true
-  }
+ 
 
   linkPaths
-    .on('mouseover', handleLinkEnter)
-    .on('mousemove', moveTooltip)
-    .on('mouseout', handleLinkLeave)
-    .on('click', function (event, link) {
-      const sourceNode = nodes.get(link.source)
-      const targetNode = nodes.get(link.target)
-      if (sourceNode?.type === 'identity' && targetNode?.type === 'role') {
-        handleIdentityRoleClick(event, link)
-      }
-    })
+  .on('mouseover', handleLinkEnter)
+  .on('mousemove', moveTooltip)
+  .on('mouseout', handleLinkLeave)
 }
 
 function linkHighlightColor(link) {
@@ -1741,14 +1724,6 @@ function handleSvgPointerLeave() {
   if (!tooltip.pinned && tooltip.kind === 'link') hideTooltip()
 }
 
-function handleSvgClick(event) {
-  const link = identityRoleLinkFromEvent(event)
-  if (!link || !isLinkVisible(link)) return
-  event.stopPropagation()
-  tooltip.pinned = false
-  showLinkTooltip(event, link, rawLinks)
-  tooltip.pinned = true
-}
 
 function showLinkTooltip(event, link, links) {
   const sourceTotal = d3.sum(links.filter((item) => item.source === link.source), (item) => item.value)
