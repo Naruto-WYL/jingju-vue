@@ -487,7 +487,7 @@ function normalizeLinkageRoleRow(row) {
     character_id: text(row.character_id),
     script_id: text(row.play_id),
     script_name: text(row.script_name),
-    historical_period: '传统京剧',
+    historical_period: findPlayById(row.play_id)?.historical_period || '时代未详',
     role_name: text(row.role_name),
     trade,
     source_trade: text(statusEntry[1]) || rawTrade,
@@ -1083,7 +1083,7 @@ function cosineSimilarity(a, b) {
 
 .role-selector {
   display: grid;
-  grid-template-columns: minmax(120px, 1.75fr) minmax(74px, 0.75fr) minmax(104px, 0.95fr) minmax(82px, 0.7fr);
+  grid-template-columns: minmax(98px, 1.15fr) minmax(130px, 1.35fr) minmax(90px, 0.9fr) minmax(76px, 0.7fr);
   grid-template-rows: 56px;
   height: 56px;
   gap: 5px;
