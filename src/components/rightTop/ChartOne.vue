@@ -2,30 +2,24 @@
   <div class="relation-network">
     <div class="relation-network__toolbar" :class="{ 'relation-network__toolbar--teleported': props.selectTarget }">
       <Teleport v-if="props.selectTarget" :to="props.selectTarget" defer>
-        <select
+        <PlaySelect
           v-model="selectedScript"
           class="script-select"
-          aria-label="选择剧本"
+          :options="scriptSelectOptions"
+          :max-visible="5"
           :disabled="loading || !scriptOptions.length"
           @change="handleScriptSelectChange"
-        >
-          <option v-for="script in scriptOptions" :key="script" :value="script">
-            {{ script }}
-          </option>
-        </select>
+        />
       </Teleport>
-      <select
+      <PlaySelect
         v-else
         v-model="selectedScript"
         class="script-select"
-        aria-label="选择剧本"
+        :options="scriptSelectOptions"
+        :max-visible="5"
         :disabled="loading || !scriptOptions.length"
         @change="handleScriptSelectChange"
-      >
-        <option v-for="script in scriptOptions" :key="script" :value="script">
-          {{ script }}
-        </option>
-      </select>
+      />
     </div>
 
     <div ref="chartRef" class="relation-network__stage">
@@ -94,6 +88,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import * as d3 from 'd3'
 import * as XLSX from 'xlsx'
+import PlaySelect from '../PlaySelect.vue'
 import {
   findPlayById,
   findPlayByTitle,
@@ -102,6 +97,7 @@ import {
   selectCharacter,
   standardizeTrade,
 } from '../../services/linkageStore'
+import { loadPlayCatalog } from '../../services/playCatalog'
 import coreAvatar from '../../assets/人物图象/核心.png'
 import majorAvatar from '../../assets/人物图象/主要.png'
 import minorAvatar from '../../assets/人物图象/次要.png'
@@ -174,6 +170,7 @@ const rows = ref([])
 const loading = ref(false)
 const errorMessage = ref('')
 const selectedScript = ref('')
+const playCatalog = ref([])
 const tooltipRef = ref(null)
 
 const tooltip = reactive({
@@ -238,8 +235,10 @@ let previousNodePositions = new Map()
 const focusSuppressed = ref(false)
 
 const scriptOptions = computed(() => {
+  if (playCatalog.value.length) return playCatalog.value.map((play) => play.title)
   return Array.from(new Set(rows.value.map((row) => row.script).filter(Boolean)))
 })
+const scriptSelectOptions = computed(() => scriptOptions.value.map((title) => ({ value: title, label: title })))
 
 const currentRows = computed(() => {
   if (!selectedScript.value) return []
@@ -303,7 +302,11 @@ async function loadRows() {
   errorMessage.value = ''
 
   try {
-    const linkageData = await loadLinkageData()
+    const [linkageData, catalog] = await Promise.all([
+      loadLinkageData(),
+      loadPlayCatalog().catch(() => []),
+    ])
+    playCatalog.value = catalog
     if (linkageData.plays?.length) {
       rows.value = linkageData.plays.flatMap((play) => (play.relations || []).map((relation) => normalizeLinkageRelation(play, relation)))
       syncSelectedScriptFromLinkage()
@@ -2065,9 +2068,6 @@ function clamp(value, min, max) {
   /* 设置下拉框高度 */
   height: 20px;
 
-  /* 设置内边距，右侧留出下拉箭头空间 */
-  padding: 0 32px 0 12px;
-
   /* 设置边框颜色和透明度 */
   border: 1px solid rgba(142, 47, 36, 0.38);
 
@@ -2096,12 +2096,17 @@ function clamp(value, min, max) {
 }
 
 /* 下拉框获得焦点时的样式 */
-.script-select:focus {
+.script-select:focus-within {
   /* 聚焦时加深边框颜色 */
   border-color: rgba(142, 47, 36, 0.74);
 
   /* 聚焦时添加淡金色外发光 */
   box-shadow: 0 0 0 2px rgba(212, 166, 74, 0.24);
+}
+
+.script-select :deep(.play-select__trigger) {
+  padding: 0 8px;
+  text-align: center;
 }
 
 .relation-network__stage {

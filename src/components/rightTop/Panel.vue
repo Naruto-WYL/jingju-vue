@@ -132,7 +132,6 @@ const selectedScript = ref({ id: '', title: '' })
 .right-top-card--network :deep(.script-select) {
   width: 100%;
   height: 22px;
-  padding: 0 20px 0 6px;
   font-size: 13px;
   font-weight: 800;
   line-height: 20px;

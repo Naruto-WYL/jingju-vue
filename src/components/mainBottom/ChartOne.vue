@@ -12,10 +12,14 @@
           </label>
 
           <label class="select-box script-box">
-            <select v-model="currentScriptKey" :disabled="loading || !scriptOptions.length" @change="switchScript(currentScriptKey)">
-              <option v-if="loading" value="">加载剧本数据...</option>
-              <option v-for="script in scriptOptions" :key="script.key" :value="script.key">{{ script.name }}</option>
-            </select>
+            <PlaySelect
+              v-model="currentScriptKey"
+              :options="scriptSelectOptions"
+              :max-visible="5"
+              :placeholder="loading ? '加载剧本数据...' : '请选择剧本'"
+              :disabled="loading || !scriptOptions.length"
+              @change="switchScript"
+            />
           </label>
         </div>
 
@@ -143,9 +147,11 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import PlaySelect from '../PlaySelect.vue'
 import { findScriptKeyByPlay, loadQiyunDataset, sceneNoFromSceneId, stageCountLabel } from './qiyunData'
 import { streamColorNames, streamColorsStroke } from './qiyunData'
 import { linkageState, loadLinkageData } from '../../services/linkageStore'
+import { FEATURED_PLAY_TITLES, pinFeaturedPlays } from '../../services/playCatalog'
 
 const canvasPanelRef = ref(null)
 const canvasRef = ref(null)
@@ -184,7 +190,15 @@ const filteredScriptKeys = computed(() => {
   const key = stageCountFilter.value
   return key && stageBuckets.value[key] ? stageBuckets.value[key] : Object.keys(scripts.value)
 })
-const scriptOptions = computed(() => filteredScriptKeys.value.map((key) => scripts.value[key]).filter(Boolean))
+const scriptOptions = computed(() =>
+  pinFeaturedPlays(
+    filteredScriptKeys.value.map((key) => scripts.value[key]).filter(Boolean),
+    (script) => script.plainName,
+  ),
+)
+const scriptSelectOptions = computed(() =>
+  scriptOptions.value.map((script) => ({ value: script.key, label: script.name })),
+)
 const currentScript = computed(() => scripts.value[currentScriptKey.value] || null)
 const currentStages = computed(() => currentScript.value?.stages || [])
 const currentStageIndicator = computed(() => {
@@ -251,8 +265,8 @@ async function loadData() {
     const defaultCount = counts.includes(5) ? 5 : counts[0]
     stageCountFilter.value = String(defaultCount || '')
     const keys = stageCountFilter.value ? dataset.stageBuckets[stageCountFilter.value] || [] : Object.keys(dataset.scripts)
-    const sishuiKey = keys.find((key) => dataset.scripts[key]?.plainName === '泗水关')
-    currentScriptKey.value = sishuiKey || (keys.includes('70003106') ? '70003106' : keys[0] || '')
+    const featuredKey = keys.find((key) => dataset.scripts[key]?.plainName === FEATURED_PLAY_TITLES[0])
+    currentScriptKey.value = featuredKey || keys[0] || ''
     if (currentScriptKey.value) switchScript(currentScriptKey.value)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'CSV 数据加载失败'
@@ -263,7 +277,7 @@ async function loadData() {
 
 function filterByStageCount(stageCount) {
   stageCountFilter.value = stageCount
-  const firstKey = filteredScriptKeys.value[0]
+  const firstKey = scriptOptions.value[0]?.key
   if (firstKey) switchScript(firstKey)
 }
 
@@ -774,9 +788,11 @@ function makeEmptyState() {
   cursor: pointer;
 }
 
-.script-box select {
+.script-box .play-select {
+  width: 100%;
+  height: 100%;
   color: #8f2f24;
-  font-size: 12px;
+  font: 800 12px/1.2 "STKaiti", "KaiTi", serif;
 }
 
 .stage-container {

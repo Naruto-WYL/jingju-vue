@@ -96,15 +96,13 @@
         </button>
 
         <label v-if="!focusedPlayId" class="play-picker">
-          <select :value="item.playId" :disabled="Boolean(focusedPlayId)" @change="handlePlayPickerChange(index, $event)">
-            <option
-              v-for="play in playOptions"
-              :key="play.playId"
-              :value="play.playId"
-            >
-              {{ play.title }}
-            </option>
-          </select>
+          <PlaySelect
+            :model-value="item.playId"
+            :options="playSelectOptions"
+            :max-visible="5"
+            :disabled="Boolean(focusedPlayId)"
+            @change="handlePlayPickerChange(index, $event)"
+          />
         </label>
       </article>
     </div>
@@ -114,7 +112,9 @@
 <script setup>
 import { Chart } from '@antv/g2'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import PlaySelect from '../PlaySelect.vue'
 import { clearLinkageFocus, linkageState, loadLinkageData } from '../../services/linkageStore'
+import { loadPlayCatalog } from '../../services/playCatalog'
 
 const THEME_CSV_URL = `${import.meta.env.BASE_URL}数据表合集/3/theme_analysis.csv`
 const KAI_FONT = '"STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif'
@@ -129,6 +129,7 @@ const chartRefs = ref([])
 const chartInstances = []
 const hoveredTreeRelationId = ref('')
 const selectedTreeRelationId = ref('')
+const playCatalog = ref([])
 
 const themeColors = {
   家庭伦理: '#ad3936',
@@ -199,11 +200,17 @@ const plays = computed(() => groupRowsByPlay(rows.value))
 
 const playMap = computed(() => new Map(plays.value.map((play) => [play.playId, play])))
 
-const playOptions = computed(() =>
+const rankedPlays = computed(() =>
   plays.value
     .slice()
     .sort((a, b) => b.themes.length - a.themes.length || dominantShare(b) - dominantShare(a)),
 )
+const playSelectOptions = computed(() => {
+  if (playCatalog.value.length) {
+    return playCatalog.value.map((play) => ({ value: play.id, label: play.title }))
+  }
+  return rankedPlays.value.map((play) => ({ value: play.playId, label: play.title }))
+})
 
 const focusedPlayId = computed(() => {
   if (!isLinkageTriggerSource()) return ''
@@ -271,7 +278,11 @@ async function loadThemeCsv() {
   error.value = ''
 
   try {
-    const linkageData = await loadLinkageData()
+    const [linkageData, catalog] = await Promise.all([
+      loadLinkageData(),
+      loadPlayCatalog().catch(() => []),
+    ])
+    playCatalog.value = catalog
     if (linkageData.plays?.length) {
       rows.value = linkageData.plays.flatMap((play) => (play.themes || []).map((theme) => normalizeLinkageTheme(play, theme)))
       return
@@ -315,8 +326,8 @@ function setChartRef(el, index) {
   }
 }
 
-function handlePlayPickerChange(index, event) {
-  const playId = event.target?.value || ''
+function handlePlayPickerChange(index, value) {
+  const playId = String(value || '')
   if (!playId) return
 
   selectedPlayIds.value[index] = playId
@@ -349,7 +360,7 @@ function reconcileSelectedPlays() {
     usedIds.add(play.playId)
   })
 
-  playOptions.value.forEach((play) => {
+  rankedPlays.value.forEach((play) => {
     if (nextIds.length >= PLAY_COUNT) return
     if (usedIds.has(play.playId)) return
 
@@ -1890,11 +1901,10 @@ function toShare(value) {
   padding: 0 10px 2px;
 }
 
-.play-picker select {
+.play-picker .play-select {
   width: 72%;
   height: 22px;
   min-width: 0;
-  padding: 0 22px 0 9px;
 
   border: 1px solid rgba(142, 47, 36, 0.38);
   border-radius: 6px;
@@ -1912,12 +1922,12 @@ function toShare(value) {
   cursor: pointer;
 }
 
-.play-picker select:hover {
+.play-picker .play-select:hover {
   border-color: rgba(142, 47, 36, 0.38);
   color: #50301c;
 }
 
-.play-picker select:focus {
+.play-picker .play-select:focus-within {
   border-color: rgba(142, 47, 36, 0.74);
   box-shadow: 0 0 0 2px rgba(212, 166, 74, 0.24);
 }

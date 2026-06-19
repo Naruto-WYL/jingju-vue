@@ -3,9 +3,7 @@
     <div class="role-selector">
       <label class="selector-field">
         <span>剧目</span>
-        <select v-model="selectedScript">
-          <option v-for="script in scripts" :key="script" :value="script">{{ script }}</option>
-        </select>
+        <PlaySelect v-model="selectedScript" :options="scriptSelectOptions" :max-visible="5" />
       </label>
 
       <div class="period-field">
@@ -56,6 +54,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as d3 from 'd3'
+import PlaySelect from '../PlaySelect.vue'
 import {
   findCharacterById,
   findPlayById,
@@ -66,6 +65,7 @@ import {
   STANDARD_TRADES,
   standardizeTrade,
 } from '../../services/linkageStore'
+import { loadPlayCatalog } from '../../services/playCatalog'
 
 const ROLE_URL = '/数据表合集/1/Table1_Role_Inference.csv'
 const HEATMAP_URL = '/数据表合集/1/Table2_Trade_Vector_Patterns.csv'
@@ -235,6 +235,7 @@ const selectedRole = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
 const tradeStatusData = ref({ plays: {} })
+const playCatalog = ref([])
 
 defineProps({
   stats: {
@@ -246,7 +247,11 @@ defineProps({
 let resizeObserver = null
 let syncingFromLinkage = false
 
-const scripts = computed(() => unique(roleRows.value.map((row) => row.script_name)).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN')))
+const scripts = computed(() => {
+  if (playCatalog.value.length) return playCatalog.value.map((play) => play.title)
+  return unique(roleRows.value.map((row) => row.script_name)).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
+})
+const scriptSelectOptions = computed(() => scripts.value.map((title) => ({ value: title, label: title })))
 
 const currentScriptRows = computed(() => roleRows.value.filter((row) => row.script_name === selectedScript.value))
 
@@ -408,10 +413,12 @@ async function loadData() {
   errorMessage.value = ''
 
   try {
-    const [linkageData, statusResponse] = await Promise.all([
+    const [linkageData, statusResponse, catalog] = await Promise.all([
       loadLinkageData(),
       fetch(`${TRADE_STATUS_URL}?t=${Date.now()}`, { cache: 'no-store' }),
+      loadPlayCatalog().catch(() => []),
     ])
+    playCatalog.value = catalog
     if (!statusResponse.ok) throw new Error(`行当标注状态数据读取失败：${statusResponse.status}`)
     tradeStatusData.value = await statusResponse.json()
     if (linkageData.roleRows?.length) {
@@ -1146,6 +1153,7 @@ function cosineSimilarity(a, b) {
 }
 
 .selector-field select,
+.selector-field .play-select,
 .period-field strong,
 .trade-badge strong {
   display: flex;
@@ -1173,6 +1181,20 @@ function cosineSimilarity(a, b) {
     linear-gradient(180deg, rgba(255, 248, 232, 0.94), rgba(242, 224, 188, 0.94)),
     #f4e8cf;
   cursor: pointer;
+}
+
+.selector-field .play-select {
+  outline: none;
+  border-color: rgba(142, 47, 36, 0.38);
+  color: #50301c;
+  background:
+    linear-gradient(180deg, rgba(255, 248, 232, 0.94), rgba(242, 224, 188, 0.94)),
+    #f4e8cf;
+}
+
+.selector-field .play-select:focus-within {
+  border-color: rgba(142, 47, 36, 0.74);
+  box-shadow: 0 0 0 2px rgba(212, 166, 74, 0.24);
 }
 
 .period-field strong {
