@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <section class="qiyun-view">
     <div class="qiyun-card">
       <div class="qiyun-topbar">
@@ -6,7 +6,7 @@
           <label class="select-box stage-count-box">
             <select v-model="stageCountFilter" :disabled="loading" @change="filterByStageCount(stageCountFilter)">
               <option v-for="count in stageCountOptions" :key="count" :value="String(count)">
-                {{ stageCountLabel(count) }}（{{ stageBuckets[count]?.length || 0 }}本）
+                {{ stageCountLabel(count) }}
               </option>
             </select>
           </label>
@@ -68,15 +68,17 @@
           </div>
           <canvas ref="canvasRef" class="analytical-canvas" :class="{ clickable: hoveringAnchor }"></canvas>
 
-          <div ref="tooltipRef" class="cursor-tooltip" :class="{ visible: isHovering }">
-            <div class="tooltip-title">实时期望张力数值：</div>
-            <div class="tooltip-grid">
-              <div v-for="(name, index) in streamColorNames" :key="name" class="tooltip-row">
-                <span :style="{ color: streamColorsStroke[index] }">{{ name }}</span>
-                <strong :style="{ color: streamColorsStroke[index] }">{{ Math.round(currentState.data[index] || 0) }}%</strong>
+          <Teleport to="body">
+            <div ref="tooltipRef" class="cursor-tooltip" :class="{ visible: isHovering }">
+              <div class="tooltip-title">实时期望张力数值：</div>
+              <div class="tooltip-grid">
+                <div v-for="(name, index) in streamColorNames" :key="name" class="tooltip-row">
+                  <span :style="{ color: streamColorsStroke[index] }">{{ name }}</span>
+                  <strong :style="{ color: streamColorsStroke[index] }">{{ Math.round(currentState.data[index] || 0) }}%</strong>
+                </div>
               </div>
             </div>
-          </div>
+          </Teleport>
         </div>
 
         <div v-if="analysisOpen" class="analysis-backdrop" @click="analysisOpen = false"></div>
@@ -133,7 +135,7 @@
           </div>
 
           <div v-if="!lockedScene" class="hover-hint">
-            点击图表白底圆点开启联动穿透
+            
           </div>
         </aside>
       </div>
@@ -152,10 +154,13 @@ import { findScriptKeyByPlay, loadQiyunDataset, sceneNoFromSceneId, stageCountLa
 import { streamColorNames, streamColorsStroke } from './qiyunData'
 import { linkageState, loadLinkageData } from '../../services/linkageStore'
 import { FEATURED_PLAY_TITLES, pinFeaturedPlays } from '../../services/playCatalog'
+import { activateFloatingTooltip, registerFloatingTooltip } from '../../services/floatingTooltip'
 
 const canvasPanelRef = ref(null)
 const canvasRef = ref(null)
 const tooltipRef = ref(null)
+const tooltipOwner = Symbol('main-bottom-chart-one')
+let unregisterFloatingTooltip = () => {}
 const radarCanvasRef = ref(null)
 
 const loading = ref(true)
@@ -230,6 +235,11 @@ const lockedInsight = computed(() => {
 })
 
 onMounted(async () => {
+  unregisterFloatingTooltip = registerFloatingTooltip(tooltipOwner, {
+    getContainer: () => canvasPanelRef.value,
+    isVisible: () => isHovering.value,
+    hide: handleCanvasMouseLeave,
+  })
   await loadData()
   await nextTick()
   initCanvas()
@@ -238,6 +248,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  unregisterFloatingTooltip()
   if (animationFrameId) cancelAnimationFrame(animationFrameId)
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
 })
@@ -570,10 +581,16 @@ function handleCanvasMouseMove(event) {
   isHovering.value = Math.abs(mouseX - trackerXCss) < 30
 
   if (isHovering.value && tooltipRef.value) {
-    let left = trackerXCss + 15
-    if (left + 220 > rect.width) left = trackerXCss - 230
-    tooltipRef.value.style.left = `${Math.max(8, left)}px`
-    tooltipRef.value.style.top = `${Math.max(8, Math.min(currentMouseY - 20, rect.height - 92))}px`
+    activateFloatingTooltip(tooltipOwner)
+    const tooltipRect = tooltipRef.value.getBoundingClientRect()
+    const gap = 14
+    const padding = 8
+    let left = event.clientX + gap
+    let top = event.clientY + gap
+    if (left + tooltipRect.width > window.innerWidth - padding) left = event.clientX - tooltipRect.width - gap
+    if (top + tooltipRect.height > window.innerHeight - padding) top = event.clientY - tooltipRect.height - gap
+    tooltipRef.value.style.left = `${Math.max(padding, left)}px`
+    tooltipRef.value.style.top = `${Math.max(padding, top)}px`
   }
   if (previousHovering !== isHovering.value || previousAnchor !== hoveringAnchor.value) requestCanvasDraw()
 }
@@ -933,8 +950,8 @@ function makeEmptyState() {
 }
 
 .cursor-tooltip {
-  position: absolute;
-  z-index: 5;
+  position: fixed;
+  z-index: 10000;
   width: 190px;
   padding: 7px 8px;
   pointer-events: none;

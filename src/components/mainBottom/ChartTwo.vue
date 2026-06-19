@@ -41,7 +41,7 @@
               >
                 <h4 :style="{ color: colorForKey(key) }">
                   ■ {{ compareScripts[key]?.mode }}
-                  <small>（{{ compareScripts[key]?.sampleCount || 0 }}本）</small>
+                  <small></small>
                 </h4>
                 <p><b>【高阶学术定义】</b>{{ compareScripts[key]?.definition }}</p>
                 <p><b>【量化划分规则】</b>{{ compareScripts[key]?.rule }}</p>

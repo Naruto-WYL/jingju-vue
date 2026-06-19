@@ -46,7 +46,7 @@ const view = ref('a')
   top: 0;
   right: 0;
   z-index: 4;
-  width: 78px;
+  width: 96px;
   height: 28px;
   border-color: rgba(143, 47, 36, 0.48);
   color: #7a241d;

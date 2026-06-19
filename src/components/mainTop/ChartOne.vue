@@ -1,7 +1,7 @@
 <template>
   <main class="loop-embed app">
     <section class="workspace">
-      <section class="view">
+      <section ref="viewRef" class="view" @pointerleave="hideTooltip">
           <div v-if="viewMode === 'loop'" class="sunburst-legend">
             <span><b></b>内圈：角色关系</span>
             <span><b></b>主环：主题组合</span>
@@ -38,7 +38,9 @@
             <strong>当前模式</strong>
             <p>{{ patternDescription }}</p>
           </div>
-          <div ref="tooltipRef" class="tooltip"></div>
+          <Teleport to="body">
+            <div ref="tooltipRef" class="tooltip"></div>
+          </Teleport>
         </section>
     </section>
     <Teleport to="body">
@@ -95,6 +97,7 @@ import './theme.css';
 import { loadDemoDataset } from '../services/tableImport';
 import { narrativeColors, outcomeColors, relationColors } from '../services/colorScales';
 import { clearLoopFilter, setLoopFilter } from '../../services/loopFilterStore';
+import { activateFloatingTooltip, registerFloatingTooltip } from '../../services/floatingTooltip';
 import type { LoopFilters, LoopFlow, ScriptRecord } from '../types/loop';
 
 const LOOP_ASSET_BASE = '/%E6%95%B0%E6%8D%AE%E8%A1%A8%E5%90%88%E9%9B%86/5';
@@ -182,7 +185,10 @@ interface EdgeDetail {
 }
 
 const svgRef = ref<SVGSVGElement | null>(null);
+const viewRef = ref<HTMLElement | null>(null);
 const tooltipRef = ref<HTMLDivElement | null>(null);
+const tooltipOwner = Symbol('main-top-chart-one');
+let unregisterFloatingTooltip = () => {};
 const viewMode = ref<'loop' | 'detail'>('loop');
 const selectionScope = ref<SelectionScope | null>(null);
 const selectedEdgeDetail = ref<EdgeDetail | null>(null);
@@ -204,11 +210,17 @@ watch(
 );
 
 onMounted(() => {
+  unregisterFloatingTooltip = registerFloatingTooltip(tooltipOwner, {
+    getContainer: () => viewRef.value,
+    isVisible: () => Boolean(tooltipRef.value?.classList.contains('visible')),
+    hide: hideTooltip,
+  });
   draw();
   window.addEventListener('resize', draw);
 });
 
 onBeforeUnmount(() => {
+  unregisterFloatingTooltip();
   window.removeEventListener('resize', draw);
 });
 
@@ -1653,12 +1665,18 @@ function ancestorAtDepth(node: NodeDatum, depth: number) {
 function showTooltip(event: MouseEvent, html: string) {
   const tooltip = tooltipRef.value;
   if (!tooltip) return;
+  activateFloatingTooltip(tooltipOwner);
   tooltip.innerHTML = html;
-  const parent = (event.currentTarget as SVGElement).closest('.view')?.getBoundingClientRect();
-  if (!parent) return;
-  tooltip.style.left = `${event.clientX - parent.left + 14}px`;
-  tooltip.style.top = `${event.clientY - parent.top + 14}px`;
   tooltip.classList.add('visible');
+  const gap = 14;
+  const padding = 8;
+  const rect = tooltip.getBoundingClientRect();
+  let left = event.clientX + gap;
+  let top = event.clientY + gap;
+  if (left + rect.width > window.innerWidth - padding) left = event.clientX - rect.width - gap;
+  if (top + rect.height > window.innerHeight - padding) top = event.clientY - rect.height - gap;
+  tooltip.style.left = `${Math.max(padding, left)}px`;
+  tooltip.style.top = `${Math.max(padding, top)}px`;
 }
 
 function hideTooltip() {

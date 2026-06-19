@@ -1,7 +1,7 @@
 <template>
   <button class="chart-toggle" type="button" :aria-pressed="modelValue === 'b'" @click="toggle">
-    <span :class="{ active: modelValue === 'a' }">图一</span>
-    <span :class="{ active: modelValue === 'b' }">图二</span>
+    <span :class="{ active: modelValue === 'a' }">单剧本</span>
+    <span :class="{ active: modelValue === 'b' }">多剧本</span>
   </button>
 </template>
 
@@ -25,8 +25,8 @@ function toggle() {
   display: inline-grid;
   grid-template-columns: 1fr 1fr;
   align-items: center;
-  width: 74px;
-  height: 26px;
+  width: 96px;
+  height: 28px;
   padding: 2px;
   border: 1px solid rgba(143, 47, 36, 0.48);
   border-radius: 999px;
@@ -39,7 +39,7 @@ function toggle() {
 .chart-toggle span {
   display: grid;
   place-items: center;
-  height: 20px;
+  height: 22px;
   border-radius: 999px;
   color: #7a241d;
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;

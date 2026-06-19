@@ -207,7 +207,11 @@ const rankedPlays = computed(() =>
 )
 const playSelectOptions = computed(() => {
   if (playCatalog.value.length) {
-    return playCatalog.value.map((play) => ({ value: play.id, label: play.title }))
+    const localPlayIdByTitle = new Map(plays.value.map((play) => [play.title, play.playId]))
+    return playCatalog.value.map((play) => ({
+      value: localPlayIdByTitle.get(play.title) || play.id,
+      label: play.title,
+    }))
   }
   return rankedPlays.value.map((play) => ({ value: play.playId, label: play.title }))
 })
@@ -434,21 +438,13 @@ async function renderCharts() {
         linkStroke: (datum) => (hasThemeFocus && datum.isFocus ? '#7a1f1b' : genreColor(play.genre)),
         linkStrokeOpacity: (datum) => (hasThemeFocus ? (datum.isFocus ? 0.68 : 0.05) : 0.18),
       },
-      tooltip: {
-        items: [
-          { field: 'playTitle', name: '剧本' },
-          { field: 'genre', name: '剧目类型' },
-          { field: 'source', name: '主题A' },
-          { field: 'target', name: '主题B' },
-          { field: 'value', name: '共现强度' },
-        ],
-      },
-      interaction: [
-        {
-          type: 'elementHighlight',
+      tooltip: false,
+      interaction: {
+        elementHighlight: {
           background: true,
         },
-      ],
+        tooltip: false,
+      },
     })
 
     chart.render()

@@ -1,5 +1,5 @@
 <template>
-  <div ref="panelRef" class="scatter-panel">
+  <div ref="panelRef" class="scatter-panel" @pointerleave="hidePanelTooltip">
     <svg ref="svgRef" class="scatter-chart" role="img" aria-label="网络结构散点图" />
 
     <div v-if="loading" class="chart-state">数据加载中...</div>
@@ -10,7 +10,9 @@
       返回全图
     </button>
 
-    <div ref="tooltipRef" class="scatter-tooltip" />
+    <Teleport to="body">
+      <div ref="tooltipRef" class="scatter-tooltip" />
+    </Teleport>
   </div>
 </template>
 
@@ -18,6 +20,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as d3 from 'd3'
 import { loopFilterState } from '../../services/loopFilterStore'
+import { activateFloatingTooltip, registerFloatingTooltip } from '../../services/floatingTooltip'
 
 const DATA_URL = '/数据表合集/2/京剧剧本_网络指标总表_已补核心字段_过滤密度中心度1.csv'
 const width = 760
@@ -45,6 +48,8 @@ const categoryColors = new Map([
 const svgRef = ref(null)
 const panelRef = ref(null)
 const tooltipRef = ref(null)
+const tooltipOwner = Symbol('right-top-chart-two')
+let unregisterFloatingTooltip = () => {}
 const rows = ref([])
 const loading = ref(false)
 const errorMessage = ref('')
@@ -115,6 +120,11 @@ watch(
 )
 
 onMounted(async () => {
+  unregisterFloatingTooltip = registerFloatingTooltip(tooltipOwner, {
+    getContainer: () => panelRef.value,
+    isVisible: () => Boolean(tooltipRef.value?.classList.contains('is-visible')),
+    hide: hidePanelTooltip,
+  })
   resizeObserver = new ResizeObserver((entries) => {
     const entry = entries[0]
     const nextWidth = Math.round(entry?.contentRect.width || 0)
@@ -135,6 +145,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  unregisterFloatingTooltip()
   resizeObserver?.disconnect()
   if (drawFrame) cancelAnimationFrame(drawFrame)
   d3.select(svgRef.value).selectAll('*').remove()
@@ -477,6 +488,7 @@ function formatTick(value) {
 }
 
 function showTooltip(event, point, tooltipElement) {
+  activateFloatingTooltip(tooltipOwner)
   tooltipElement.innerHTML = `
     <b>${point.title}</b>
     <span>类别：${point.category}</span>
@@ -508,6 +520,10 @@ function showTooltip(event, point, tooltipElement) {
 
 function hideTooltip(tooltipElement) {
   tooltipElement.classList.remove('is-visible')
+}
+
+function hidePanelTooltip() {
+  if (tooltipRef.value) hideTooltip(tooltipRef.value)
 }
 </script>
 

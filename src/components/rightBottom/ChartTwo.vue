@@ -1,5 +1,10 @@
 <template>
-  <section ref="panelRef" class="vertical-upset-panel" aria-label="主题组合矩阵图">
+  <section
+    ref="panelRef"
+    class="vertical-upset-panel"
+    aria-label="主题组合矩阵图"
+    @mouseleave="hideTooltip"
+  >
     <div v-if="loading" class="upset-state">主题组合加载中...</div>
     <div v-else-if="error" class="upset-state upset-state--error">{{ error }}</div>
     <svg v-else ref="svgRef" class="vertical-upset-svg" role="img" aria-label="跨剧本主题组合纵向矩阵图" />
@@ -8,7 +13,9 @@
       返回全图
     </button>
 
-    <div ref="tooltipRef" class="upset-tooltip" />
+    <Teleport to="body">
+      <div ref="tooltipRef" class="upset-tooltip" />
+    </Teleport>
   </section>
 </template>
 
@@ -16,6 +23,7 @@
 import * as d3 from 'd3'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { loopFilterState } from '../../services/loopFilterStore'
+import { activateFloatingTooltip, registerFloatingTooltip } from '../../services/floatingTooltip'
 
 const PLAY_URL = '/data/theme_matrix_play_full.csv'
 const AGGREGATE_URL = '/data/theme_matrix_combo_full.csv'
@@ -92,6 +100,8 @@ const TOP_COMBO_LIMIT = 18
 const panelRef = ref(null)
 const svgRef = ref(null)
 const tooltipRef = ref(null)
+const tooltipOwner = Symbol('right-bottom-chart-two')
+let unregisterFloatingTooltip = () => {}
 const playRows = ref([])
 const aggregateRows = ref([])
 const highlightRows = ref([])
@@ -165,12 +175,18 @@ watch(
 )
 
 onMounted(async () => {
+  unregisterFloatingTooltip = registerFloatingTooltip(tooltipOwner, {
+    getContainer: () => panelRef.value,
+    isVisible: () => tooltipRef.value?.style.display === 'grid',
+    hide: hideTooltip,
+  })
   resizeObserver = new ResizeObserver(() => renderUpset())
   if (panelRef.value) resizeObserver.observe(panelRef.value)
   await loadRows()
 })
 
 onBeforeUnmount(() => {
+  unregisterFloatingTooltip()
   resizeObserver?.disconnect()
 })
 
@@ -339,12 +355,14 @@ function drawTopThemeBars(svg, data, layout) {
     .data(data.themes)
     .join('g')
     .attr('class', 'theme-count-group')
-    .on('pointerenter', (event, theme) => {
+    .on('mouseenter', (event, theme) => {
       highlightTheme(svg, theme.name)
       showTooltip(event, themeTooltip(theme))
     })
-    .on('pointermove', moveTooltip)
-    .on('pointerleave', () => {
+    .on('mousemove', (event, theme) => {
+      showTooltip(event, themeTooltip(theme))
+    })
+    .on('mouseleave', () => {
       applyLoopHighlight(svg, data, true)
       hideTooltip()
     })
@@ -380,12 +398,14 @@ function drawVerticalMatrix(svg, data, layout) {
     .join('g')
     .attr('class', 'theme-column')
     .attr('transform', (theme) => `translate(${layout.themeX(theme.name)},0)`)
-    .on('pointerenter', (event, theme) => {
+    .on('mouseenter', (event, theme) => {
       highlightTheme(svg, theme.name)
       showTooltip(event, themeTooltip(theme))
     })
-    .on('pointermove', moveTooltip)
-    .on('pointerleave', () => {
+    .on('mousemove', (event, theme) => {
+      showTooltip(event, themeTooltip(theme))
+    })
+    .on('mouseleave', () => {
       applyLoopHighlight(svg, data, true)
       hideTooltip()
     })
@@ -409,12 +429,14 @@ function drawVerticalMatrix(svg, data, layout) {
     .join('g')
     .attr('class', 'combo-row')
     .attr('transform', (combo) => `translate(0,${rowScale(combo.key)})`)
-    .on('pointerenter', (event, combo) => {
+    .on('mouseenter', (event, combo) => {
       highlightCombo(svg, combo.index)
       showTooltip(event, comboTooltip(combo))
     })
-    .on('pointermove', moveTooltip)
-    .on('pointerleave', () => {
+    .on('mousemove', (event, combo) => {
+      showTooltip(event, comboTooltip(combo))
+    })
+    .on('mouseleave', () => {
       applyLoopHighlight(svg, data, true)
       hideTooltip()
     })
@@ -730,19 +752,23 @@ function themeTooltip(theme) {
 
 function showTooltip(event, html) {
   if (!tooltipRef.value) return
+  activateFloatingTooltip(tooltipOwner)
   tooltipRef.value.innerHTML = html
   tooltipRef.value.style.display = 'grid'
   moveTooltip(event)
 }
 
 function moveTooltip(event) {
-  if (!tooltipRef.value || !panelRef.value) return
-  const panelRect = panelRef.value.getBoundingClientRect()
+  if (!tooltipRef.value) return
   const tooltipRect = tooltipRef.value.getBoundingClientRect()
-  const x = event.clientX - panelRect.left + 12
-  const y = event.clientY - panelRect.top + 12
-  tooltipRef.value.style.left = `${Math.min(x, panelRect.width - tooltipRect.width - 8)}px`
-  tooltipRef.value.style.top = `${Math.min(y, panelRect.height - tooltipRect.height - 8)}px`
+  const gap = 12
+  const padding = 8
+  let x = event.clientX + gap
+  let y = event.clientY + gap
+  if (x + tooltipRect.width > window.innerWidth - padding) x = event.clientX - tooltipRect.width - gap
+  if (y + tooltipRect.height > window.innerHeight - padding) y = event.clientY - tooltipRect.height - gap
+  tooltipRef.value.style.left = `${Math.max(padding, x)}px`
+  tooltipRef.value.style.top = `${Math.max(padding, y)}px`
 }
 
 function hideTooltip() {
@@ -908,8 +934,8 @@ function escapeHtml(value) {
 }
 
 .upset-tooltip {
-  position: absolute;
-  z-index: 5;
+  position: fixed;
+  z-index: 10000;
   display: none;
   max-width: 190px;
   gap: 3px;

@@ -103,7 +103,7 @@ function updateScale() {
   overflow: hidden;
   color: #7a241d;
   font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: 0;
@@ -117,7 +117,7 @@ function updateScale() {
   top: 0;
   right: 0;
   z-index: 4;
-  width: 78px;
+  width: 96px;
   height: 28px;
   border-color: rgba(143, 47, 36, 0.48);
   color: #7a241d;

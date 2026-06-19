@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>京剧可视分析系统标题预览</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-width: 1100px;
+        margin: 0;
+        padding: 24px;
+        color: #4d3025;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(176, 128, 55, 0.08), transparent 28%),
+          #f7f0df;
+      }
+
+      .opera-header {
+        --red: #8f2f24;
+        --deep-red: #6e211b;
+        --gold: #c9983e;
+        --paper: #fbf6e9;
+
+        position: relative;
+        display: grid;
+        grid-template-columns: 210px minmax(560px, 1fr) 210px;
+        align-items: center;
+        width: min(1440px, 100%);
+        height: 92px;
+        margin: 0 auto;
+        overflow: hidden;
+        border: 1px solid rgba(143, 47, 36, 0.72);
+        outline: 1px solid rgba(201, 152, 62, 0.34);
+        outline-offset: -5px;
+        background:
+          linear-gradient(90deg, rgba(143, 47, 36, 0.05), transparent 24%, transparent 76%, rgba(143, 47, 36, 0.05)),
+          var(--paper);
+        box-shadow: 0 8px 24px rgba(89, 48, 28, 0.12);
+      }
+
+      .opera-header::before,
+      .opera-header::after {
+        content: "";
+        position: absolute;
+        top: 8px;
+        width: 70px;
+        height: 70px;
+        border: 1px solid rgba(143, 47, 36, 0.24);
+        transform: rotate(45deg);
+      }
+
+      .opera-header::before {
+        left: -39px;
+      }
+
+      .opera-header::after {
+        right: -39px;
+      }
+
+      .side-ornament {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 26px;
+      }
+
+      .side-ornament.right {
+        justify-content: flex-end;
+        transform: scaleX(-1);
+      }
+
+      .seal {
+        display: grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        border: 2px solid var(--red);
+        color: var(--red);
+        font-family: "STKaiti", "KaiTi", serif;
+        font-size: 16px;
+        font-weight: 900;
+        line-height: 1;
+        transform: rotate(-3deg);
+      }
+
+      .cloud {
+        width: 94px;
+        height: 28px;
+        border-top: 2px solid var(--gold);
+        border-bottom: 1px solid rgba(143, 47, 36, 0.42);
+        border-radius: 50%;
+        opacity: 0.9;
+      }
+
+      .title-area {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        justify-items: center;
+        align-content: center;
+        min-width: 0;
+        height: 100%;
+      }
+
+      .title-area::before,
+      .title-area::after {
+        content: "";
+        position: absolute;
+        left: 5%;
+        width: 90%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, var(--gold) 18%, var(--red) 50%, var(--gold) 82%, transparent);
+      }
+
+      .title-area::before {
+        top: 14px;
+      }
+
+      .title-area::after {
+        bottom: 14px;
+      }
+
+      h1 {
+        margin: 0;
+        color: var(--deep-red);
+        font-family: "STKaiti", "KaiTi", "FangSong", serif;
+        font-size: clamp(28px, 2.7vw, 42px);
+        font-weight: 900;
+        line-height: 1;
+        letter-spacing: 0.16em;
+        text-indent: 0.16em;
+        text-shadow: 0 1px 0 #fff8e9;
+        white-space: nowrap;
+      }
+
+      .subtitle {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 10px;
+        color: #85664c;
+        font-family: "Microsoft YaHei", sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.24em;
+      }
+
+      .subtitle::before,
+      .subtitle::after {
+        content: "";
+        width: 36px;
+        height: 1px;
+        background: rgba(201, 152, 62, 0.82);
+      }
+
+      .preview-note {
+        width: min(1440px, 100%);
+        margin: 14px auto 0;
+        color: #876d59;
+        font: 13px/1.6 "Microsoft YaHei", sans-serif;
+        text-align: center;
+      }
+    </style>
+  </head>
+
+  <body>
+    <header class="opera-header">
+      <div class="side-ornament">
+        <span class="seal">京韵</span>
+        <span class="cloud"></span>
+      </div>
+
+      <div class="title-area">
+        <h1>京韵知微 · 京剧剧本可视分析系统</h1>
+        <div class="subtitle">角色 · 关系 · 主题 · 叙事</div>
+      </div>
+
+      <div class="side-ornament right" aria-hidden="true">
+        <span class="seal">京韵</span>
+        <span class="cloud"></span>
+      </div>
+    </header>
+
+    <p class="preview-note">独立标题预览页，不会影响当前系统。</p>
+  </body>
+</html>

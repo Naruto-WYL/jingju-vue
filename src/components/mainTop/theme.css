@@ -1396,8 +1396,8 @@
 }
 
 .tooltip {
-  position: absolute;
-  z-index: 5;
+  position: fixed;
+  z-index: 10000;
   min-width: 190px;
   max-width: 280px;
   padding: 10px 12px;

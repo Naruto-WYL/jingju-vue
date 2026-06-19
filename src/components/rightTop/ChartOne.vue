@@ -22,7 +22,7 @@
       />
     </div>
 
-    <div ref="chartRef" class="relation-network__stage">
+    <div ref="chartRef" class="relation-network__stage" @pointerleave="hideTooltip">
   <div class="relation-legend" aria-label="人物关系图例">
     <button
   class="relation-legend__item relation-legend__item--all"
@@ -70,16 +70,18 @@
         返回全图
       </button>
 
-      <div
-        ref="tooltipRef"
-        class="relation-tooltip"
-        :class="{ 'is-visible': tooltip.visible }"
-        :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }"
-      >
-        <strong>{{ tooltip.title }}</strong>
-        <span v-if="tooltip.sub">{{ tooltip.sub }}</span>
-        <p v-if="tooltip.body">{{ tooltip.body }}</p>
-      </div>
+      <Teleport to="body">
+        <div
+          ref="tooltipRef"
+          class="relation-tooltip"
+          :class="{ 'is-visible': tooltip.visible }"
+          :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }"
+        >
+          <strong>{{ tooltip.title }}</strong>
+          <span v-if="tooltip.sub">{{ tooltip.sub }}</span>
+          <p v-if="tooltip.body">{{ tooltip.body }}</p>
+        </div>
+      </Teleport>
     </div>
   </div>
 </template>
@@ -98,6 +100,7 @@ import {
   standardizeTrade,
 } from '../../services/linkageStore'
 import { loadPlayCatalog } from '../../services/playCatalog'
+import { activateFloatingTooltip, registerFloatingTooltip } from '../../services/floatingTooltip'
 import coreAvatar from '../../assets/人物图象/核心.png'
 import majorAvatar from '../../assets/人物图象/主要.png'
 import minorAvatar from '../../assets/人物图象/次要.png'
@@ -172,6 +175,8 @@ const errorMessage = ref('')
 const selectedScript = ref('')
 const playCatalog = ref([])
 const tooltipRef = ref(null)
+const tooltipOwner = Symbol('right-top-chart-one')
+let unregisterFloatingTooltip = () => {}
 
 const tooltip = reactive({
   visible: false,
@@ -252,6 +257,11 @@ const isFocusedGraphVisible = computed(() => {
 })
 
 onMounted(async () => {
+  unregisterFloatingTooltip = registerFloatingTooltip(tooltipOwner, {
+    getContainer: () => chartRef.value,
+    isVisible: () => tooltip.visible,
+    hide: hideTooltip,
+  })
   await loadRows()
 
   resizeObserver = new ResizeObserver((entries) => {
@@ -275,6 +285,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  unregisterFloatingTooltip()
   resizeObserver?.disconnect()
   if (drawFrame) cancelAnimationFrame(drawFrame)
   d3.select(svgRef.value).selectAll('*').remove()
@@ -1952,6 +1963,7 @@ function isLinkageTriggerSource() {
 }
 
 function showNodeTooltip(event, node, links, nodeById) {
+  activateFloatingTooltip(tooltipOwner)
   const related = links
     .filter((edge) => edge.source === node.id || edge.target === node.id)
     .slice(0, 4)
@@ -1969,6 +1981,7 @@ function showNodeTooltip(event, node, links, nodeById) {
 }
 
 function showEdgeTooltip(event, edge, nodeById) {
+  activateFloatingTooltip(tooltipOwner)
   const source = nodeById.get(edge.source)
   const target = nodeById.get(edge.target)
   const relationType = getRelationType(edge)
@@ -1982,18 +1995,19 @@ function showEdgeTooltip(event, edge, nodeById) {
 }
 
 function moveTooltip(event) {
-  const stage = chartRef.value
   const tooltipElement = tooltipRef.value
-  if (!stage || !tooltipElement) return
+  if (!tooltipElement) return
 
-  const stageRect = stage.getBoundingClientRect()
-  const maxX = stage.clientWidth - tooltipElement.offsetWidth - 12
-  const maxY = stage.clientHeight - tooltipElement.offsetHeight - 12
-  const x = event.clientX - stageRect.left + 14
-  const y = event.clientY - stageRect.top + 14
-
-  tooltip.x = clamp(x, 10, Math.max(10, maxX))
-  tooltip.y = clamp(y, 10, Math.max(10, maxY))
+  const gap = 14
+  const padding = 8
+  const width = tooltipElement.offsetWidth || 260
+  const height = tooltipElement.offsetHeight || 120
+  let x = event.clientX + gap
+  let y = event.clientY + gap
+  if (x + width > window.innerWidth - padding) x = event.clientX - width - gap
+  if (y + height > window.innerHeight - padding) y = event.clientY - height - gap
+  tooltip.x = Math.max(padding, x)
+  tooltip.y = Math.max(padding, y)
 }
 
 function hideTooltip() {
@@ -2512,17 +2526,17 @@ function clamp(value, min, max) {
 
 /* tooltip 提示框 */
 .relation-tooltip {
-  /* 绝对定位，位置由 JS 控制 */
-  position: absolute;
+  /* 固定到视口，避免被图表面板的 overflow 裁切 */
+  position: fixed;
 
   /* 设置层级，保证浮在 SVG 上面 */
-  z-index: 10;
+  z-index: 10000;
 
   /* 设置固定宽度 */
   width: 260px;
 
   /* 最大宽度不超过容器宽度 */
-  max-width: calc(100% - 20px);
+  max-width: min(260px, calc(100vw - 16px));
 
   /* 设置内边距 */
   padding: 10px 12px;
